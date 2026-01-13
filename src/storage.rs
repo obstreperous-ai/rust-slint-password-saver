@@ -87,19 +87,20 @@ impl PasswordStorage {
 
         // Generate cryptographically random salt and nonce
         let salt = SaltString::generate(&mut OsRng);
+        let salt_bytes = salt.as_str().as_bytes();
         let mut nonce_bytes = [0u8; 12];
         use aes_gcm::aead::rand_core::RngCore;
         OsRng.fill_bytes(&mut nonce_bytes);
         
         // Derive encryption key from master password
-        let key = Self::derive_key(master_password, salt.as_str().as_bytes())?;
+        let key = Self::derive_key(master_password, salt_bytes)?;
         
         // Encrypt the data
         let encrypted_data = Self::encrypt_data(json_data.as_bytes(), &key, &nonce_bytes)?;
 
         // Create storage structure with salt, nonce, and encrypted data
         let storage_data = StorageData {
-            salt: salt.as_str().as_bytes().to_vec(),
+            salt: salt_bytes.to_vec(),
             nonce: nonce_bytes.to_vec(),
             encrypted_data,
         };
