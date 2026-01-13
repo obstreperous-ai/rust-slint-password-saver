@@ -1,0 +1,123 @@
+import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "Password Saver";
+    preferred-width: 600px;
+    preferred-height: 500px;
+    
+    in-out property <string> status-message: "";
+    
+    callback save-password(string, string, string);
+    callback load-passwords();
+    
+    VerticalBox {
+        padding: 20px;
+        spacing: 15px;
+        
+        Text {
+            text: "Password Saver";
+            font-size: 24px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+        
+        GroupBox {
+            title: "Add New Password";
+            
+            VerticalBox {
+                spacing: 10px;
+                
+                HorizontalBox {
+                    Text {
+                        text: "Title:";
+                        vertical-alignment: center;
+                        min-width: 100px;
+                    }
+                    title-input := LineEdit {
+                        placeholder-text: "e.g., Gmail, GitHub, etc.";
+                    }
+                }
+                
+                HorizontalBox {
+                    Text {
+                        text: "Username:";
+                        vertical-alignment: center;
+                        min-width: 100px;
+                    }
+                    username-input := LineEdit {
+                        placeholder-text: "Username or email";
+                    }
+                }
+                
+                HorizontalBox {
+                    Text {
+                        text: "Password:";
+                        vertical-alignment: center;
+                        min-width: 100px;
+                    }
+                    password-input := LineEdit {
+                        placeholder-text: "Enter password";
+                        input-type: password;
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    Button {
+                        text: "Save Password";
+                        primary: true;
+                        clicked => {
+                            root.save-password(
+                                title-input.text,
+                                username-input.text,
+                                password-input.text
+                            );
+                            // Clear inputs after saving
+                            title-input.text = "";
+                            username-input.text = "";
+                            password-input.text = "";
+                        }
+                    }
+                    
+                    Button {
+                        text: "Load Passwords";
+                        clicked => {
+                            root.load-passwords();
+                        }
+                    }
+                }
+            }
+        }
+        
+        GroupBox {
+            title: "Stored Passwords";
+            
+            ScrollView {
+                height: 200px;
+                
+                VerticalBox {
+                    Text {
+                        text: "Password entries will appear here...";
+                        color: #888;
+                        font-size: 14px;
+                    }
+                }
+            }
+        }
+        
+        if status-message != "" : HorizontalBox {
+            Rectangle {
+                background: #e8f5e9;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #4caf50;
+                
+                Text {
+                    text: status-message;
+                    color: #2e7d32;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,20 @@
+[package]
+name = "rust-slint-password-saver"
+version = "0.1.0"
+edition = "2021"
+authors = ["obstreperous-ai"]
+description = "A cross-platform desktop password saver application using Slint UI"
+license = "MIT"
+repository = "https://github.com/obstreperous-ai/rust-slint-password-saver"
+keywords = ["password-manager", "encryption", "slint", "desktop"]
+categories = ["cryptography", "gui"]
+
+[dependencies]
+slint = "1.9.1"
+argon2 = "0.5.3"
+aes-gcm = "0.10.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[build-dependencies]
+slint-build = "1.9.1"
