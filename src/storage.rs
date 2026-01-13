@@ -1,5 +1,5 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit},
+    aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
 };
 use argon2::{
@@ -45,6 +45,14 @@ impl PasswordStorage {
             .ok_or("No hash generated")?;
         let hash_bytes = hash.as_bytes();
         
+        // Verify hash is at least 32 bytes
+        if hash_bytes.len() < 32 {
+            return Err(format!(
+                "Hash too short: expected at least 32 bytes, got {}",
+                hash_bytes.len()
+            ));
+        }
+        
         let mut key = [0u8; 32];
         key.copy_from_slice(&hash_bytes[..32]);
         
@@ -77,20 +85,22 @@ impl PasswordStorage {
         let json_data = serde_json::to_string(entries)
             .map_err(|e| format!("Failed to serialize entries: {}", e))?;
 
-        // Generate random salt and nonce for encryption
-        let salt = [0u8; 16]; // In production, generate random salt
-        let nonce = [0u8; 12]; // In production, generate random nonce
+        // Generate cryptographically random salt and nonce
+        let salt = SaltString::generate(&mut OsRng);
+        let mut nonce_bytes = [0u8; 12];
+        use aes_gcm::aead::rand_core::RngCore;
+        OsRng.fill_bytes(&mut nonce_bytes);
         
         // Derive encryption key from master password
-        let key = Self::derive_key(master_password, &salt)?;
+        let key = Self::derive_key(master_password, salt.as_str().as_bytes())?;
         
         // Encrypt the data
-        let encrypted_data = Self::encrypt_data(json_data.as_bytes(), &key, &nonce)?;
+        let encrypted_data = Self::encrypt_data(json_data.as_bytes(), &key, &nonce_bytes)?;
 
         // Create storage structure with salt, nonce, and encrypted data
         let storage_data = StorageData {
-            salt: salt.to_vec(),
-            nonce: nonce.to_vec(),
+            salt: salt.as_str().as_bytes().to_vec(),
+            nonce: nonce_bytes.to_vec(),
             encrypted_data,
         };
 
