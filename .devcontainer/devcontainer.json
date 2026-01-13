@@ -1,6 +1,6 @@
 {
   "name": "Rust Slint Password Saver",
-  "image": "mcr.microsoft.com/devcontainers/rust:latest",
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
   
   // Configure tool-specific properties
   "customizations": {

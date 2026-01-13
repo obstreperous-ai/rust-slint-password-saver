@@ -128,8 +128,11 @@ You can customize the devcontainer by editing `.devcontainer/devcontainer.json`:
 
 ## Cross-Platform Notes
 
-This devcontainer is optimized for Linux-based containers but includes all dependencies needed for cross-platform development targeting:
-- Linux (native)
-- macOS (via cross-compilation setup, though building is done in Linux container)
+This devcontainer is optimized for Linux-based containers and includes all dependencies needed for building Linux applications with Slint UI framework. The Slint framework itself is cross-platform and can target multiple platforms.
 
-The Slint framework itself is cross-platform, and this container provides all necessary build tools.
+For building macOS binaries, you would need to:
+1. Set up a macOS cross-compilation toolchain (not included in this devcontainer)
+2. Use a macOS runner for actual builds
+3. Or develop and test in this Linux container, then build for macOS on a Mac system
+
+The current setup focuses on Linux development and testing in a containerized environment.

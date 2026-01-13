@@ -59,8 +59,7 @@ cargo install cargo-edit --quiet || echo "cargo-edit already installed or failed
 # Install cargo-outdated to check for outdated dependencies
 cargo install cargo-outdated --quiet || echo "cargo-outdated already installed or failed to install"
 
-# Install cargo-tree to visualize dependency tree
-cargo install cargo-tree --quiet || echo "cargo-tree already installed or failed to install"
+# Note: cargo-tree is built into Cargo since 1.44.0, no separate installation needed
 
 # Update cargo audit database
 echo "🔒 Updating security audit database..."
