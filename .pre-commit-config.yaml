@@ -1,0 +1,40 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+
+  # Rust formatting with rustfmt
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: Rust format check
+        args: ['--manifest-path', 'Cargo.toml', '--', '--check']
+      - id: clippy
+        name: Rust clippy lint
+        args: ['--manifest-path', 'Cargo.toml', '--', '-D', 'warnings']
+
+  # Security checks for dependencies
+  - repo: local
+    hooks:
+      - id: cargo-audit
+        name: Cargo audit (security vulnerabilities)
+        entry: cargo audit
+        language: system
+        pass_filenames: false
+        files: ^(Cargo\.(toml|lock))$
+        stages: [commit]

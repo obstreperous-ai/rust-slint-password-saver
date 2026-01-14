@@ -89,6 +89,16 @@ The project follows standard Rust project conventions:
 - Tests are co-located with the code they test
 - Build artifacts go to `target/`
 
+### Code Quality Tools
+
+This project uses several code quality tools to maintain high standards:
+- **rustfmt** for code formatting
+- **clippy** for linting
+- **cargo-audit** for security vulnerability scanning
+- **pre-commit hooks** for automated checks
+
+For detailed information about code quality tools and how to use them, see [CODE_QUALITY.md](CODE_QUALITY.md).
+
 ## License
 
 MIT License - See LICENSE file for details
