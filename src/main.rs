@@ -7,6 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 slint::include_modules!();
 
+/// Maximum number of password entries to display in status message
+const MAX_DISPLAY_ENTRIES: usize = 5;
+
 /// Get cross-platform path for storing encrypted passwords
 /// Works on macOS, Linux, and other Unix-like systems
 fn get_storage_path() -> PathBuf {
@@ -110,15 +113,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 Ok(entries) => {
                     let count = entries.len();
                     let mut message = format!("Loaded {} password(s):\n", count);
-                    for entry in entries.iter().take(5) {
+                    for entry in entries.iter().take(MAX_DISPLAY_ENTRIES) {
                         let _ = write!(message, "- {}", entry.title);
                         if !entry.username.is_empty() {
                             let _ = write!(message, " ({})", entry.username);
                         }
                         message.push('\n');
                     }
-                    if entries.len() > 5 {
-                        let _ = write!(message, "... and {} more", entries.len() - 5);
+                    if entries.len() > MAX_DISPLAY_ENTRIES {
+                        let _ = write!(message, "... and {} more", entries.len() - MAX_DISPLAY_ENTRIES);
                     }
                     ui.set_status_message(message.into());
                 }

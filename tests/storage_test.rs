@@ -2,6 +2,14 @@ use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Helper function to generate current timestamp
+fn current_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
 #[test]
 fn test_full_encryption_flow() {
     // Create a temporary test file
@@ -19,19 +27,13 @@ fn test_full_encryption_flow() {
             title: "GitHub".to_string(),
             username: "testuser".to_string(),
             password: "github_password_123".to_string(),
-            created_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created_at: current_timestamp(),
         },
         PasswordEntry {
             title: "Gmail".to_string(),
             username: "test@example.com".to_string(),
             password: "gmail_password_456".to_string(),
-            created_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created_at: current_timestamp(),
         },
     ];
     
@@ -74,10 +76,7 @@ fn test_wrong_master_password() {
         title: "Test".to_string(),
         username: "user".to_string(),
         password: "pass".to_string(),
-        created_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
+        created_at: current_timestamp(),
     }];
     
     storage.save_entries(&entries, master_password).expect("Failed to save entries");
@@ -109,10 +108,7 @@ fn test_multiple_save_and_load_cycles() {
         title: "Entry1".to_string(),
         username: "user1".to_string(),
         password: "pass1".to_string(),
-        created_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
+        created_at: current_timestamp(),
     }];
     
     storage.save_entries(&entries, master_password).expect("Failed to save in cycle 1");
@@ -124,10 +120,7 @@ fn test_multiple_save_and_load_cycles() {
         title: "Entry2".to_string(),
         username: "user2".to_string(),
         password: "pass2".to_string(),
-        created_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
+        created_at: current_timestamp(),
     });
     
     storage.save_entries(&entries, master_password).expect("Failed to save in cycle 2");

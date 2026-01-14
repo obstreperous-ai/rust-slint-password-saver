@@ -2,8 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// We need to expose the storage module for testing
-// For this, we'll create a simple integration test that tests the core functionality
+/// Minimum timestamp for year 2020 (Jan 1, 2020 00:00:00 UTC)
+const JAN_1_2020_TIMESTAMP: u64 = 1_577_836_800;
 
 #[test]
 fn test_cross_platform_path_creation() {
@@ -37,7 +37,7 @@ fn test_timestamp_generation() {
         .as_secs();
     
     // Timestamp should be reasonable (after 2020)
-    assert!(timestamp > 1_577_836_800); // Jan 1, 2020
+    assert!(timestamp > JAN_1_2020_TIMESTAMP);
 }
 
 #[test]
