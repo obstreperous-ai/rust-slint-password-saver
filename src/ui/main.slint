@@ -3,12 +3,13 @@ import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, Gro
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
-    preferred-height: 500px;
+    preferred-height: 600px;
     
     in-out property <string> status-message: "";
+    in-out property <string> master-password: "";
     
-    callback save-password(string, string, string);
-    callback load-passwords();
+    callback save-password(string, string, string, string);
+    callback load-passwords(string);
     
     VerticalBox {
         padding: 20px;
@@ -19,6 +20,33 @@ export component AppWindow inherits Window {
             font-size: 24px;
             font-weight: 700;
             horizontal-alignment: center;
+        }
+        
+        GroupBox {
+            title: "Master Password";
+            
+            VerticalBox {
+                spacing: 10px;
+                
+                HorizontalBox {
+                    Text {
+                        text: "Master Password:";
+                        vertical-alignment: center;
+                        min-width: 120px;
+                    }
+                    master-password-input := LineEdit {
+                        placeholder-text: "Enter your master password";
+                        input-type: password;
+                        text <=> root.master-password;
+                    }
+                }
+                
+                Text {
+                    text: "This password is used to encrypt/decrypt your stored passwords";
+                    font-size: 12px;
+                    color: #666;
+                }
+            }
         }
         
         GroupBox {
@@ -67,8 +95,10 @@ export component AppWindow inherits Window {
                     Button {
                         text: "Save Password";
                         primary: true;
+                        enabled: root.master-password != "" && title-input.text != "" && password-input.text != "";
                         clicked => {
                             root.save-password(
+                                root.master-password,
                                 title-input.text,
                                 username-input.text,
                                 password-input.text
@@ -82,8 +112,9 @@ export component AppWindow inherits Window {
                     
                     Button {
                         text: "Load Passwords";
+                        enabled: root.master-password != "";
                         clicked => {
-                            root.load-passwords();
+                            root.load-passwords(root.master-password);
                         }
                     }
                 }

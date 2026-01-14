@@ -29,6 +29,7 @@ pub struct PasswordStorage {
 #[allow(dead_code)]
 impl PasswordStorage {
     /// Create a new password storage instance
+    #[must_use]
     pub fn new(storage_path: PathBuf) -> Self {
         Self { storage_path }
     }
@@ -157,6 +158,7 @@ impl PasswordStorage {
     }
 
     /// Check if storage file exists
+    #[must_use]
     pub fn exists(&self) -> bool {
         self.storage_path.exists()
     }
