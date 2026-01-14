@@ -11,19 +11,19 @@ fn test_cross_platform_path_creation() {
     let home_dir = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| String::from("."));
-    
+
     let mut path = PathBuf::from(home_dir);
     path.push(".password_saver_test");
     path.push("test_passwords.enc");
-    
+
     // Create parent directory
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).expect("Failed to create test directory");
     }
-    
+
     // Verify directory was created
     assert!(path.parent().unwrap().exists());
-    
+
     // Clean up
     let _ = fs::remove_dir_all(path.parent().unwrap());
 }
@@ -35,7 +35,7 @@ fn test_timestamp_generation() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     // Timestamp should be reasonable (after 2020)
     assert!(timestamp > JAN_1_2020_TIMESTAMP);
 }
