@@ -1,0 +1,17 @@
+# Rust formatting configuration
+# See https://rust-lang.github.io/rustfmt for all options
+
+# Edition configuration
+edition = "2021"
+
+# Formatting options (stable features only)
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+
+# Misc stable options
+use_field_init_shorthand = true
+use_try_shorthand = true
+force_explicit_abi = true
+reorder_imports = true
+reorder_modules = true
