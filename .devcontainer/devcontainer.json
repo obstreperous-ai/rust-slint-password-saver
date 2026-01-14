@@ -1,0 +1,58 @@
+{
+  "name": "Rust Slint Password Saver",
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
+  
+  // Configure tool-specific properties
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "slint.slint",
+        "vadimcn.vscode-lldb",
+        "serayuzgur.crates",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "rust-analyzer.checkOnSave.command": "clippy",
+        "rust-analyzer.cargo.features": "all",
+        "editor.formatOnSave": true,
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        }
+      }
+    }
+  },
+
+  // Features to add to the dev container
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "configureZshAsDefaultShell": true
+    }
+  },
+
+  // Install additional system dependencies required for Slint and cross-platform builds
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  // Forward ports for potential web-based debugging or documentation servers
+  "forwardPorts": [],
+
+  // Use 'postStartCommand' to run commands after the container starts
+  "postStartCommand": "rustc --version && cargo --version",
+
+  // Configure container environment
+  "remoteEnv": {
+    "RUST_BACKTRACE": "1"
+  },
+
+  // Set container user to vscode (non-root)
+  "remoteUser": "vscode",
+
+  // Configure mounts for caching to improve performance
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-cargo-cache,target=/usr/local/cargo/registry,type=volume",
+    "source=${localWorkspaceFolderBasename}-target-cache,target=${containerWorkspaceFolder}/target,type=volume"
+  ]
+}
