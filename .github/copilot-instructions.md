@@ -62,7 +62,7 @@ This is a cross-platform desktop password manager built with Rust and Slint UI f
 ### Security Best Practices
 
 1. **Never commit secrets or hardcoded passwords** to source code
-2. **Always use cryptographically secure random number generators** (e.g., `OsRng` from `aes_gcm::aead`)
+2. **Always use cryptographically secure random number generators** (e.g., `OsRng` re-exported from `aes_gcm::aead`)
 3. **Follow the existing encryption patterns** in `src/storage.rs`:
    - Use Argon2 for key derivation with random salts
    - Use AES-256-GCM for encryption with random nonces
@@ -105,7 +105,7 @@ tests/
 ## Platform Support
 
 - **Primary targets**: macOS and Linux
-- **Storage path**: `~/.password_saver/passwords.enc` (cross-platform via `std::env::home_dir()` or similar)
+- **Storage path**: `~/.password_saver/passwords.enc` (resolved via `std::env::var("HOME")` on Unix-like systems)
 - **System dependencies**: Slint requires platform-specific libraries
   - macOS: cmake
   - Linux: cmake, libfontconfig1-dev, libxcb-shape0-dev, libxcb-xfixes0-dev
