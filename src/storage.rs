@@ -12,7 +12,7 @@
 //! - **Authenticity**: GCM mode provides tamper detection
 //! - **Integrity**: Any modification causes decryption to fail
 //! - **Zero-Knowledge**: Master password never stored
-//! - **Forward Secrecy**: New salt and nonce per save operation
+//! - **Unique Encryption**: New salt and nonce per save operation
 
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
@@ -306,7 +306,8 @@ impl PasswordStorage {
     ///
     /// - Generates a new random salt for each save operation
     /// - Generates a new random nonce for each save operation
-    /// - This ensures forward secrecy - old backups cannot be decrypted if master password changes
+    /// - This ensures different ciphertexts even for identical plaintexts
+    /// - Protects against rainbow table attacks on the password hash
     ///
     /// # Example
     ///
@@ -338,7 +339,7 @@ impl PasswordStorage {
             .map_err(|e| format!("Failed to serialize entries: {}", e))?;
 
         // Generate cryptographically random salt for key derivation
-        // Each save operation gets a new salt for forward secrecy
+        // Each save operation gets a new salt to prevent rainbow table attacks
         let salt = SaltString::generate(&mut OsRng);
         let salt_bytes = salt.as_str().as_bytes();
 
