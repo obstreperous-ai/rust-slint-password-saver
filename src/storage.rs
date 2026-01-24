@@ -337,17 +337,21 @@ impl PasswordStorage {
         let json_data = serde_json::to_string(entries)
             .map_err(|e| format!("Failed to serialize entries: {}", e))?;
 
-        // Generate cryptographically random salt and nonce
+        // Generate cryptographically random salt for key derivation
+        // Each save operation gets a new salt for forward secrecy
         let salt = SaltString::generate(&mut OsRng);
         let salt_bytes = salt.as_str().as_bytes();
+
+        // Generate cryptographically random nonce for AES-GCM
+        // Must be unique for each encryption with the same key
         let mut nonce_bytes = [0u8; 12];
         use aes_gcm::aead::rand_core::RngCore;
         OsRng.fill_bytes(&mut nonce_bytes);
 
-        // Derive encryption key from master password
+        // Derive encryption key from master password using Argon2
         let key = Self::derive_key(master_password, salt_bytes)?;
 
-        // Encrypt the data
+        // Encrypt the data using AES-256-GCM (provides both confidentiality and authenticity)
         let encrypted_data = Self::encrypt_data(json_data.as_bytes(), &key, &nonce_bytes)?;
 
         // Create storage structure with salt, nonce, and encrypted data
@@ -357,7 +361,7 @@ impl PasswordStorage {
             encrypted_data,
         };
 
-        // Serialize and write to disk
+        // Serialize storage data to JSON and write to disk
         let storage_json = serde_json::to_string(&storage_data)
             .map_err(|e| format!("Failed to serialize storage data: {}", e))?;
 
@@ -415,29 +419,32 @@ impl PasswordStorage {
     /// }
     /// ```
     pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, String> {
-        // Read storage file
+        // Read encrypted storage file from disk
         let storage_json = fs::read_to_string(&self.storage_path)
             .map_err(|e| format!("Failed to read storage file: {}", e))?;
 
-        // Deserialize storage data
+        // Deserialize storage data (salt, nonce, encrypted data)
         let storage_data: StorageData = serde_json::from_str(&storage_json)
             .map_err(|e| format!("Failed to deserialize storage data: {}", e))?;
 
-        // Derive decryption key
+        // Derive decryption key using the same salt that was used for encryption
         let key = Self::derive_key(master_password, &storage_data.salt)?;
 
-        // Decrypt data
+        // Extract nonce (must be exactly 12 bytes for AES-GCM)
         let nonce: [u8; 12] = storage_data
             .nonce
             .as_slice()
             .try_into()
             .map_err(|_| "Invalid nonce size")?;
+
+        // Decrypt data (will fail if password is wrong or data has been tampered with)
         let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)?;
 
-        // Deserialize entries
+        // Convert decrypted bytes to UTF-8 string
         let json_str = String::from_utf8(decrypted_data)
             .map_err(|e| format!("Failed to convert decrypted data to string: {}", e))?;
 
+        // Deserialize password entries from JSON
         let entries: Vec<PasswordEntry> = serde_json::from_str(&json_str)
             .map_err(|e| format!("Failed to deserialize entries: {}", e))?;
 
