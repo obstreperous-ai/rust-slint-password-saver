@@ -75,7 +75,7 @@ pub struct PasswordEntry {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```no_run
 /// use rust_slint_password_saver::storage::{PasswordStorage, PasswordEntry};
 /// use std::path::PathBuf;
 /// use std::time::{SystemTime, UNIX_EPOCH};
@@ -310,7 +310,7 @@ impl PasswordStorage {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```no_run
     /// use rust_slint_password_saver::storage::{PasswordStorage, PasswordEntry};
     /// use std::path::PathBuf;
     /// use std::time::{SystemTime, UNIX_EPOCH};
@@ -406,7 +406,7 @@ impl PasswordStorage {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```no_run
     /// use rust_slint_password_saver::storage::PasswordStorage;
     /// use std::path::PathBuf;
     ///
@@ -459,7 +459,7 @@ impl PasswordStorage {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```no_run
     /// use rust_slint_password_saver::storage::PasswordStorage;
     /// use std::path::PathBuf;
     ///

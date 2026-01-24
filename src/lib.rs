@@ -11,7 +11,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```no_run
 //! use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 //! use std::path::PathBuf;
 //! use std::time::{SystemTime, UNIX_EPOCH};
