@@ -1,3 +1,24 @@
+//! # Password Saver Application
+//!
+//! A cross-platform desktop password manager built with Slint UI framework.
+//!
+//! This application provides a graphical interface for securely storing and
+//! retrieving passwords using military-grade encryption (Argon2 + AES-256-GCM).
+//!
+//! ## Features
+//!
+//! - Save password entries with title, username, and password
+//! - Load and view stored passwords
+//! - All data encrypted with master password
+//! - Cross-platform support (macOS, Linux)
+//!
+//! ## Usage
+//!
+//! Run the application with:
+//! ```bash
+//! cargo run --release
+//! ```
+
 mod storage;
 
 use std::fmt::Write as _;
@@ -10,8 +31,22 @@ slint::include_modules!();
 /// Maximum number of password entries to display in status message
 const MAX_DISPLAY_ENTRIES: usize = 5;
 
-/// Get cross-platform path for storing encrypted passwords
-/// Works on macOS, Linux, and other Unix-like systems
+/// Get cross-platform path for storing encrypted passwords.
+///
+/// This function determines the appropriate location for password storage
+/// based on the operating system:
+/// - Unix-like systems (macOS, Linux): `~/.password_saver/passwords.enc`
+/// - Windows: `%USERPROFILE%/.password_saver/passwords.enc`
+///
+/// # Returns
+///
+/// A `PathBuf` pointing to the storage file location. Parent directory
+/// is created if it doesn't exist.
+///
+/// # Platform Support
+///
+/// Works on macOS, Linux, and other Unix-like systems. Uses `HOME` environment
+/// variable on Unix and `USERPROFILE` on Windows.
 fn get_storage_path() -> PathBuf {
     // Use home directory for cross-platform compatibility
     let home_dir = std::env::var("HOME")
