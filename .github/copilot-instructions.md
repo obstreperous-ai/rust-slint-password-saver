@@ -205,11 +205,75 @@ All quality checks run automatically in GitHub Actions:
 
 **Before submitting PR**: Ensure all CI checks will pass by running locally:
 ```bash
+# Quality checks
 cargo fmt -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test
+
+# Security audit (REQUIRED - workflow will fail if this fails)
 cargo audit
+
+# If any check fails, you MUST fix it before submitting the PR
 ```
+
+### GitHub Actions Workflow Requirements
+
+**CRITICAL: When modifying or creating GitHub Actions workflows, ensure:**
+
+1. **Rust Toolchain Action** (`dtolnay/rust-toolchain`):
+   - ALWAYS provide the `toolchain` input parameter explicitly
+   - Correct usage:
+     ```yaml
+     - name: Install Rust toolchain
+       uses: dtolnay/rust-toolchain@stable
+       with:
+         toolchain: stable  # Required parameter
+     ```
+   - ❌ INCORRECT: `uses: dtolnay/rust-toolchain@stable` (missing `with:` block)
+   - ✅ CORRECT: Include `with:` block with explicit `toolchain` parameter
+
+2. **Security Audit Workflow** (`.github/workflows/security.yml`):
+   - Must run `cargo audit` successfully
+   - Requires `cargo-audit` to be installed
+   - Should fail the build if vulnerabilities are found
+   - Run locally before PR: `cargo audit`
+
+3. **Before submitting ANY PR that touches workflows**:
+   - Verify the workflow syntax is correct
+   - Check that all required action inputs are provided
+   - Review the action's documentation for required parameters
+   - Test locally when possible (e.g., run cargo commands directly)
+
+4. **Common GitHub Actions mistakes to avoid**:
+   - ❌ Using action version tags as input parameters
+   - ❌ Forgetting `with:` block for actions that require inputs
+   - ❌ Not checking action documentation for required parameters
+   - ❌ Assuming version tags automatically set parameters
+
+### Pre-PR Security Checklist
+
+Before submitting a pull request, ALWAYS verify:
+
+```bash
+# 1. Run security audit
+cargo audit
+
+# 2. If cargo audit fails, investigate and fix vulnerabilities
+#    - Update dependencies if patches are available
+#    - Review security advisories
+#    - Document any accepted risks
+
+# 3. Ensure all CI workflows would pass
+#    Check each workflow file and verify you can run equivalent commands locally
+```
+
+If `cargo audit` reports vulnerabilities:
+- Check if updated versions of dependencies are available
+- Review the security advisory to understand the risk
+- Update `Cargo.toml` and run `cargo update`
+- Re-run `cargo audit` to verify fixes
+- Document any vulnerabilities that cannot be immediately fixed
+
 
 ## TDD (Test-Driven Development) Best Practices
 
