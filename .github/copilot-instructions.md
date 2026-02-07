@@ -648,6 +648,35 @@ cargo tree                    # Show dependency tree
 - **Documentation**: This is an educational/experimental project - see README disclaimer
 - **Agent-friendly**: The codebase is designed to be clear and maintainable for both humans and AI assistants
 
+## Agent Personas
+
+This repository supports specialized agent personas for different types of development work. When assigned to a task, agents should operate according to their persona's expertise and guidelines.
+
+### How to Use Agent Personas
+
+1. **Assignment**: Issues can be assigned to specific agent personas using labels or mentions in the issue description
+2. **Custom Agents**: Use the `@agent-name` syntax in pull request descriptions to invoke specialized agents
+3. **Collaboration**: Multiple agents can work together on complex issues by referencing each other's work
+
+### Available Agent Personas
+
+Agent personas are defined in the `.github/agents/` directory. Each persona has:
+- Specific expertise and focus areas
+- Guidelines for code review and implementation
+- Testing and security requirements specific to their domain
+- Communication style and collaboration patterns
+
+See individual agent persona files in `.github/agents/` for detailed documentation.
+
+### Creating New Agent Personas
+
+When creating a new agent persona:
+1. Create a new `.md` file in `.github/agents/` following the template
+2. Define the agent's expertise, responsibilities, and constraints
+3. Include specific guidelines for code review and testing
+4. Update this section to reference the new persona
+5. Test the persona by assigning it to a sample issue
+
 ## References
 
 - README.md - Comprehensive project documentation
