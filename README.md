@@ -78,12 +78,16 @@ Encrypted passwords are stored at:
 
 ### Security Considerations
 
+📋 **For comprehensive security information, see [SECURITY.md](SECURITY.md)**
+
 ⚠️ **Important Notes**:
 - The security of your passwords depends entirely on the strength of your master password
 - Use a strong, unique master password (recommended: 16+ characters, mixed case, numbers, symbols)
 - Master password is never stored and cannot be recovered if forgotten
 - The application does not implement any backup/recovery mechanism by design
 - All data is stored locally; no cloud synchronization (enhances security, reduces attack surface)
+
+🔍 **Security Status**: The project undergoes regular security audits. Current security status and identified issues are documented in [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -493,7 +497,10 @@ We welcome contributions from the community! This project is designed to be agen
 5. Address review feedback promptly
 
 #### Security Issues
-If you discover a security vulnerability, please email the maintainers directly rather than opening a public issue.
+
+**For detailed security information, policies, and vulnerability reporting, please see [SECURITY.md](SECURITY.md).**
+
+If you discover a security vulnerability, please follow the responsible disclosure process outlined in [SECURITY.md](SECURITY.md) rather than opening a public issue.
 
 ### Development Workflow
 
