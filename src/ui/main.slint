@@ -7,9 +7,11 @@ export component AppWindow inherits Window {
     
     in-out property <string> status-message: "";
     in-out property <string> master-password: "";
+    in-out property <bool> show-change-password-dialog: false;
     
     callback save-password(string, string, string, string);
     callback load-passwords(string);
+    callback change-master-password(string, string, string);
     
     VerticalBox {
         padding: 20px;
@@ -117,6 +119,14 @@ export component AppWindow inherits Window {
                             root.load-passwords(root.master-password);
                         }
                     }
+                    
+                    Button {
+                        text: "Change Master Password";
+                        enabled: root.master-password != "";
+                        clicked => {
+                            root.show-change-password-dialog = true;
+                        }
+                    }
                 }
             }
         }
@@ -147,6 +157,145 @@ export component AppWindow inherits Window {
                 Text {
                     text: status-message;
                     color: #2e7d32;
+                }
+            }
+        }
+    }
+    
+    // Change Master Password Dialog
+    if root.show-change-password-dialog : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        
+        Rectangle {
+            width: 500px;
+            height: 450px;
+            background: white;
+            border-radius: 8px;
+            border-width: 2px;
+            border-color: #4caf50;
+            
+            VerticalBox {
+                padding: 20px;
+                spacing: 15px;
+                
+                Text {
+                    text: "Change Master Password";
+                    font-size: 20px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                }
+                
+                HorizontalBox {
+                    Text {
+                        text: "Current Password:";
+                        vertical-alignment: center;
+                        min-width: 140px;
+                    }
+                    current-password-input := LineEdit {
+                        placeholder-text: "Enter current password";
+                        input-type: password;
+                    }
+                }
+                
+                HorizontalBox {
+                    Text {
+                        text: "New Password:";
+                        vertical-alignment: center;
+                        min-width: 140px;
+                    }
+                    new-password-input := LineEdit {
+                        placeholder-text: "Enter new password";
+                        input-type: password;
+                    }
+                }
+                
+                HorizontalBox {
+                    Text {
+                        text: "Confirm New:";
+                        vertical-alignment: center;
+                        min-width: 140px;
+                    }
+                    confirm-password-input := LineEdit {
+                        placeholder-text: "Confirm new password";
+                        input-type: password;
+                    }
+                }
+                
+                Rectangle {
+                    background: #f5f5f5;
+                    border-radius: 4px;
+                    
+                    VerticalBox {
+                        padding: 10px;
+                        spacing: 5px;
+                        
+                        Text {
+                            text: "Password Requirements:";
+                            font-weight: 600;
+                            font-size: 14px;
+                        }
+                        
+                        Text {
+                            text: "• At least 8 characters long";
+                            font-size: 12px;
+                            color: #666;
+                        }
+                        
+                        Text {
+                            text: "• At least one uppercase letter";
+                            font-size: 12px;
+                            color: #666;
+                        }
+                        
+                        Text {
+                            text: "• At least one lowercase letter";
+                            font-size: 12px;
+                            color: #666;
+                        }
+                        
+                        Text {
+                            text: "• At least one number";
+                            font-size: 12px;
+                            color: #666;
+                        }
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    Button {
+                        text: "Change Password";
+                        primary: true;
+                        enabled: current-password-input.text != "" && 
+                                new-password-input.text != "" && 
+                                confirm-password-input.text != "";
+                        clicked => {
+                            root.change-master-password(
+                                current-password-input.text,
+                                new-password-input.text,
+                                confirm-password-input.text
+                            );
+                            // Clear fields and close dialog
+                            current-password-input.text = "";
+                            new-password-input.text = "";
+                            confirm-password-input.text = "";
+                            root.show-change-password-dialog = false;
+                        }
+                    }
+                    
+                    Button {
+                        text: "Cancel";
+                        clicked => {
+                            // Clear fields and close dialog
+                            current-password-input.text = "";
+                            new-password-input.text = "";
+                            confirm-password-input.text = "";
+                            root.show-change-password-dialog = false;
+                        }
+                    }
                 }
             }
         }

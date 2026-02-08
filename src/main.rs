@@ -136,6 +136,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Set up load passwords callback
     // This is called when the user clicks "Load Passwords" button
     let ui_weak = ui.as_weak();
+    let storage_path_clone = storage_path.clone();
     ui.on_load_passwords(move |master_password| {
         if let Some(ui) = ui_weak.upgrade() {
             if master_password.is_empty() {
@@ -143,7 +144,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
 
-            let storage = PasswordStorage::new(storage_path.clone());
+            let storage = PasswordStorage::new(storage_path_clone.clone());
 
             if !storage.exists() {
                 ui.set_status_message("No passwords stored yet".into());
@@ -182,6 +183,58 @@ fn main() -> Result<(), slint::PlatformError> {
                         )
                         .into(),
                     );
+                }
+            }
+        }
+    });
+
+    // Set up change master password callback
+    // This is called when the user clicks "Change Password" button in the dialog
+    let ui_weak = ui.as_weak();
+    let storage_path_clone = storage_path.clone();
+    ui.on_change_master_password(move |current_password, new_password, confirm_password| {
+        if let Some(ui) = ui_weak.upgrade() {
+            // Validate inputs
+            if current_password.is_empty() {
+                ui.set_status_message("Error: Current password is required".into());
+                return;
+            }
+
+            if new_password.is_empty() {
+                ui.set_status_message("Error: New password is required".into());
+                return;
+            }
+
+            if confirm_password.is_empty() {
+                ui.set_status_message("Error: Please confirm new password".into());
+                return;
+            }
+
+            // Check if new passwords match
+            if new_password != confirm_password {
+                ui.set_status_message("Error: New passwords do not match".into());
+                return;
+            }
+
+            let storage = PasswordStorage::new(storage_path_clone.clone());
+
+            if !storage.exists() {
+                ui.set_status_message("Error: No password storage file exists".into());
+                return;
+            }
+
+            // Attempt to change the master password
+            match storage.change_master_password(&current_password, &new_password) {
+                Ok(()) => {
+                    ui.set_status_message(
+                        "Master password changed successfully! Use the new password from now on."
+                            .into(),
+                    );
+                    // Update the master password field to new password
+                    ui.set_master_password(new_password.to_string().into());
+                }
+                Err(e) => {
+                    ui.set_status_message(format!("Error changing password: {}", e).into());
                 }
             }
         }
