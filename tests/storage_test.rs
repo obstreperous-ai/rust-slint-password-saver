@@ -12,6 +12,18 @@ fn current_timestamp() -> u64 {
 
 #[test]
 fn test_zeroization_behavior() {
+    // This test verifies that the ZeroizeOnDrop trait is properly derived
+    // and that PasswordEntry continues to work correctly with zeroization enabled.
+    //
+    // Note: Direct verification of memory zeroization is not possible in safe Rust.
+    // The zeroize crate provides this guarantee through its Drop implementation,
+    // which is automatically called when the struct goes out of scope.
+    //
+    // What this test verifies:
+    // 1. PasswordEntry compiles with Zeroize and ZeroizeOnDrop traits
+    // 2. Normal operations (clone, drop) work as expected
+    // 3. Serialization/deserialization still functions correctly
+
     // Create a password entry
     let password = "my_secret_password_123";
     let entry = PasswordEntry {
@@ -21,18 +33,15 @@ fn test_zeroization_behavior() {
         created_at: current_timestamp(),
     };
 
-    // Clone the password to verify behavior
+    // Clone the password to verify normal operations work
     let password_clone = entry.password.clone();
     assert_eq!(password_clone, password);
 
     // Drop the entry to trigger zeroization
+    // The password field's memory is securely cleared here by ZeroizeOnDrop
     drop(entry);
 
-    // Note: We can't directly test that memory was zeroized in Rust,
-    // but we can verify that the ZeroizeOnDrop trait is properly derived
-    // The actual zeroization happens automatically when the struct is dropped
-
-    // Create another entry to ensure the pattern works
+    // Create another entry to ensure the pattern works consistently
     let entry2 = PasswordEntry {
         title: "Test Entry 2".to_string(),
         username: "user2".to_string(),
@@ -45,6 +54,8 @@ fn test_zeroization_behavior() {
     let deserialized: PasswordEntry = serde_json::from_str(&json).unwrap();
     assert_eq!(entry2.password, deserialized.password);
     assert_eq!(entry2.title, deserialized.title);
+
+    // entry2 will be dropped here, triggering zeroization
 }
 
 #[test]
