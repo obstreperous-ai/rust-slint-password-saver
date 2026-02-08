@@ -11,6 +11,7 @@
 //! - Load and view stored passwords
 //! - All data encrypted with master password
 //! - Cross-platform support (macOS, Linux)
+//! - Security audit logging for all operations
 //!
 //! ## Usage
 //!
@@ -19,8 +20,10 @@
 //! cargo run --release
 //! ```
 
+mod audit_log;
 mod storage;
 
+use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -68,6 +71,15 @@ fn get_storage_path() -> PathBuf {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
+    // Initialize audit logging
+    let audit_logger = AuditLogger::new(get_audit_log_path());
+    let startup_entry = AuditLogger::create_entry(
+        AuditEventType::ApplicationStartup,
+        true,
+        Some("Password Manager application started".to_string()),
+    );
+    let _ = audit_logger.log_event(&startup_entry);
+
     // Create and initialize the main UI window
     let ui = AppWindow::new()?;
 

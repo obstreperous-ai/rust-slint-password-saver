@@ -13,7 +13,9 @@
 //! - **Integrity**: Any modification causes decryption to fail
 //! - **Zero-Knowledge**: Master password never stored
 //! - **Unique Encryption**: New salt and nonce per save operation
+//! - **Audit Trail**: All operations logged for forensic analysis
 
+use crate::audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
@@ -334,6 +336,17 @@ impl PasswordStorage {
         entries: &[PasswordEntry],
         master_password: &str,
     ) -> Result<(), String> {
+        // Initialize audit logger
+        let audit_logger = AuditLogger::new(get_audit_log_path());
+
+        // Log file access attempt
+        let file_access_entry = AuditLogger::create_entry(
+            AuditEventType::FileAccess,
+            true,
+            Some(format!("Writing to {}", self.storage_path.display())),
+        );
+        let _ = audit_logger.log_event(&file_access_entry);
+
         // Serialize entries to JSON
         let json_data = serde_json::to_string(entries)
             .map_err(|e| format!("Failed to serialize entries: {}", e))?;
@@ -368,6 +381,14 @@ impl PasswordStorage {
 
         fs::write(&self.storage_path, storage_json)
             .map_err(|e| format!("Failed to write to disk: {}", e))?;
+
+        // Log successful password save
+        let save_entry = AuditLogger::create_entry(
+            AuditEventType::PasswordsSaved,
+            true,
+            Some(format!("Saved {} password entries", entries.len())),
+        );
+        let _ = audit_logger.log_event(&save_entry);
 
         Ok(())
     }
@@ -420,6 +441,17 @@ impl PasswordStorage {
     /// }
     /// ```
     pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, String> {
+        // Initialize audit logger
+        let audit_logger = AuditLogger::new(get_audit_log_path());
+
+        // Log file access attempt
+        let file_access_entry = AuditLogger::create_entry(
+            AuditEventType::FileAccess,
+            true,
+            Some(format!("Reading from {}", self.storage_path.display())),
+        );
+        let _ = audit_logger.log_event(&file_access_entry);
+
         // Read encrypted storage file from disk
         let storage_json = fs::read_to_string(&self.storage_path)
             .map_err(|e| format!("Failed to read storage file: {}", e))?;
@@ -438,8 +470,25 @@ impl PasswordStorage {
             .try_into()
             .map_err(|_| "Invalid nonce size")?;
 
+        // Log master password check
+        let password_check_entry = AuditLogger::create_entry(
+            AuditEventType::MasterPasswordCheck,
+            true,
+            Some("Attempting decryption".to_string()),
+        );
+        let _ = audit_logger.log_event(&password_check_entry);
+
         // Decrypt data (will fail if password is wrong or data has been tampered with)
-        let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)?;
+        let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)
+            .inspect_err(|_| {
+                // Log failed decryption attempt
+                let failed_entry = AuditLogger::create_entry(
+                    AuditEventType::MasterPasswordCheck,
+                    false,
+                    Some("Decryption failed - possibly wrong master password".to_string()),
+                );
+                let _ = audit_logger.log_event(&failed_entry);
+            })?;
 
         // Convert decrypted bytes to UTF-8 string
         let json_str = String::from_utf8(decrypted_data)
@@ -448,6 +497,14 @@ impl PasswordStorage {
         // Deserialize password entries from JSON
         let entries: Vec<PasswordEntry> = serde_json::from_str(&json_str)
             .map_err(|e| format!("Failed to deserialize entries: {}", e))?;
+
+        // Log successful password load
+        let load_entry = AuditLogger::create_entry(
+            AuditEventType::PasswordsLoaded,
+            true,
+            Some(format!("Loaded {} password entries", entries.len())),
+        );
+        let _ = audit_logger.log_event(&load_entry);
 
         Ok(entries)
     }
