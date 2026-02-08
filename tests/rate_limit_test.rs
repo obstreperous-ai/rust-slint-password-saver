@@ -119,8 +119,9 @@ fn test_error_message_includes_wait_time() {
 
 #[test]
 fn test_time_window_cleanup() {
-    // Note: This test uses a real rate limiter with the default 5-minute window.
-    // We simulate the cleanup by testing that attempts are properly tracked.
+    // This test verifies that attempts are properly tracked.
+    // Actual cleanup happens automatically in check_and_record_attempt
+    // when attempts outside the time window are removed.
     let limiter = RateLimiter::new();
 
     // Make 3 attempts
@@ -128,10 +129,6 @@ fn test_time_window_cleanup() {
         let _ = limiter.check_and_record_attempt();
     }
 
-    assert_eq!(limiter.attempt_count(), 3);
-
-    // The rate limiter will clean up old attempts automatically
-    // when check_and_record_attempt is called next time.
-    // For now, verify that we have the expected number of attempts
+    // Verify attempts are tracked
     assert_eq!(limiter.attempt_count(), 3);
 }

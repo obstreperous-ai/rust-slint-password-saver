@@ -150,15 +150,15 @@ impl RateLimiter {
 
         // Check if we've exceeded max attempts
         if attempts.len() >= self.max_attempts {
-            // Find the oldest attempt in the window
-            if let Some(&oldest_attempt) = attempts.first() {
-                let time_since_oldest = now.duration_since(oldest_attempt);
+            // Find the most recent attempt in the window to enforce lockout from there
+            if let Some(&most_recent_attempt) = attempts.last() {
+                let time_since_most_recent = now.duration_since(most_recent_attempt);
 
-                // If we're still within the lockout period after the oldest attempt
-                if time_since_oldest < self.lockout_duration {
+                // If we're still within the lockout period after the most recent attempt
+                if time_since_most_recent < self.lockout_duration {
                     let remaining_secs = self
                         .lockout_duration
-                        .checked_sub(time_since_oldest)
+                        .checked_sub(time_since_most_recent)
                         .map_or(0, |d| d.as_secs());
                     return Err(format!(
                         "Too many failed attempts. Please wait {} seconds before trying again.",
