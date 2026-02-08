@@ -742,7 +742,7 @@ ui.on_save_password(move |master_password, title, username, password| {
 - ✅ Uses zxcvbn entropy analysis to detect weak patterns and common passwords
 - ✅ Validation only applied on first use (creating new password database)
 - ✅ Provides user-friendly error messages with specific improvement suggestions
-- ✅ Added 17 unit tests covering various password scenarios
+- ✅ Added 14 unit tests covering various password scenarios
 - ✅ Updated README.md with password requirements and examples
 - ✅ All tests pass, no clippy warnings
 
