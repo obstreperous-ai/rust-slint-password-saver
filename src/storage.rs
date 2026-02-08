@@ -148,7 +148,7 @@ impl PasswordStorage {
     /// - **Output**: 32 bytes (256 bits) - matches AES-256 key size
     ///
     /// These parameters provide a good balance between security and usability, with typical
-    /// key derivation time of 100-500ms on modern hardware.
+    /// key derivation time of 100ms-2000ms depending on hardware (measured ~869ms on GitHub Actions CI).
     ///
     /// # Arguments
     ///
@@ -566,7 +566,8 @@ mod tests {
     #[test]
     fn test_key_derivation_time() {
         // Test that key derivation with strengthened parameters takes a reasonable time
-        // Expected: 100ms - 1000ms (acceptable range for security vs usability)
+        // Expected: 100ms - 2000ms (acceptable range balancing security vs usability)
+        // Measured on CI: ~869ms
         let password = "test_password_for_timing";
         let salt = [1u8; 16];
 
@@ -579,10 +580,10 @@ mod tests {
             duration
         );
 
-        // Verify key derivation takes at least 50ms (security requirement)
+        // Verify key derivation takes at least 100ms (security requirement)
         assert!(
-            duration.as_millis() >= 50,
-            "Key derivation too fast: {:?}ms - may be insecure",
+            duration.as_millis() >= 100,
+            "Key derivation too fast: {:?}ms - strengthened parameters not working",
             duration.as_millis()
         );
 

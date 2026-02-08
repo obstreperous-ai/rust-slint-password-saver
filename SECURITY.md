@@ -572,8 +572,9 @@ The `derive_key()` function in `src/storage.rs` has been updated with:
 - Explicit version specification (V0x13 - latest with security improvements)
 
 **Key Derivation Performance:**
-- Measured time: ~869ms on test hardware
-- Within acceptable range for password managers (100ms-2000ms)
+- Measured time: ~869ms (on GitHub Actions CI runners - Ubuntu Linux)
+- Expected range on typical hardware: 100ms-2000ms
+- **Note**: Performance varies significantly by hardware - faster CPUs will see shorter times
 - Balances security with user experience
 
 **Security Benefits:**
