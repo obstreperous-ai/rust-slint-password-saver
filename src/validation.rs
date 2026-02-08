@@ -139,7 +139,7 @@ pub fn validate_username(username: &str) -> Result<(), String> {
 ///
 /// - Must not be empty
 /// - Maximum length: 1000 characters
-/// - Must not contain control characters (except for legitimate password characters)
+/// - Must not contain control characters (tab character is allowed for compatibility)
 ///
 /// # Arguments
 ///
@@ -161,8 +161,11 @@ pub fn validate_username(username: &str) -> Result<(), String> {
 /// // Empty password
 /// assert!(validate_password("").is_err());
 ///
-/// // Password with control character
+/// // Password with newline control character
 /// assert!(validate_password("pass\nword").is_err());
+///
+/// // Tab character is allowed
+/// assert!(validate_password("pass\tword").is_ok());
 /// ```
 pub fn validate_password(password: &str) -> Result<(), String> {
     if password.is_empty() {
@@ -174,8 +177,8 @@ pub fn validate_password(password: &str) -> Result<(), String> {
             MAX_PASSWORD_LENGTH
         ));
     }
-    // Note: We allow control characters except for the most problematic ones
-    // like null bytes, as some passwords might legitimately contain whitespace chars
+    // Note: Tab character is allowed as it may be used in some passwords,
+    // but other control characters (newlines, null bytes, etc.) are rejected
     if password.chars().any(|c| c.is_control() && c != '\t') {
         return Err("Password contains invalid characters".into());
     }
