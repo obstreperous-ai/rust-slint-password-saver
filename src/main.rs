@@ -41,7 +41,8 @@ const MAX_DISPLAY_ENTRIES: usize = 5;
 /// # Returns
 ///
 /// A `PathBuf` pointing to the storage file location. Parent directory
-/// is created if it doesn't exist.
+/// is created if it doesn't exist. On Unix systems, the directory is
+/// created with secure permissions (0700).
 ///
 /// # Platform Support
 ///
@@ -62,6 +63,14 @@ fn get_storage_path() -> PathBuf {
     // This ensures ~/.password_saver/ exists before we try to write
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
+
+        // Set secure permissions on the directory (0700 on Unix)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o700);
+            let _ = std::fs::set_permissions(parent, permissions);
+        }
     }
 
     path

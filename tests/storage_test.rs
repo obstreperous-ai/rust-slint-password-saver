@@ -2,6 +2,9 @@ use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 /// Helper function to generate current timestamp
 fn current_timestamp() -> u64 {
     SystemTime::now()
@@ -168,6 +171,134 @@ fn test_empty_entries() {
         .load_entries(master_password)
         .expect("Failed to load empty entries");
     assert_eq!(loaded.len(), 0);
+
+    // Clean up
+    let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_file_permissions_are_secure() {
+    let test_path = std::env::temp_dir().join("test_passwords_perms.enc");
+
+    // Clean up any existing test file
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+    let master_password = "test_password";
+
+    // Create and save test entry
+    let entries = vec![PasswordEntry {
+        title: "Test".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: current_timestamp(),
+    }];
+
+    storage
+        .save_entries(&entries, master_password)
+        .expect("Failed to save entries");
+
+    // Verify file permissions are 0600
+    let metadata = fs::metadata(&test_path).expect("Failed to get file metadata");
+    let permissions = metadata.permissions();
+    let mode = permissions.mode();
+
+    // On Unix, the lower 9 bits represent rwxrwxrwx
+    // 0600 means rw------- (owner read/write only)
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "File permissions should be 0600 (owner read/write only)"
+    );
+
+    // Clean up
+    let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_directory_permissions_are_secure() {
+    let test_dir = std::env::temp_dir().join("test_password_saver_dir");
+    let test_path = test_dir.join("passwords.enc");
+
+    // Clean up any existing test directory
+    let _ = fs::remove_dir_all(&test_dir);
+
+    // Create directory with secure permissions
+    fs::create_dir_all(&test_dir).expect("Failed to create directory");
+
+    // Set directory permissions to 0700
+    let permissions = fs::Permissions::from_mode(0o700);
+    fs::set_permissions(&test_dir, permissions).expect("Failed to set directory permissions");
+
+    // Verify directory permissions are 0700
+    let metadata = fs::metadata(&test_dir).expect("Failed to get directory metadata");
+    let permissions = metadata.permissions();
+    let mode = permissions.mode();
+
+    // 0700 means rwx------ (owner read/write/execute only)
+    assert_eq!(
+        mode & 0o777,
+        0o700,
+        "Directory permissions should be 0700 (owner read/write/execute only)"
+    );
+
+    // Now test that saving a file in this directory preserves directory permissions
+    let storage = PasswordStorage::new(test_path.clone());
+    let entries = vec![PasswordEntry {
+        title: "Test".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: current_timestamp(),
+    }];
+
+    storage
+        .save_entries(&entries, "test_password")
+        .expect("Failed to save entries");
+
+    // Verify directory permissions are still 0700
+    let metadata = fs::metadata(&test_dir).expect("Failed to get directory metadata");
+    let permissions = metadata.permissions();
+    let mode = permissions.mode();
+
+    assert_eq!(
+        mode & 0o777,
+        0o700,
+        "Directory permissions should remain 0700 after file operations"
+    );
+
+    // Clean up
+    let _ = fs::remove_dir_all(&test_dir);
+}
+
+#[test]
+#[cfg(not(unix))]
+fn test_permissions_no_op_on_windows() {
+    // This test just verifies that setting permissions doesn't fail on Windows
+    let test_path = std::env::temp_dir().join("test_passwords_windows.enc");
+
+    // Clean up any existing test file
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+    let master_password = "test_password";
+
+    // Create and save test entry
+    let entries = vec![PasswordEntry {
+        title: "Test".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: current_timestamp(),
+    }];
+
+    // This should succeed on Windows without trying to set Unix permissions
+    storage
+        .save_entries(&entries, master_password)
+        .expect("Failed to save entries on Windows");
+
+    // Verify file exists
+    assert!(test_path.exists(), "File should exist after save");
 
     // Clean up
     let _ = fs::remove_file(&test_path);

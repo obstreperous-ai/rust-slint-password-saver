@@ -24,7 +24,10 @@ use argon2::{
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 /// Represents a single password entry in the password manager.
 ///
@@ -369,6 +372,9 @@ impl PasswordStorage {
         fs::write(&self.storage_path, storage_json)
             .map_err(|e| format!("Failed to write to disk: {}", e))?;
 
+        // Set secure permissions immediately after file creation (0600 on Unix)
+        Self::set_secure_permissions(&self.storage_path)?;
+
         Ok(())
     }
 
@@ -475,6 +481,52 @@ impl PasswordStorage {
     #[must_use]
     pub fn exists(&self) -> bool {
         self.storage_path.exists()
+    }
+
+    /// Sets secure file permissions (0600) on the storage file.
+    ///
+    /// On Unix systems, this sets the file permissions to 0600 (owner read/write only),
+    /// preventing other users from accessing the encrypted data. On non-Unix systems
+    /// (like Windows), this is a no-op.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the file to set permissions on
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or an error message on failure
+    ///
+    /// # Security
+    ///
+    /// - On Unix: Sets permissions to 0600 (owner read/write only)
+    /// - On Windows: No-op (Windows has different permission model)
+    /// - Defense-in-depth: Protects against future encryption vulnerabilities
+    /// - Reduces attack surface by preventing other users from accessing encrypted data
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("passwords.enc");
+    /// PasswordStorage::set_secure_permissions(path).unwrap();
+    /// ```
+    pub fn set_secure_permissions(path: &Path) -> Result<(), String> {
+        #[cfg(unix)]
+        {
+            let permissions = fs::Permissions::from_mode(0o600);
+            fs::set_permissions(path, permissions)
+                .map_err(|e| format!("Failed to set file permissions: {}", e))?;
+        }
+        #[cfg(not(unix))]
+        {
+            // On Windows, file permissions are handled differently (ACLs)
+            // This is a no-op, but we still return Ok to maintain API consistency
+            let _ = path;
+        }
+        Ok(())
     }
 }
 
