@@ -24,6 +24,7 @@ mod audit_log;
 mod storage;
 
 use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
+use log::warn;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -78,7 +79,9 @@ fn main() -> Result<(), slint::PlatformError> {
         true,
         Some("Password Manager application started".to_string()),
     );
-    let _ = audit_logger.log_event(&startup_entry);
+    if let Err(e) = audit_logger.log_event(&startup_entry) {
+        warn!("Failed to log application startup: {}", e);
+    }
 
     // Create and initialize the main UI window
     let ui = AppWindow::new()?;

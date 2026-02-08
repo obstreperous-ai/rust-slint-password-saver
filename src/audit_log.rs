@@ -23,6 +23,9 @@ type HmacSha256 = Hmac<Sha256>;
 /// Maximum log file size before rotation (10 MB)
 const MAX_LOG_SIZE: u64 = 10 * 1024 * 1024;
 
+/// Maximum number of rotated log files to keep
+const MAX_ROTATIONS: usize = 5;
+
 /// Represents a single audit log entry.
 ///
 /// Each entry contains:
@@ -311,19 +314,23 @@ impl AuditLogger {
             return Ok(());
         }
 
-        // Rotate logs (keep last 5 rotations)
-        for i in (1..5).rev() {
+        // Rotate logs (keep last MAX_ROTATIONS rotations)
+        for i in (1..MAX_ROTATIONS).rev() {
             let old_path = if i == 1 {
                 self.log_path.clone()
             } else {
+                // Construct rotated filename: audit.log.N
                 let mut path = self.log_path.clone();
-                path.set_extension(format!("log.{}", i));
+                let filename = format!("{}.{}", path.file_name().unwrap().to_string_lossy(), i);
+                path.set_file_name(filename);
                 path
             };
 
             let new_path = {
+                // Construct rotated filename: audit.log.(N+1)
                 let mut path = self.log_path.clone();
-                path.set_extension(format!("log.{}", i + 1));
+                let filename = format!("{}.{}", path.file_name().unwrap().to_string_lossy(), i + 1);
+                path.set_file_name(filename);
                 path
             };
 
@@ -336,7 +343,8 @@ impl AuditLogger {
         // Rename current log to .1
         let rotated_path = {
             let mut path = self.log_path.clone();
-            path.set_extension("log.1");
+            let filename = format!("{}.1", path.file_name().unwrap().to_string_lossy());
+            path.set_file_name(filename);
             path
         };
 

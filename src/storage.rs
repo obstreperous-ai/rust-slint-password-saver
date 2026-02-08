@@ -24,6 +24,7 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -345,7 +346,9 @@ impl PasswordStorage {
             true,
             Some(format!("Writing to {}", self.storage_path.display())),
         );
-        let _ = audit_logger.log_event(&file_access_entry);
+        if let Err(e) = audit_logger.log_event(&file_access_entry) {
+            warn!("Failed to log file access: {}", e);
+        }
 
         // Serialize entries to JSON
         let json_data = serde_json::to_string(entries)
@@ -388,7 +391,9 @@ impl PasswordStorage {
             true,
             Some(format!("Saved {} password entries", entries.len())),
         );
-        let _ = audit_logger.log_event(&save_entry);
+        if let Err(e) = audit_logger.log_event(&save_entry) {
+            warn!("Failed to log password save: {}", e);
+        }
 
         Ok(())
     }
@@ -450,7 +455,9 @@ impl PasswordStorage {
             true,
             Some(format!("Reading from {}", self.storage_path.display())),
         );
-        let _ = audit_logger.log_event(&file_access_entry);
+        if let Err(e) = audit_logger.log_event(&file_access_entry) {
+            warn!("Failed to log file access: {}", e);
+        }
 
         // Read encrypted storage file from disk
         let storage_json = fs::read_to_string(&self.storage_path)
@@ -476,7 +483,9 @@ impl PasswordStorage {
             true,
             Some("Attempting decryption".to_string()),
         );
-        let _ = audit_logger.log_event(&password_check_entry);
+        if let Err(e) = audit_logger.log_event(&password_check_entry) {
+            warn!("Failed to log password check: {}", e);
+        }
 
         // Decrypt data (will fail if password is wrong or data has been tampered with)
         let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)
@@ -487,7 +496,9 @@ impl PasswordStorage {
                     false,
                     Some("Decryption failed - possibly wrong master password".to_string()),
                 );
-                let _ = audit_logger.log_event(&failed_entry);
+                if let Err(e) = audit_logger.log_event(&failed_entry) {
+                    warn!("Failed to log failed decryption: {}", e);
+                }
             })?;
 
         // Convert decrypted bytes to UTF-8 string
@@ -504,7 +515,9 @@ impl PasswordStorage {
             true,
             Some(format!("Loaded {} password entries", entries.len())),
         );
-        let _ = audit_logger.log_event(&load_entry);
+        if let Err(e) = audit_logger.log_event(&load_entry) {
+            warn!("Failed to log password load: {}", e);
+        }
 
         Ok(entries)
     }
