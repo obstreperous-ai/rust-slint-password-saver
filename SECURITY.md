@@ -87,6 +87,8 @@ The automated security audit (cargo-audit) is currently failing due to known vul
 - Forward secrecy (new salt/nonce per save)
 - Memory safety via Rust's ownership system
 - Input validation (checks for empty fields)
+- Password strength requirements/validation
+- Master password change functionality
 
 ❌ **Missing:**
 - Memory clearing for sensitive data (passwords in memory)
@@ -96,8 +98,6 @@ The automated security audit (cargo-audit) is currently failing due to known vul
 - Protection against timing attacks in password verification
 - Secure deletion of old encrypted data
 - Audit logging for security events
-- Password strength requirements/validation
-- Master password change functionality
 - Backup and recovery mechanisms
 
 ---
@@ -1026,17 +1026,37 @@ pub fn change_master_password(
 - Verify old password no longer works
 
 **Acceptance Criteria:**
-- [ ] Master password change functionality implemented
-- [ ] UI dialog for password change added
-- [ ] Password strength validation enforced
-- [ ] Old password verified before change
-- [ ] All data successfully re-encrypted
-- [ ] Comprehensive tests for edge cases
-- [ ] Documentation updated with password change instructions
+- [x] Master password change functionality implemented
+- [x] UI dialog for password change added
+- [x] Password strength validation enforced
+- [x] Old password verified before change
+- [x] All data successfully re-encrypted
+- [x] Comprehensive tests for edge cases
+- [x] Documentation updated with password change instructions
 
 **Priority:** 🔵 MEDIUM
 **Estimated Effort:** 4-6 hours
 **Labels:** security, enhancement, feature
+
+**Status:** ✅ **RESOLVED**
+
+**Resolution Date:** 2026-02-08
+
+**Implementation Details:**
+- Added `validate_password_strength()` function to enforce password requirements:
+  - Minimum 8 characters
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one number
+- Added `change_master_password()` method to `PasswordStorage`:
+  - Verifies old password by loading entries
+  - Validates new password strength
+  - Ensures new password differs from old
+  - Re-encrypts all data with new password
+- Added UI dialog with fields for current/new/confirm passwords
+- Added comprehensive test coverage (5 test cases)
+- All data successfully re-encrypted with new password
+- Old password immediately invalidated after change
 
 ---
 
