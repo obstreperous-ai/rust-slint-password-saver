@@ -8,6 +8,7 @@
 //! - **Military-grade encryption**: Uses Argon2 + AES-256-GCM
 //! - **Zero-knowledge architecture**: Master password never stored
 //! - **Cross-platform support**: Works on macOS, Linux, and other Unix-like systems
+//! - **Rate limiting**: Protection against brute-force attacks
 //!
 //! ## Example
 //!
@@ -38,4 +39,5 @@
 //! let loaded = storage.load_entries("master_password").unwrap();
 //! ```
 
+pub mod rate_limit;
 pub mod storage;

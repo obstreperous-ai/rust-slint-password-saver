@@ -10,6 +10,7 @@
 //! - Save password entries with title, username, and password
 //! - Load and view stored passwords
 //! - All data encrypted with master password
+//! - Rate limiting to prevent brute-force attacks
 //! - Cross-platform support (macOS, Linux)
 //!
 //! ## Usage
@@ -19,14 +20,27 @@
 //! cargo run --release
 //! ```
 
+// Allow lazy_static for compatibility with Rust 1.70+
+// Will migrate to std::sync::LazyLock when minimum version is 1.80+
+#![allow(clippy::non_std_lazy_statics)]
+
+mod rate_limit;
 mod storage;
 
+use lazy_static::lazy_static;
+use rate_limit::RateLimiter;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::{PasswordEntry, PasswordStorage};
 
 slint::include_modules!();
+
+// Global rate limiter instance
+// Note: Using lazy_static for compatibility with Rust 1.70+
+lazy_static! {
+    static ref RATE_LIMITER: RateLimiter = RateLimiter::new();
+}
 
 /// Maximum number of password entries to display in status message
 const MAX_DISPLAY_ENTRIES: usize = 5;
@@ -143,6 +157,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
 
+            // Check rate limit before attempting decryption
+            if let Err(e) = RATE_LIMITER.check_and_record_attempt() {
+                ui.set_status_message(e.into());
+                return;
+            }
+
             let storage = PasswordStorage::new(storage_path.clone());
 
             if !storage.exists() {
@@ -152,6 +172,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
             match storage.load_entries(&master_password) {
                 Ok(entries) => {
+                    // Clear rate limiter on successful authentication
+                    RATE_LIMITER.record_success();
+
                     let count = entries.len();
                     let mut message = format!("Loaded {} password(s):\n", count);
 
