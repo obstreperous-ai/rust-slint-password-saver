@@ -448,7 +448,9 @@ pub struct PasswordEntry {
 
 ---
 
-### Issue 3: 🟡 Set Secure File Permissions for Encrypted Storage
+### Issue 3: ✅ Set Secure File Permissions for Encrypted Storage (RESOLVED)
+
+**Status:** ✅ **RESOLVED** - Implemented in commit 9cc8a8a
 
 **Title:** Implement secure file permissions (0600) for password storage file
 
@@ -461,75 +463,52 @@ The encrypted password file (`~/.password_saver/passwords.enc`) is currently cre
 - Reduces attack surface (defense in depth)
 - Protects against future encryption vulnerabilities
 
-**Solution:**
+**Solution Implemented:**
 Set file permissions to 0600 (owner read/write only) for the encrypted storage file and 0700 for the parent directory.
 
-**Implementation Steps:**
+**Implementation Summary:**
 
-1. Add platform-specific file permission handling to `src/storage.rs`:
+1. ✅ Added platform-specific file permission handling to `src/storage.rs`:
+   - Added `use std::os::unix::fs::PermissionsExt` for Unix systems
+   - Implemented `set_secure_permissions()` public method
 
-```rust
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-use std::fs::{self, Permissions};
+2. ✅ Updated `save_entries()` in `src/storage.rs`:
+   - Calls `set_secure_permissions()` immediately after file write
+   - Sets file permissions to 0600 on Unix systems
 
-// After writing the file
-fn set_secure_permissions(path: &Path) -> Result<(), String> {
-    #[cfg(unix)]
-    {
-        let permissions = Permissions::from_mode(0o600);
-        fs::set_permissions(path, permissions)
-            .map_err(|e| format!("Failed to set file permissions: {}", e))?;
-    }
-    Ok(())
-}
-```
+3. ✅ Updated `get_storage_path()` in `src/main.rs`:
+   - Sets directory permissions to 0700 on Unix systems
+   - Ensures secure directory permissions when creating storage directory
 
-2. Update `save_entries()` in `src/storage.rs` to set permissions after write:
-```rust
-fs::write(&self.storage_path, storage_json)
-    .map_err(|e| format!("Failed to write to disk: {}", e))?;
+4. ✅ Added comprehensive tests in `tests/storage_test.rs`:
+   - `test_file_permissions_are_secure()` - Verifies file permissions are 0600
+   - `test_directory_permissions_are_secure()` - Verifies directory permissions are 0700
+   - `test_permissions_no_op_on_windows()` - Ensures Windows compatibility
 
-// Set secure permissions immediately after creation
-self.set_secure_permissions(&self.storage_path)?;
-```
-
-3. Update `get_storage_path()` in `src/main.rs` to set directory permissions:
-```rust
-if let Some(parent) = path.parent() {
-    std::fs::create_dir_all(parent)?;
-    
-    #[cfg(unix)]
-    {
-        let permissions = Permissions::from_mode(0o700);
-        std::fs::set_permissions(parent, permissions)?;
-    }
-}
-```
-
-4. Add tests to verify permissions are set correctly
-
-**Files to Modify:**
-- `src/storage.rs` - Add permission setting after file write
+**Files Modified:**
+- `src/storage.rs` - Added permission setting functionality
 - `src/main.rs` - Set directory permissions in get_storage_path()
-- `tests/storage_test.rs` - Add permission verification tests
+- `tests/storage_test.rs` - Added permission verification tests
 
-**Testing:**
-- Verify file permissions are 0600 after save on Unix systems
-- Verify directory permissions are 0700 on Unix systems
-- Verify functionality on Windows (no-op for permissions)
-- All existing tests pass
+**Testing Results:**
+- ✅ File permissions verified as 0600 after save on Unix systems
+- ✅ Directory permissions verified as 0700 on Unix systems
+- ✅ Functionality verified on Unix (no-op for Windows via conditional compilation)
+- ✅ All existing tests pass (10 total tests)
+- ✅ All new tests pass (3 new permission tests)
 
 **Acceptance Criteria:**
-- [ ] File permissions set to 0600 on Unix systems after write
-- [ ] Directory permissions set to 0700 on Unix systems
-- [ ] No change in behavior on Windows
-- [ ] Tests verify correct permissions are set
-- [ ] All tests pass
+- [x] File permissions set to 0600 on Unix systems after write
+- [x] Directory permissions set to 0700 on Unix systems
+- [x] No change in behavior on Windows
+- [x] Tests verify correct permissions are set
+- [x] All tests pass
 
 **Priority:** 🟡 HIGH
-**Estimated Effort:** 1-2 hours
+**Estimated Effort:** 1-2 hours (Actual: ~1 hour)
 **Labels:** security, enhancement, unix
+
+**Resolution Date:** 2026-02-08
 
 ---
 
