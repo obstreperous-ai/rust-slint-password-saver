@@ -180,9 +180,9 @@ impl PasswordStorage {
         // Configure Argon2id with stronger parameters optimized for password managers
         // Memory: 32 MiB, Iterations: 2, Parallelism: 4, Output: 32 bytes
         let params = Params::new(
-            32768, // 32 MiB memory cost (in KiB) - balances security with performance
-            2,     // 2 iterations - provides good security while maintaining usability
-            4,     // 4 parallel threads - balances security with performance
+            32768,    // 32 MiB memory cost (in KiB) - balances security with performance
+            2,        // 2 iterations - provides good security while maintaining usability
+            4,        // 4 parallel threads - balances security with performance
             Some(32), // 32 byte output length - matches AES-256 key size
         )
         .map_err(|e| format!("Failed to create Argon2 params: {}", e))?;
