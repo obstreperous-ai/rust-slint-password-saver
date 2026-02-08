@@ -25,6 +25,7 @@ use argon2::{
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Represents a single password entry in the password manager.
 ///
@@ -32,8 +33,14 @@ use std::path::PathBuf;
 ///
 /// * `title` - The name/title of the password entry (e.g., "Gmail", "GitHub")
 /// * `username` - The username or email associated with this entry
-/// * `password` - The actual password to store
+/// * `password` - The actual password to store (securely cleared on drop)
 /// * `created_at` - Unix timestamp (seconds since epoch) when entry was created
+///
+/// # Security
+///
+/// This struct implements `ZeroizeOnDrop` to ensure that sensitive data (passwords)
+/// is securely cleared from memory when the struct is dropped. The `title` and
+/// `username` fields are skipped from zeroization as they are less sensitive.
 ///
 /// # Example
 ///
@@ -50,13 +57,17 @@ use std::path::PathBuf;
 ///         .unwrap()
 ///         .as_secs(),
 /// };
+/// // password field will be securely cleared when entry is dropped
 /// ```
 #[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct PasswordEntry {
+    #[zeroize(skip)]
     pub title: String,
+    #[zeroize(skip)]
     pub username: String,
     pub password: String,
+    #[zeroize(skip)]
     pub created_at: u64,
 }
 

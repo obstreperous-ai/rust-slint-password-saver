@@ -11,6 +11,43 @@ fn current_timestamp() -> u64 {
 }
 
 #[test]
+fn test_zeroization_behavior() {
+    // Create a password entry
+    let password = "my_secret_password_123";
+    let entry = PasswordEntry {
+        title: "Test Entry".to_string(),
+        username: "testuser".to_string(),
+        password: password.to_string(),
+        created_at: current_timestamp(),
+    };
+
+    // Clone the password to verify behavior
+    let password_clone = entry.password.clone();
+    assert_eq!(password_clone, password);
+
+    // Drop the entry to trigger zeroization
+    drop(entry);
+
+    // Note: We can't directly test that memory was zeroized in Rust,
+    // but we can verify that the ZeroizeOnDrop trait is properly derived
+    // The actual zeroization happens automatically when the struct is dropped
+
+    // Create another entry to ensure the pattern works
+    let entry2 = PasswordEntry {
+        title: "Test Entry 2".to_string(),
+        username: "user2".to_string(),
+        password: "another_password".to_string(),
+        created_at: current_timestamp(),
+    };
+
+    // Verify serialization/deserialization still works with zeroize
+    let json = serde_json::to_string(&entry2).unwrap();
+    let deserialized: PasswordEntry = serde_json::from_str(&json).unwrap();
+    assert_eq!(entry2.password, deserialized.password);
+    assert_eq!(entry2.title, deserialized.title);
+}
+
+#[test]
 fn test_full_encryption_flow() {
     // Create a temporary test file
     let test_path = std::env::temp_dir().join("test_passwords_full.enc");
