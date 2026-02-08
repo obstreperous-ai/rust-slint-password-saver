@@ -67,6 +67,7 @@ fn get_storage_path() -> PathBuf {
     path
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<(), slint::PlatformError> {
     // Create and initialize the main UI window
     let ui = AppWindow::new()?;

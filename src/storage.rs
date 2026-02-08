@@ -56,15 +56,15 @@ pub fn validate_password_strength(password: &str) -> Result<(), String> {
         return Err("Password must be at least 8 characters long".into());
     }
 
-    if !password.chars().any(|c| c.is_uppercase()) {
+    if !password.chars().any(char::is_uppercase) {
         return Err("Password must contain at least one uppercase letter".into());
     }
 
-    if !password.chars().any(|c| c.is_lowercase()) {
+    if !password.chars().any(char::is_lowercase) {
         return Err("Password must contain at least one lowercase letter".into());
     }
 
-    if !password.chars().any(|c| c.is_numeric()) {
+    if !password.chars().any(char::is_numeric) {
         return Err("Password must contain at least one number".into());
     }
 
