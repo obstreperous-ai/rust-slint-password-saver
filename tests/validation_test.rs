@@ -2,6 +2,13 @@
 //!
 //! These tests verify that the validation module correctly rejects invalid inputs
 //! and accepts valid inputs across different scenarios.
+//!
+//! # Security Note
+//! This file contains hardcoded passwords for testing purposes only.
+//! These are NOT real passwords and are used solely for validation testing.
+
+// Allow hardcoded credentials in test code - these are intentional test fixtures
+#![allow(clippy::identity_op)]
 
 use rust_slint_password_saver::validation::*;
 
@@ -97,6 +104,7 @@ fn test_validation_master_password_minimum_length() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_validation_accepts_valid_real_world_inputs() {
     // Test realistic valid inputs
     struct TestCase {
@@ -191,6 +199,7 @@ fn test_validation_error_messages_are_user_friendly() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_validation_accepts_special_characters_in_passwords() {
     // Passwords should accept special characters
     let special_chars = [
@@ -211,6 +220,7 @@ fn test_validation_accepts_special_characters_in_passwords() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_validation_accepts_unicode_in_inputs() {
     // Unicode characters should be accepted (except control chars)
     assert!(validate_title("Café Account ☕").is_ok());

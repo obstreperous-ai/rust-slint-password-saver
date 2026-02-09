@@ -10,6 +10,12 @@
 //! - **Control characters**: Rejected to prevent UI injection and display issues
 //! - **Empty strings**: Title and password fields cannot be empty
 //!
+//! # Security Note
+//!
+//! Documentation examples in this module contain hardcoded passwords for
+//! demonstration purposes only. These are NOT real passwords and should
+//! never be used in production code.
+//!
 //! # Example
 //!
 //! ```
@@ -155,6 +161,7 @@ pub fn validate_username(username: &str) -> Result<(), String> {
 /// ```
 /// use rust_slint_password_saver::validation::validate_password;
 ///
+/// // codeql[rust/hardcoded-credentials] - Example password for documentation only
 /// // Valid password
 /// assert!(validate_password("MySecureP@ssw0rd!").is_ok());
 ///
@@ -208,6 +215,7 @@ pub fn validate_password(password: &str) -> Result<(), String> {
 /// ```
 /// use rust_slint_password_saver::validation::validate_master_password;
 ///
+/// // codeql[rust/hardcoded-credentials] - Example password for documentation only
 /// // Valid master password
 /// assert!(validate_master_password("MySecureM@sterP@ss123").is_ok());
 ///

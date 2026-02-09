@@ -1,3 +1,12 @@
+//! Storage encryption/decryption integration tests
+//!
+//! # Security Note
+//! This file contains hardcoded passwords for testing purposes only.
+//! These are NOT real passwords and are used solely for testing the encryption/decryption functionality.
+
+// Allow hardcoded credentials in test code - these are intentional test fixtures
+#![allow(clippy::identity_op)]
+
 use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -11,6 +20,7 @@ fn current_timestamp() -> u64 {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_full_encryption_flow() {
     // Create a temporary test file
     let test_path = std::env::temp_dir().join("test_passwords_full.enc");
@@ -64,6 +74,7 @@ fn test_full_encryption_flow() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_wrong_master_password() {
     // Create a temporary test file
     let test_path = std::env::temp_dir().join("test_passwords_wrong.enc");
@@ -100,6 +111,7 @@ fn test_wrong_master_password() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_multiple_save_and_load_cycles() {
     let test_path = std::env::temp_dir().join("test_passwords_cycles.enc");
 
@@ -148,6 +160,7 @@ fn test_multiple_save_and_load_cycles() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_empty_entries() {
     let test_path = std::env::temp_dir().join("test_passwords_empty.enc");
 
