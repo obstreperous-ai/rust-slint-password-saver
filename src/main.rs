@@ -70,6 +70,7 @@ fn get_storage_path() -> PathBuf {
     path
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<(), slint::PlatformError> {
     // Create and initialize the main UI window
     let ui = AppWindow::new()?;
@@ -158,6 +159,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Set up load passwords callback
     // This is called when the user clicks "Load Passwords" button
     let ui_weak = ui.as_weak();
+    let storage_path_clone = storage_path.clone();
     ui.on_load_passwords(move |master_password| {
         if let Some(ui) = ui_weak.upgrade() {
             // Validate master password
@@ -166,7 +168,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
 
-            let storage = PasswordStorage::new(storage_path.clone());
+            let storage = PasswordStorage::new(storage_path_clone.clone());
 
             if !storage.exists() {
                 ui.set_status_message("No passwords stored yet".into());
