@@ -560,6 +560,77 @@ impl PasswordStorage {
     pub fn exists(&self) -> bool {
         self.storage_path.exists()
     }
+
+    /// Changes the master password by re-encrypting all stored entries.
+    ///
+    /// This method performs the following operations:
+    /// 1. Verifies the old password by attempting to load entries
+    /// 2. Validates the new password strength
+    /// 3. Ensures the new password is different from the old one
+    /// 4. Re-encrypts all entries with the new password
+    ///
+    /// # Arguments
+    ///
+    /// * `old_password` - Current master password (must be correct)
+    /// * `new_password` - New master password to use (must meet strength requirements)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or a `SecurityError` if:
+    /// - Old password is incorrect
+    /// - New password doesn't meet strength requirements
+    /// - New password is same as old password
+    /// - Storage file doesn't exist
+    /// - Re-encryption fails
+    ///
+    /// # Security
+    ///
+    /// - Verifies old password before making any changes
+    /// - Generates new salt and nonce for re-encryption
+    /// - All data is re-encrypted with new key derivation
+    /// - No data is lost if operation fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use std::path::PathBuf;
+    ///
+    /// let storage = PasswordStorage::new(PathBuf::from("passwords.enc"));
+    ///
+    /// match storage.change_master_password("OldPassword123", "NewPassword456") {
+    ///     Ok(()) => println!("Password changed successfully"),
+    ///     Err(e) => eprintln!("Failed to change password: {}", e),
+    /// }
+    /// ```
+    pub fn change_master_password(
+        &self,
+        old_password: &str,
+        new_password: &str,
+    ) -> Result<(), SecurityError> {
+        // Verify storage file exists
+        if !self.exists() {
+            return Err(SecurityError::StorageError);
+        }
+
+        // Step 1: Load entries with old password (verifies old password is correct)
+        let entries = self.load_entries(old_password)?;
+
+        // Step 2: Validate new password strength
+        validate_password_strength(new_password)?;
+
+        // Step 3: Ensure new password is different from old password
+        if old_password == new_password {
+            return Err(SecurityError::InvalidInput(
+                "password: new password must be different from old password".into(),
+            ));
+        }
+
+        // Step 4: Save entries with new password (re-encrypts with new key)
+        self.save_entries(&entries, new_password)?;
+
+        Ok(())
+    }
 }
 
 /// Internal structure for storing encrypted data on disk.
@@ -633,5 +704,44 @@ mod tests {
         assert_eq!(entry.title, deserialized.title);
         assert_eq!(entry.username, deserialized.username);
         assert_eq!(entry.password, deserialized.password);
+    }
+
+    #[test]
+    fn test_validate_password_strength_valid() {
+        assert!(validate_password_strength("SecurePass123").is_ok());
+        assert!(validate_password_strength("MyPassword1").is_ok());
+        assert!(validate_password_strength("Abc12345").is_ok());
+    }
+
+    #[test]
+    fn test_validate_password_strength_too_short() {
+        let result = validate_password_strength("Pass1");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("at least 8 characters"));
+    }
+
+    #[test]
+    fn test_validate_password_strength_no_uppercase() {
+        let result = validate_password_strength("password123");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("uppercase letter"));
+    }
+
+    #[test]
+    fn test_validate_password_strength_no_lowercase() {
+        let result = validate_password_strength("PASSWORD123");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("lowercase letter"));
+    }
+
+    #[test]
+    fn test_validate_password_strength_no_number() {
+        let result = validate_password_strength("PasswordOnly");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("number"));
     }
 }
