@@ -120,6 +120,69 @@ pub struct PasswordStorage {
     storage_path: PathBuf,
 }
 
+/// Validates the strength of a master password.
+///
+/// Checks that the password meets minimum security requirements:
+/// - At least 8 characters long
+/// - Contains at least one uppercase letter
+/// - Contains at least one lowercase letter
+/// - Contains at least one number
+///
+/// # Arguments
+///
+/// * `password` - The password to validate
+///
+/// # Returns
+///
+/// - `Ok(())` if password meets all strength requirements
+/// - `Err(SecurityError)` with details if password is too weak
+///
+/// # Example
+///
+/// ```
+/// use rust_slint_password_saver::storage::validate_password_strength;
+///
+/// // Strong password
+/// assert!(validate_password_strength("SecurePass123").is_ok());
+///
+/// // Too short
+/// assert!(validate_password_strength("Pass1").is_err());
+///
+/// // No uppercase
+/// assert!(validate_password_strength("password123").is_err());
+/// ```
+pub fn validate_password_strength(password: &str) -> Result<(), SecurityError> {
+    // Check minimum length
+    if password.len() < 8 {
+        return Err(SecurityError::InvalidInput(
+            "password: must be at least 8 characters long".into(),
+        ));
+    }
+
+    // Check for at least one uppercase letter
+    if !password.chars().any(char::is_uppercase) {
+        return Err(SecurityError::InvalidInput(
+            "password: must contain at least one uppercase letter".into(),
+        ));
+    }
+
+    // Check for at least one lowercase letter
+    if !password.chars().any(char::is_lowercase) {
+        return Err(SecurityError::InvalidInput(
+            "password: must contain at least one lowercase letter".into(),
+        ));
+    }
+
+    // Check for at least one number
+    if !password.chars().any(char::is_numeric) {
+        return Err(SecurityError::InvalidInput(
+            "password: must contain at least one number".into(),
+        ));
+    }
+
+    Ok(())
+}
+
 #[allow(dead_code)]
 impl PasswordStorage {
     /// Creates a new password storage instance.
@@ -578,7 +641,7 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// `Ok(())` on success, or an error message on failure
+    /// `Ok(())` on success, or a `SecurityError` on failure
     ///
     /// # Security
     ///
@@ -586,17 +649,21 @@ impl PasswordStorage {
     /// - On Windows: No-op (Windows has different permission model)
     /// - Defense-in-depth: Protects against future encryption vulnerabilities
     /// - Reduces attack surface by preventing other users from accessing encrypted data
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rust_slint_password_saver::storage::PasswordStorage;
     /// use std::path::Path;
     ///
     /// let path = Path::new("passwords.enc");
     /// PasswordStorage::set_secure_permissions(path).unwrap();
     /// ```
-    pub fn set_secure_permissions(path: &Path) -> Result<(), String> {
+    pub fn set_secure_permissions(path: &Path) -> Result<(), SecurityError> {
         #[cfg(unix)]
         {
             let permissions = fs::Permissions::from_mode(0o600);
-            fs::set_permissions(path, permissions)
-                .map_err(|e| format!("Failed to set file permissions: {}", e))?;
+            fs::set_permissions(path, permissions).map_err(|_| SecurityError::PermissionDenied)?;
         }
         #[cfg(not(unix))]
         {
@@ -604,8 +671,9 @@ impl PasswordStorage {
             // This is a no-op, but we still return Ok to maintain API consistency
             let _ = path;
         }
+        Ok(())
     }
-  
+
     /// Changes the master password by re-encrypting all stored entries.
     ///
     /// This method performs the following operations:

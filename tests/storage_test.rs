@@ -245,7 +245,7 @@ fn test_file_permissions_are_secure() {
     // Clean up any existing test file
     let _ = fs::remove_file(&test_path);
 
-    let storage = PasswordStorage::new(test_path.clone());  
+    let storage = PasswordStorage::new(test_path.clone());
     let master_password = "test_password";
 
     // Create and save test entry
@@ -256,7 +256,7 @@ fn test_file_permissions_are_secure() {
         created_at: current_timestamp(),
     }];
 
-    storage  
+    storage
         .save_entries(&entries, master_password)
         .expect("Failed to save entries");
 
@@ -272,7 +272,7 @@ fn test_file_permissions_are_secure() {
         0o600,
         "File permissions should be 0600 (owner read/write only)"
     );
-  
+
     // Clean up
     let _ = fs::remove_file(&test_path);
 }
@@ -315,7 +315,6 @@ fn test_directory_permissions_are_secure() {
     }];
 
     storage
-
         .save_entries(&entries, "test_password")
         .expect("Failed to save entries");
 
@@ -343,8 +342,8 @@ fn test_permissions_no_op_on_windows() {
     // Clean up any existing test file
     let _ = fs::remove_file(&test_path);
 
-    let storage = PasswordStorage::new(test_path.clone());  
-  
+    let storage = PasswordStorage::new(test_path.clone());
+
     let master_password = "test_password";
 
     // Create and save test entry
@@ -366,7 +365,8 @@ fn test_permissions_no_op_on_windows() {
     // Clean up
     let _ = fs::remove_file(&test_path);
 }
-  
+
+#[test]
 fn test_change_master_password_success() {
     let test_path = std::env::temp_dir().join("test_passwords_change.enc");
 
@@ -452,10 +452,7 @@ fn test_change_master_password_wrong_old_password() {
 
     // Try to change password with wrong old password
     let result = storage.change_master_password(wrong_password, new_password);
-    assert!(
-        result.is_err(),
-        "Should fail with wrong old password"
-    );
+    assert!(result.is_err(), "Should fail with wrong old password");
 
     // Verify original password still works
     let loaded = storage.load_entries(correct_password);
@@ -490,10 +487,7 @@ fn test_change_master_password_weak_new_password() {
 
     // Try to change to weak password
     let result = storage.change_master_password(old_password, weak_password);
-    assert!(
-        result.is_err(),
-        "Should fail with weak new password"
-    );
+    assert!(result.is_err(), "Should fail with weak new password");
     let error = result.unwrap_err();
     assert!(error.user_message().contains("at least 8 characters"));
 
@@ -515,7 +509,7 @@ fn test_change_master_password_same_password() {
     let storage = PasswordStorage::new(test_path.clone());
 
     let password = "SamePassword123";
-  
+
     // Create and save test entry
     let entries = vec![PasswordEntry {
         title: "Test".to_string(),
