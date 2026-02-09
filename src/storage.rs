@@ -43,7 +43,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 ///
 /// # Returns
 ///
-/// `Ok(())` if password meets requirements, or a SecurityError describing the issue
+/// `Ok(())` if password meets requirements, or a `SecurityError` describing the issue
 ///
 /// # Example
 ///
@@ -559,7 +559,7 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// `Ok(())` on success, or a SecurityError if:
+    /// `Ok(())` on success, or a `SecurityError` if:
     /// - Old password is incorrect
     /// - New password doesn't meet strength requirements
     /// - New password is same as old password
