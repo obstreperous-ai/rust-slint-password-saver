@@ -555,11 +555,14 @@ mod tests {
     #[test]
     fn test_key_derivation() {
         let password = "test_password";
-        let salt = [0u8; 16];
+        // Use random salt for testing to avoid security scan warnings
+        let salt = SaltString::generate(&mut OsRng);
+        let salt_bytes = salt.as_str().as_bytes();
 
-        let key1 = PasswordStorage::derive_key(password, &salt).unwrap();
-        let key2 = PasswordStorage::derive_key(password, &salt).unwrap();
+        let key1 = PasswordStorage::derive_key(password, salt_bytes).unwrap();
+        let key2 = PasswordStorage::derive_key(password, salt_bytes).unwrap();
 
+        // Same password and salt should produce the same key
         assert_eq!(key1, key2);
     }
 
@@ -569,10 +572,12 @@ mod tests {
         // Expected: 100ms - 2000ms (acceptable range balancing security vs usability)
         // Measured on CI: ~869ms
         let password = "test_password_for_timing";
-        let salt = [1u8; 16];
+        // Use random salt for testing to avoid security scan warnings
+        let salt = SaltString::generate(&mut OsRng);
+        let salt_bytes = salt.as_str().as_bytes();
 
         let start = Instant::now();
-        let _key = PasswordStorage::derive_key(password, &salt).unwrap();
+        let _key = PasswordStorage::derive_key(password, salt_bytes).unwrap();
         let duration = start.elapsed();
 
         println!(
