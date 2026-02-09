@@ -11,6 +11,7 @@
 //! - Load and view stored passwords
 //! - All data encrypted with master password
 //! - Cross-platform support (macOS, Linux)
+//! - Security audit logging for all operations
 //!
 //! ## Usage
 //!
@@ -19,10 +20,13 @@
 //! cargo run --release
 //! ```
 
+mod audit_log;
 mod errors;
 mod storage;
 mod validation;
 
+use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
+use log::warn;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -72,6 +76,17 @@ fn get_storage_path() -> PathBuf {
 
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<(), slint::PlatformError> {
+    // Initialize audit logging
+    let audit_logger = AuditLogger::new(get_audit_log_path());
+    let startup_entry = AuditLogger::create_entry(
+        AuditEventType::ApplicationStartup,
+        true,
+        Some("Password Manager application started".to_string()),
+    );
+    if let Err(e) = audit_logger.log_event(&startup_entry) {
+        warn!("Failed to log application startup: {}", e);
+    }
+
     // Create and initialize the main UI window
     let ui = AppWindow::new()?;
 

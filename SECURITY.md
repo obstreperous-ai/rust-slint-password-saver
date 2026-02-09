@@ -88,6 +88,7 @@ The automated security audit (cargo-audit) is passing. All critical vulnerabilit
 - Forward secrecy (new salt/nonce per save)
 - Memory safety via Rust's ownership system
 - Input validation (checks for empty fields)
+- Security audit logging with HMAC-based integrity protection
 - **Secure memory clearing via zeroize crate (passwords zeroized on drop)**
 - Password strength requirements/validation
 - Master password change functionality
@@ -98,6 +99,8 @@ The automated security audit (cargo-audit) is passing. All critical vulnerabilit
 - Key stretching parameters tuning (Argon2 defaults may be too weak)
 - Protection against timing attacks in password verification
 - Secure deletion of old encrypted data
+- Password strength requirements/validation
+- Master password change functionality
 - Audit logging for security events
 - Backup and recovery mechanisms
 
@@ -952,12 +955,27 @@ impl AuditLogger {
 - Test log rotation
 
 **Acceptance Criteria:**
-- [ ] Audit logging implemented for security events
-- [ ] Logs stored in `~/.password_saver/audit.log`
-- [ ] Log entries include timestamp, event type, and result
-- [ ] Log integrity protected with HMAC
-- [ ] Log rotation implemented
-- [ ] Documentation added for audit log format
+- [x] Audit logging implemented for security events
+- [x] Logs stored in `~/.password_saver/audit.log`
+- [x] Log entries include timestamp, event type, and result
+- [x] Log integrity protected with HMAC
+- [x] Log rotation implemented
+- [x] Documentation added for audit log format
+
+**Status:** ✅ **COMPLETED** (2026-02-08)
+
+**Implementation Details:**
+- Created `src/audit_log.rs` module with full audit logging functionality
+- Logs stored at `~/.password_saver/audit.log`
+- Each log entry includes timestamp, event type, success status, and optional details
+- HMAC-SHA256 used for log integrity protection
+- Size-based log rotation (10 MB threshold)
+- Integrated logging into:
+  - Application startup
+  - File access operations
+  - Encryption/decryption attempts (success/failure)
+  - Password save/load operations
+- Added comprehensive tests and documentation
 
 **Priority:** 🔵 MEDIUM
 **Estimated Effort:** 3-4 hours
