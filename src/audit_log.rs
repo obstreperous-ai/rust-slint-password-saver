@@ -13,6 +13,7 @@
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use std::convert::TryInto;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -183,8 +184,10 @@ impl AuditLogger {
         hasher.update(b"audit_log_hmac_key_v1");
         let result = hasher.finalize();
 
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&result);
+        let key: [u8; 32] = result
+            .as_slice()
+            .try_into()
+            .expect("Sha256 output must be 32 bytes");
         key
     }
 
