@@ -19,6 +19,7 @@
 //! cargo run --release
 //! ```
 
+mod errors;
 mod storage;
 mod validation;
 
@@ -114,7 +115,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 match storage.load_entries(&master_password) {
                     Ok(entries) => entries,
                     Err(e) => {
-                        ui.set_status_message(format!("Error loading entries: {}", e).into());
+                        // Show generic message to user
+                        ui.set_status_message(e.user_message().into());
+                        // Log detailed error for debugging
+                        eprintln!("Load entries failed: {}", e.debug_message());
                         return;
                     }
                 }
@@ -142,7 +146,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     ui.set_status_message(format!("Password saved for: {}", title).into());
                 }
                 Err(e) => {
-                    ui.set_status_message(format!("Error saving password: {}", e).into());
+                    // Show generic message to user
+                    ui.set_status_message(e.user_message().into());
+                    // Log detailed error for debugging
+                    eprintln!("Save entries failed: {}", e.debug_message());
                 }
             }
         }
@@ -191,13 +198,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     ui.set_status_message(message.into());
                 }
                 Err(e) => {
-                    ui.set_status_message(
-                        format!(
-                            "Error loading passwords: {}. Check your master password.",
-                            e
-                        )
-                        .into(),
-                    );
+                    // Show generic message to user
+                    ui.set_status_message(e.user_message().into());
+                    // Log detailed error for debugging
+                    eprintln!("Load passwords failed: {}", e.debug_message());
                 }
             }
         }
