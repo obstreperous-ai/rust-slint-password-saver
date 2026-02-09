@@ -20,11 +20,13 @@
 //! cargo run --release
 //! ```
 
+mod password_strength;
 mod audit_log;
 mod errors;
 mod storage;
 mod validation;
 
+use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use log::warn;
 use std::fmt::Write as _;
@@ -124,6 +126,34 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             let storage = PasswordStorage::new(storage_path_clone.clone());
+
+            // Validate master password strength on first use (when no storage file exists)
+            // This ensures new users create strong master passwords
+            if !storage.exists() {
+                let requirements = PasswordRequirements::default();
+                match validate_password_strength(&master_password, &requirements) {
+                    Ok(strength) if strength >= PasswordStrength::Strong => {
+                        // Password is strong enough, continue
+                    }
+                    Ok(strength) => {
+                        // Password meets basic requirements but is not strong enough
+                        ui.set_status_message(
+                            format!(
+                                "Master password is too weak (strength: {:?}). Please use a stronger password with at least 12 characters, including uppercase, lowercase, digits, and special characters.",
+                                strength
+                            ).into()
+                        );
+                        return;
+                    }
+                    Err(e) => {
+                        // Password fails basic requirements
+                        ui.set_status_message(
+                            format!("Master password validation failed: {}", e).into()
+                        );
+                        return;
+                    }
+                }
+            }
 
             // Load existing entries or create new list
             // This allows adding to existing passwords without overwriting
