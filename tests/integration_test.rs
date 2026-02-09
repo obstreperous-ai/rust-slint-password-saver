@@ -45,3 +45,77 @@ fn test_basic_functionality() {
     // This is a placeholder test to ensure the test infrastructure works
     assert_eq!(2 + 2, 4);
 }
+
+#[test]
+fn test_password_change_integration() {
+    use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
+
+    let test_path = std::env::temp_dir().join("test_integration_password_change.enc");
+
+    // Clean up any existing test file
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+    let old_password = "OldSecure123";
+    let new_password = "NewSecure456";
+
+    // Create initial test data
+    let entries = vec![
+        PasswordEntry {
+            title: "TestAccount1".to_string(),
+            username: "user1@example.com".to_string(),
+            password: "secret123".to_string(),
+            created_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        },
+        PasswordEntry {
+            title: "TestAccount2".to_string(),
+            username: "user2@example.com".to_string(),
+            password: "password456".to_string(),
+            created_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        },
+    ];
+
+    // Step 1: Save with old password
+    storage
+        .save_entries(&entries, old_password)
+        .expect("Failed to save with old password");
+
+    // Step 2: Verify we can load with old password
+    let loaded = storage
+        .load_entries(old_password)
+        .expect("Failed to load with old password");
+    assert_eq!(loaded.len(), 2);
+
+    // Step 3: Change the master password
+    storage
+        .change_master_password(old_password, new_password)
+        .expect("Failed to change master password");
+
+    // Step 4: Verify old password no longer works
+    let old_result = storage.load_entries(old_password);
+    assert!(
+        old_result.is_err(),
+        "Old password should not work after change"
+    );
+
+    // Step 5: Verify new password works and data is intact
+    let new_loaded = storage
+        .load_entries(new_password)
+        .expect("Failed to load with new password");
+    assert_eq!(new_loaded.len(), 2);
+    assert_eq!(new_loaded[0].title, "TestAccount1");
+    assert_eq!(new_loaded[0].username, "user1@example.com");
+    assert_eq!(new_loaded[0].password, "secret123");
+    assert_eq!(new_loaded[1].title, "TestAccount2");
+    assert_eq!(new_loaded[1].username, "user2@example.com");
+    assert_eq!(new_loaded[1].password, "password456");
+
+    // Clean up
+    let _ = fs::remove_file(&test_path);
+}
