@@ -91,7 +91,10 @@ The automated security audit (cargo-audit) is passing. All critical vulnerabilit
 - Forward secrecy (new salt/nonce per save)
 - Memory safety via Rust's ownership system
 - Input validation (checks for empty fields)
+- Security audit logging with HMAC-based integrity protection
 - **Secure memory clearing via zeroize crate (passwords zeroized on drop)**
+- Password strength requirements/validation
+- Master password change functionality
 
 ❌ **Missing:**
 - Secure file permissions for encrypted storage file
@@ -101,7 +104,11 @@ The automated security audit (cargo-audit) is passing. All critical vulnerabilit
 - Audit logging for security events
 - Password strength requirements/validation
 - Master password change functionality
+- Audit logging for security events
 - Backup and recovery mechanisms
+
+✅ **Recently Added:**
+- Password strength requirements/validation (v0.1.0) - Enforces strong master passwords on first use
 
 ---
 
@@ -628,7 +635,9 @@ The `derive_key()` function in `src/storage.rs` has been updated with:
 
 ---
 
-### Issue 5: 🟡 Add Password Strength Validation
+### Issue 5: ✅ Add Password Strength Validation (RESOLVED)
+
+**Status:** ✅ **RESOLVED** - Implemented in v0.1.0
 
 **Title:** Implement password strength requirements and validation
 
@@ -736,11 +745,22 @@ ui.on_save_password(move |master_password, title, username, password| {
 - Verify user-friendly error messages
 
 **Acceptance Criteria:**
-- [ ] Password strength validation implemented
-- [ ] Minimum 12 character requirement enforced for master password
-- [ ] Clear error messages guide users to create strong passwords
-- [ ] Tests cover various password strengths
-- [ ] Documentation updated with password requirements
+- [x] Password strength validation implemented
+- [x] Minimum 12 character requirement enforced for master password
+- [x] Clear error messages guide users to create strong passwords
+- [x] Tests cover various password strengths
+- [x] Documentation updated with password requirements
+
+**Implementation Details:**
+- ✅ Added `zxcvbn` crate (v3.1) for password strength analysis
+- ✅ Created `src/password_strength.rs` module with comprehensive validation
+- ✅ Enforces requirements: 12+ chars, uppercase, lowercase, digit, special character
+- ✅ Uses zxcvbn entropy analysis to detect weak patterns and common passwords
+- ✅ Validation only applied on first use (creating new password database)
+- ✅ Provides user-friendly error messages with specific improvement suggestions
+- ✅ Added 14 unit tests covering various password scenarios
+- ✅ Updated README.md with password requirements and examples
+- ✅ All tests pass, no clippy warnings
 
 **Priority:** 🟡 MEDIUM
 **Estimated Effort:** 3-4 hours  
@@ -951,12 +971,27 @@ impl AuditLogger {
 - Test log rotation
 
 **Acceptance Criteria:**
-- [ ] Audit logging implemented for security events
-- [ ] Logs stored in `~/.password_saver/audit.log`
-- [ ] Log entries include timestamp, event type, and result
-- [ ] Log integrity protected with HMAC
-- [ ] Log rotation implemented
-- [ ] Documentation added for audit log format
+- [x] Audit logging implemented for security events
+- [x] Logs stored in `~/.password_saver/audit.log`
+- [x] Log entries include timestamp, event type, and result
+- [x] Log integrity protected with HMAC
+- [x] Log rotation implemented
+- [x] Documentation added for audit log format
+
+**Status:** ✅ **COMPLETED** (2026-02-08)
+
+**Implementation Details:**
+- Created `src/audit_log.rs` module with full audit logging functionality
+- Logs stored at `~/.password_saver/audit.log`
+- Each log entry includes timestamp, event type, success status, and optional details
+- HMAC-SHA256 used for log integrity protection
+- Size-based log rotation (10 MB threshold)
+- Integrated logging into:
+  - Application startup
+  - File access operations
+  - Encryption/decryption attempts (success/failure)
+  - Password save/load operations
+- Added comprehensive tests and documentation
 
 **Priority:** 🔵 MEDIUM
 **Estimated Effort:** 3-4 hours
@@ -1037,17 +1072,37 @@ pub fn change_master_password(
 - Verify old password no longer works
 
 **Acceptance Criteria:**
-- [ ] Master password change functionality implemented
-- [ ] UI dialog for password change added
-- [ ] Password strength validation enforced
-- [ ] Old password verified before change
-- [ ] All data successfully re-encrypted
-- [ ] Comprehensive tests for edge cases
-- [ ] Documentation updated with password change instructions
+- [x] Master password change functionality implemented
+- [x] UI dialog for password change added
+- [x] Password strength validation enforced
+- [x] Old password verified before change
+- [x] All data successfully re-encrypted
+- [x] Comprehensive tests for edge cases
+- [x] Documentation updated with password change instructions
 
 **Priority:** 🔵 MEDIUM
 **Estimated Effort:** 4-6 hours
 **Labels:** security, enhancement, feature
+
+**Status:** ✅ **RESOLVED**
+
+**Resolution Date:** 2026-02-08
+
+**Implementation Details:**
+- Added `validate_password_strength()` function to enforce password requirements:
+  - Minimum 8 characters
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one number
+- Added `change_master_password()` method to `PasswordStorage`:
+  - Verifies old password by loading entries
+  - Validates new password strength
+  - Ensures new password differs from old
+  - Re-encrypts all data with new password
+- Added UI dialog with fields for current/new/confirm passwords
+- Added comprehensive test coverage (5 test cases)
+- All data successfully re-encrypted with new password
+- Old password immediately invalidated after change
 
 ---
 
