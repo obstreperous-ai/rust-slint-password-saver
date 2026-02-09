@@ -76,13 +76,45 @@ This application implements a **zero-knowledge encryption** model where all sens
 Encrypted passwords are stored at:
 - **macOS/Linux**: `~/.password_saver/passwords.enc`
 
+### Master Password Requirements
+
+To ensure maximum security, the application enforces strict password requirements for your master password:
+
+✅ **Minimum Requirements:**
+- At least **12 characters** in length
+- At least **one uppercase** letter (A-Z)
+- At least **one lowercase** letter (a-z)
+- At least **one digit** (0-9)
+- At least **one special** character (!@#$%^&*()_+-=[]{}|;:,.<>?)
+- Must achieve **"Strong"** or better rating from entropy analysis
+
+🛡️ **Password Strength Analysis:**
+The application uses the [zxcvbn](https://github.com/dropbox/zxcvbn) password strength estimator to detect:
+- Common passwords and dictionary words
+- Keyboard patterns (e.g., "qwerty", "asdf")
+- Repeated patterns (e.g., "abcabc", "123123")
+- Sequential patterns (e.g., "abc", "123")
+- Date patterns and names
+
+**Example Strong Passwords:**
+- `MyS3cur3P@ssw0rd!` ✅
+- `Tr0ub4dor&3!xKcd` ✅
+- `C0rr3ct-H0rs3-B@tt3ry` ✅
+
+**Example Weak Passwords (will be rejected):**
+- `Password123!` ❌ (too common)
+- `Qwerty123!` ❌ (keyboard pattern)
+- `Abcdef123!` ❌ (sequential pattern)
+
+⚠️ **Note:** Password requirements are only enforced when creating a new password database (first use). Existing databases are not affected.
+
 ### Security Considerations
 
 📋 **For comprehensive security information, see [SECURITY.md](SECURITY.md)**
 
 ⚠️ **Important Notes**:
 - The security of your passwords depends entirely on the strength of your master password
-- Use a strong, unique master password (recommended: 16+ characters, mixed case, numbers, symbols)
+- Master password strength is validated only on first use (when creating new database)
 - Master password is never stored and cannot be recovered if forgotten
 - The application does not implement any backup/recovery mechanism by design
 - All data is stored locally; no cloud synchronization (enhances security, reduces attack surface)
@@ -278,6 +310,7 @@ rust-slint-password-saver/
 | [slint](https://slint.dev/) | 1.14 | UI framework and rendering |
 | [argon2](https://crates.io/crates/argon2) | 0.5.3 | Password hashing and key derivation |
 | [aes-gcm](https://crates.io/crates/aes-gcm) | 0.10.3 | AES-256-GCM encryption |
+| [zxcvbn](https://crates.io/crates/zxcvbn) | 3.1 | Password strength estimation |
 | [serde](https://crates.io/crates/serde) | 1.0 | Serialization/deserialization |
 | [serde_json](https://crates.io/crates/serde_json) | 1.0 | JSON format support |
 

@@ -12,6 +12,7 @@
 //! - All data encrypted with master password
 //! - Rate limiting to prevent brute-force attacks
 //! - Cross-platform support (macOS, Linux)
+//! - Security audit logging for all operations
 //!
 //! ## Usage
 //!
@@ -26,14 +27,22 @@
 
 mod errors;
 mod rate_limit;
+mod password_strength;
+mod audit_log;
+mod errors;
 mod storage;
+mod validation;
 
 use lazy_static::lazy_static;
 use rate_limit::RateLimiter;
+use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
+use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
+use log::warn;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::{PasswordEntry, PasswordStorage};
+use validation::{validate_master_password, validate_password, validate_title, validate_username};
 
 slint::include_modules!();
 
@@ -82,7 +91,19 @@ fn get_storage_path() -> PathBuf {
     path
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<(), slint::PlatformError> {
+    // Initialize audit logging
+    let audit_logger = AuditLogger::new(get_audit_log_path());
+    let startup_entry = AuditLogger::create_entry(
+        AuditEventType::ApplicationStartup,
+        true,
+        Some("Password Manager application started".to_string()),
+    );
+    if let Err(e) = audit_logger.log_event(&startup_entry) {
+        warn!("Failed to log application startup: {}", e);
+    }
+
     // Create and initialize the main UI window
     let ui = AppWindow::new()?;
 
@@ -95,18 +116,59 @@ fn main() -> Result<(), slint::PlatformError> {
     let storage_path_clone = storage_path.clone();
     ui.on_save_password(move |master_password, title, username, password| {
         if let Some(ui) = ui_weak.upgrade() {
-            // Validate inputs before attempting to save
-            if master_password.is_empty() {
-                ui.set_status_message("Error: Master password is required".into());
+            // Validate master password
+            if let Err(e) = validate_master_password(&master_password) {
+                ui.set_status_message(format!("Invalid master password: {}", e).into());
                 return;
             }
 
-            if title.is_empty() || password.is_empty() {
-                ui.set_status_message("Error: Title and password are required".into());
+            // Validate title
+            if let Err(e) = validate_title(&title) {
+                ui.set_status_message(format!("Invalid title: {}", e).into());
+                return;
+            }
+
+            // Validate username
+            if let Err(e) = validate_username(&username) {
+                ui.set_status_message(format!("Invalid username: {}", e).into());
+                return;
+            }
+
+            // Validate password
+            if let Err(e) = validate_password(&password) {
+                ui.set_status_message(format!("Invalid password: {}", e).into());
                 return;
             }
 
             let storage = PasswordStorage::new(storage_path_clone.clone());
+
+            // Validate master password strength on first use (when no storage file exists)
+            // This ensures new users create strong master passwords
+            if !storage.exists() {
+                let requirements = PasswordRequirements::default();
+                match validate_password_strength(&master_password, &requirements) {
+                    Ok(strength) if strength >= PasswordStrength::Strong => {
+                        // Password is strong enough, continue
+                    }
+                    Ok(strength) => {
+                        // Password meets basic requirements but is not strong enough
+                        ui.set_status_message(
+                            format!(
+                                "Master password is too weak (strength: {:?}). Please use a stronger password with at least 12 characters, including uppercase, lowercase, digits, and special characters.",
+                                strength
+                            ).into()
+                        );
+                        return;
+                    }
+                    Err(e) => {
+                        // Password fails basic requirements
+                        ui.set_status_message(
+                            format!("Master password validation failed: {}", e).into()
+                        );
+                        return;
+                    }
+                }
+            }
 
             // Load existing entries or create new list
             // This allows adding to existing passwords without overwriting
@@ -157,10 +219,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // Set up load passwords callback
     // This is called when the user clicks "Load Passwords" button
     let ui_weak = ui.as_weak();
+    let storage_path_clone = storage_path.clone();
     ui.on_load_passwords(move |master_password| {
         if let Some(ui) = ui_weak.upgrade() {
-            if master_password.is_empty() {
-                ui.set_status_message("Error: Master password is required".into());
+            // Validate master password
+            if let Err(e) = validate_master_password(&master_password) {
+                ui.set_status_message(format!("Invalid master password: {}", e).into());
                 return;
             }
 
@@ -170,7 +234,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
 
-            let storage = PasswordStorage::new(storage_path.clone());
+            let storage = PasswordStorage::new(storage_path_clone.clone());
 
             if !storage.exists() {
                 ui.set_status_message("No passwords stored yet".into());

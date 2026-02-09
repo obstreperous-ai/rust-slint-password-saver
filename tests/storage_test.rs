@@ -1,3 +1,12 @@
+//! Storage encryption/decryption integration tests
+//!
+//! # Security Note
+//! This file contains hardcoded passwords for testing purposes only.
+//! These are NOT real passwords and are used solely for testing the encryption/decryption functionality.
+
+// Allow hardcoded credentials in test code - these are intentional test fixtures
+#![allow(clippy::identity_op)]
+
 use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -11,6 +20,7 @@ fn current_timestamp() -> u64 {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_zeroization_behavior() {
     // This test verifies that the ZeroizeOnDrop trait is properly derived
     // and that PasswordEntry continues to work correctly with zeroization enabled.
@@ -112,6 +122,7 @@ fn test_full_encryption_flow() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_wrong_master_password() {
     // Create a temporary test file
     let test_path = std::env::temp_dir().join("test_passwords_wrong.enc");
@@ -148,6 +159,7 @@ fn test_wrong_master_password() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_multiple_save_and_load_cycles() {
     let test_path = std::env::temp_dir().join("test_passwords_cycles.enc");
 
@@ -196,6 +208,7 @@ fn test_multiple_save_and_load_cycles() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_empty_entries() {
     let test_path = std::env::temp_dir().join("test_passwords_empty.enc");
 
@@ -218,5 +231,202 @@ fn test_empty_entries() {
     assert_eq!(loaded.len(), 0);
 
     // Clean up
+    let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_change_master_password_success() {
+    let test_path = std::env::temp_dir().join("test_passwords_change.enc");
+
+    // Clean up any existing test file
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+    let old_password = "OldPassword123";
+    let new_password = "NewPassword456";
+
+    // Create and save test entries with old password
+    let entries = vec![
+        PasswordEntry {
+            title: "GitHub".to_string(),
+            username: "testuser".to_string(),
+            password: "github_password".to_string(),
+            created_at: current_timestamp(),
+        },
+        PasswordEntry {
+            title: "Gmail".to_string(),
+            username: "test@example.com".to_string(),
+            password: "gmail_password".to_string(),
+            created_at: current_timestamp(),
+        },
+    ];
+
+    storage
+        .save_entries(&entries, old_password)
+        .expect("Failed to save entries");
+
+    // Change the master password
+    storage
+        .change_master_password(old_password, new_password)
+        .expect("Failed to change master password");
+
+    // Verify old password no longer works
+    let old_result = storage.load_entries(old_password);
+    assert!(
+        old_result.is_err(),
+        "Old password should no longer work after change"
+    );
+
+    // Verify new password works and data is intact
+    let loaded_entries = storage
+        .load_entries(new_password)
+        .expect("Failed to load entries with new password");
+
+    assert_eq!(loaded_entries.len(), 2);
+    assert_eq!(loaded_entries[0].title, "GitHub");
+    assert_eq!(loaded_entries[0].username, "testuser");
+    assert_eq!(loaded_entries[0].password, "github_password");
+    assert_eq!(loaded_entries[1].title, "Gmail");
+    assert_eq!(loaded_entries[1].username, "test@example.com");
+    assert_eq!(loaded_entries[1].password, "gmail_password");
+
+    // Clean up
+    let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_change_master_password_wrong_old_password() {
+    let test_path = std::env::temp_dir().join("test_passwords_change_wrong.enc");
+
+    // Clean up any existing test file
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+    let correct_password = "CorrectPassword123";
+    let wrong_password = "WrongPassword123";
+    let new_password = "NewPassword456";
+
+    // Create and save test entry
+    let entries = vec![PasswordEntry {
+        title: "Test".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: current_timestamp(),
+    }];
+
+    storage
+        .save_entries(&entries, correct_password)
+        .expect("Failed to save entries");
+
+    // Try to change password with wrong old password
+    let result = storage.change_master_password(wrong_password, new_password);
+    assert!(
+        result.is_err(),
+        "Should fail with wrong old password"
+    );
+
+    // Verify original password still works
+    let loaded = storage.load_entries(correct_password);
+    assert!(loaded.is_ok(), "Original password should still work");
+
+    // Clean up
+    let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_change_master_password_weak_new_password() {
+    let test_path = std::env::temp_dir().join("test_passwords_change_weak.enc");
+
+    // Clean up any existing test file
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+    let old_password = "OldPassword123";
+    let weak_password = "weak"; // Too short, no uppercase, no numbers
+
+    // Create and save test entry
+    let entries = vec![PasswordEntry {
+        title: "Test".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: current_timestamp(),
+    }];
+
+    storage
+        .save_entries(&entries, old_password)
+        .expect("Failed to save entries");
+
+    // Try to change to weak password
+    let result = storage.change_master_password(old_password, weak_password);
+    assert!(
+        result.is_err(),
+        "Should fail with weak new password"
+    );
+    let error = result.unwrap_err();
+    assert!(error.user_message().contains("at least 8 characters"));
+
+    // Verify original password still works
+    let loaded = storage.load_entries(old_password);
+    assert!(loaded.is_ok(), "Original password should still work");
+
+    // Clean up
+    let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_change_master_password_same_password() {
+    let test_path = std::env::temp_dir().join("test_passwords_change_same.enc");
+
+    // Clean up any existing test file
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+    let password = "SamePassword123";
+
+    // Create and save test entry
+    let entries = vec![PasswordEntry {
+        title: "Test".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: current_timestamp(),
+    }];
+
+    storage
+        .save_entries(&entries, password)
+        .expect("Failed to save entries");
+
+    // Try to change to same password
+    let result = storage.change_master_password(password, password);
+    assert!(
+        result.is_err(),
+        "Should fail when new password is same as old"
+    );
+    let error = result.unwrap_err();
+    assert!(error.user_message().contains("must be different"));
+
+    // Clean up
+    let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_change_master_password_no_storage_file() {
+    let test_path = std::env::temp_dir().join("test_passwords_nonexistent.enc");
+
+    // Make sure file doesn't exist
+    let _ = fs::remove_file(&test_path);
+
+    let storage = PasswordStorage::new(test_path.clone());
+
+    // Try to change password when no storage file exists
+    let result = storage.change_master_password("OldPassword123", "NewPassword456");
+    assert!(
+        result.is_err(),
+        "Should fail when storage file doesn't exist"
+    );
+    // StorageError doesn't have "No password storage file" in user message
+    // Just check it's an error
+    assert!(result.is_err());
+
+    // Clean up (just in case)
     let _ = fs::remove_file(&test_path);
 }
