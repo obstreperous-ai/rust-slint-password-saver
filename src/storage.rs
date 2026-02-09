@@ -28,59 +28,6 @@ use std::fs;
 use std::path::PathBuf;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-/// Validates password strength requirements.
-///
-/// # Password Requirements
-///
-/// - Minimum 8 characters long
-/// - At least one uppercase letter
-/// - At least one lowercase letter  
-/// - At least one number
-///
-/// # Arguments
-///
-/// * `password` - The password to validate
-///
-/// # Returns
-///
-/// `Ok(())` if password meets requirements, or a `SecurityError` describing the issue
-///
-/// # Example
-///
-/// ```
-/// use rust_slint_password_saver::storage::validate_password_strength;
-///
-/// assert!(validate_password_strength("SecurePass123").is_ok());
-/// assert!(validate_password_strength("weak").is_err());
-/// ```
-pub fn validate_password_strength(password: &str) -> Result<(), SecurityError> {
-    if password.len() < 8 {
-        return Err(SecurityError::InvalidInput(
-            "password: must be at least 8 characters".into(),
-        ));
-    }
-
-    if !password.chars().any(char::is_uppercase) {
-        return Err(SecurityError::InvalidInput(
-            "password: must contain at least one uppercase letter".into(),
-        ));
-    }
-
-    if !password.chars().any(char::is_lowercase) {
-        return Err(SecurityError::InvalidInput(
-            "password: must contain at least one lowercase letter".into(),
-        ));
-    }
-
-    if !password.chars().any(char::is_numeric) {
-        return Err(SecurityError::InvalidInput(
-            "password: must contain at least one number".into(),
-        ));
-    }
-
-    Ok(())
-}
-
 /// Represents a single password entry in the password manager.
 ///
 /// # Fields

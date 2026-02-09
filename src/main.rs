@@ -21,11 +21,13 @@
 
 mod errors;
 mod storage;
+mod validation;
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::{PasswordEntry, PasswordStorage};
+use validation::{validate_master_password, validate_password, validate_title, validate_username};
 
 slint::include_modules!();
 
@@ -82,14 +84,27 @@ fn main() -> Result<(), slint::PlatformError> {
     let storage_path_clone = storage_path.clone();
     ui.on_save_password(move |master_password, title, username, password| {
         if let Some(ui) = ui_weak.upgrade() {
-            // Validate inputs before attempting to save
-            if master_password.is_empty() {
-                ui.set_status_message("Error: Master password is required".into());
+            // Validate master password
+            if let Err(e) = validate_master_password(&master_password) {
+                ui.set_status_message(format!("Invalid master password: {}", e).into());
                 return;
             }
 
-            if title.is_empty() || password.is_empty() {
-                ui.set_status_message("Error: Title and password are required".into());
+            // Validate title
+            if let Err(e) = validate_title(&title) {
+                ui.set_status_message(format!("Invalid title: {}", e).into());
+                return;
+            }
+
+            // Validate username
+            if let Err(e) = validate_username(&username) {
+                ui.set_status_message(format!("Invalid username: {}", e).into());
+                return;
+            }
+
+            // Validate password
+            if let Err(e) = validate_password(&password) {
+                ui.set_status_message(format!("Invalid password: {}", e).into());
                 return;
             }
 
@@ -147,8 +162,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let storage_path_clone = storage_path.clone();
     ui.on_load_passwords(move |master_password| {
         if let Some(ui) = ui_weak.upgrade() {
-            if master_password.is_empty() {
-                ui.set_status_message("Error: Master password is required".into());
+            // Validate master password
+            if let Err(e) = validate_master_password(&master_password) {
+                ui.set_status_message(format!("Invalid master password: {}", e).into());
                 return;
             }
 
@@ -188,58 +204,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     ui.set_status_message(e.user_message().into());
                     // Log detailed error for debugging
                     eprintln!("Load passwords failed: {}", e.debug_message());
-                }
-            }
-        }
-    });
-
-    // Set up change master password callback
-    // This is called when the user clicks "Change Password" button in the dialog
-    let ui_weak = ui.as_weak();
-    let storage_path_clone = storage_path.clone();
-    ui.on_change_master_password(move |current_password, new_password, confirm_password| {
-        if let Some(ui) = ui_weak.upgrade() {
-            // Validate inputs
-            if current_password.is_empty() {
-                ui.set_status_message("Error: Current password is required".into());
-                return;
-            }
-
-            if new_password.is_empty() {
-                ui.set_status_message("Error: New password is required".into());
-                return;
-            }
-
-            if confirm_password.is_empty() {
-                ui.set_status_message("Error: Please confirm new password".into());
-                return;
-            }
-
-            // Check if new passwords match
-            if new_password != confirm_password {
-                ui.set_status_message("Error: New passwords do not match".into());
-                return;
-            }
-
-            let storage = PasswordStorage::new(storage_path_clone.clone());
-
-            if !storage.exists() {
-                ui.set_status_message("Error: No password storage file exists".into());
-                return;
-            }
-
-            // Attempt to change the master password
-            match storage.change_master_password(&current_password, &new_password) {
-                Ok(()) => {
-                    ui.set_status_message(
-                        "Master password changed successfully! Use the new password from now on."
-                            .into(),
-                    );
-                    // Update the master password field to new password
-                    ui.set_master_password(new_password.to_string().into());
-                }
-                Err(e) => {
-                    ui.set_status_message(format!("Error changing password: {}", e).into());
                 }
             }
         }
