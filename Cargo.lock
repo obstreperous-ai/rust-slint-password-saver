@@ -4212,6 +4212,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "argon2",
+ "lazy_static",
  "env_logger",
  "hex",
  "hmac",

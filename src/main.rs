@@ -10,6 +10,7 @@
 //! - Save password entries with title, username, and password
 //! - Load and view stored passwords
 //! - All data encrypted with master password
+//! - Rate limiting to prevent brute-force attacks
 //! - Cross-platform support (macOS, Linux)
 //! - Security audit logging for all operations
 //!
@@ -20,12 +21,20 @@
 //! cargo run --release
 //! ```
 
+// Allow lazy_static for compatibility with Rust 1.70+
+// Will migrate to std::sync::LazyLock when minimum version is 1.80+
+#![allow(clippy::non_std_lazy_statics)]
+
+mod errors;
+mod rate_limit;
 mod password_strength;
 mod audit_log;
 mod errors;
 mod storage;
 mod validation;
 
+use lazy_static::lazy_static;
+use rate_limit::RateLimiter;
 use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use log::warn;
@@ -36,6 +45,12 @@ use storage::{PasswordEntry, PasswordStorage};
 use validation::{validate_master_password, validate_password, validate_title, validate_username};
 
 slint::include_modules!();
+
+// Global rate limiter instance
+// Note: Using lazy_static for compatibility with Rust 1.70+
+lazy_static! {
+    static ref RATE_LIMITER: RateLimiter = RateLimiter::new();
+}
 
 /// Maximum number of password entries to display in status message
 const MAX_DISPLAY_ENTRIES: usize = 5;
@@ -213,6 +228,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
 
+            // Check rate limit before attempting decryption
+            if let Err(e) = RATE_LIMITER.check_and_record_attempt() {
+                ui.set_status_message(e.into());
+                return;
+            }
+
             let storage = PasswordStorage::new(storage_path_clone.clone());
 
             if !storage.exists() {
@@ -222,6 +243,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
             match storage.load_entries(&master_password) {
                 Ok(entries) => {
+                    // Clear rate limiter on successful authentication
+                    RATE_LIMITER.record_success();
+
                     let count = entries.len();
                     let mut message = format!("Loaded {} password(s):\n", count);
 
