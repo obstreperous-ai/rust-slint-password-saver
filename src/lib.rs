@@ -38,4 +38,6 @@
 //! let loaded = storage.load_entries("master_password").unwrap();
 //! ```
 
+pub mod errors;
 pub mod storage;
+pub mod validation;
