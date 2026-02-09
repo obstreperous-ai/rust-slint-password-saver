@@ -8,6 +8,7 @@
 //! - **Military-grade encryption**: Uses Argon2 + AES-256-GCM
 //! - **Zero-knowledge architecture**: Master password never stored
 //! - **Cross-platform support**: Works on macOS, Linux, and other Unix-like systems
+//! - **Security audit logging**: Comprehensive logging of security events with integrity protection
 //!
 //! ## Example
 //!
@@ -38,5 +39,7 @@
 //! let loaded = storage.load_entries("master_password").unwrap();
 //! ```
 
+pub mod audit_log;
 pub mod errors;
 pub mod storage;
+pub mod validation;

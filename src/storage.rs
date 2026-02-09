@@ -13,7 +13,9 @@
 //! - **Integrity**: Any modification causes decryption to fail
 //! - **Zero-Knowledge**: Master password never stored
 //! - **Unique Encryption**: New salt and nonce per save operation
+//! - **Audit Trail**: All operations logged for forensic analysis
 
+use crate::audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use crate::errors::SecurityError;
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
@@ -23,6 +25,7 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -352,6 +355,19 @@ impl PasswordStorage {
         entries: &[PasswordEntry],
         master_password: &str,
     ) -> Result<(), SecurityError> {
+        // Initialize audit logger
+        let audit_logger = AuditLogger::new(get_audit_log_path());
+
+        // Log file access attempt
+        let file_access_entry = AuditLogger::create_entry(
+            AuditEventType::FileAccess,
+            true,
+            Some(format!("Writing to {}", self.storage_path.display())),
+        );
+        if let Err(e) = audit_logger.log_event(&file_access_entry) {
+            warn!("Failed to log file access: {}", e);
+        }
+
         // Serialize entries to JSON
         let json_data =
             serde_json::to_string(entries).map_err(|_| SecurityError::CryptographicError)?;
@@ -388,6 +404,15 @@ impl PasswordStorage {
 
         // Set secure permissions immediately after file creation (0600 on Unix)
         Self::set_secure_permissions(&self.storage_path)?;
+        // Log successful password save
+        let save_entry = AuditLogger::create_entry(
+            AuditEventType::PasswordsSaved,
+            true,
+            Some(format!("Saved {} password entries", entries.len())),
+        );
+        if let Err(e) = audit_logger.log_event(&save_entry) {
+            warn!("Failed to log password save: {}", e);
+        }
 
         Ok(())
     }
@@ -440,6 +465,19 @@ impl PasswordStorage {
     /// }
     /// ```
     pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, SecurityError> {
+        // Initialize audit logger
+        let audit_logger = AuditLogger::new(get_audit_log_path());
+
+        // Log file access attempt
+        let file_access_entry = AuditLogger::create_entry(
+            AuditEventType::FileAccess,
+            true,
+            Some(format!("Reading from {}", self.storage_path.display())),
+        );
+        if let Err(e) = audit_logger.log_event(&file_access_entry) {
+            warn!("Failed to log file access: {}", e);
+        }
+
         // Read encrypted storage file from disk
         let storage_json =
             fs::read_to_string(&self.storage_path).map_err(|_| SecurityError::StorageError)?;
@@ -458,8 +496,29 @@ impl PasswordStorage {
             .try_into()
             .map_err(|_| SecurityError::CryptographicError)?;
 
+        // Log master password check
+        let password_check_entry = AuditLogger::create_entry(
+            AuditEventType::MasterPasswordCheck,
+            true,
+            Some("Attempting decryption".to_string()),
+        );
+        if let Err(e) = audit_logger.log_event(&password_check_entry) {
+            warn!("Failed to log password check: {}", e);
+        }
+
         // Decrypt data (will fail if password is wrong or data has been tampered with)
-        let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)?;
+        let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)
+            .inspect_err(|_| {
+                // Log failed decryption attempt
+                let failed_entry = AuditLogger::create_entry(
+                    AuditEventType::MasterPasswordCheck,
+                    false,
+                    Some("Decryption failed - possibly wrong master password".to_string()),
+                );
+                if let Err(e) = audit_logger.log_event(&failed_entry) {
+                    warn!("Failed to log failed decryption: {}", e);
+                }
+            })?;
 
         // Convert decrypted bytes to UTF-8 string
         let json_str =
@@ -468,6 +527,16 @@ impl PasswordStorage {
         // Deserialize password entries from JSON
         let entries: Vec<PasswordEntry> =
             serde_json::from_str(&json_str).map_err(|_| SecurityError::CryptographicError)?;
+
+        // Log successful password load
+        let load_entry = AuditLogger::create_entry(
+            AuditEventType::PasswordsLoaded,
+            true,
+            Some(format!("Loaded {} password entries", entries.len())),
+        );
+        if let Err(e) = audit_logger.log_event(&load_entry) {
+            warn!("Failed to log password load: {}", e);
+        }
 
         Ok(entries)
     }
@@ -517,11 +586,6 @@ impl PasswordStorage {
     /// - On Windows: No-op (Windows has different permission model)
     /// - Defense-in-depth: Protects against future encryption vulnerabilities
     /// - Reduces attack surface by preventing other users from accessing encrypted data
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use rust_slint_password_saver::storage::PasswordStorage;
     /// use std::path::Path;
     ///
     /// let path = Path::new("passwords.enc");
@@ -540,6 +604,76 @@ impl PasswordStorage {
             // This is a no-op, but we still return Ok to maintain API consistency
             let _ = path;
         }
+    }
+  
+    /// Changes the master password by re-encrypting all stored entries.
+    ///
+    /// This method performs the following operations:
+    /// 1. Verifies the old password by attempting to load entries
+    /// 2. Validates the new password strength
+    /// 3. Ensures the new password is different from the old one
+    /// 4. Re-encrypts all entries with the new password
+    ///
+    /// # Arguments
+    ///
+    /// * `old_password` - Current master password (must be correct)
+    /// * `new_password` - New master password to use (must meet strength requirements)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or a `SecurityError` if:
+    /// - Old password is incorrect
+    /// - New password doesn't meet strength requirements
+    /// - New password is same as old password
+    /// - Storage file doesn't exist
+    /// - Re-encryption fails
+    ///
+    /// # Security
+    ///
+    /// - Verifies old password before making any changes
+    /// - Generates new salt and nonce for re-encryption
+    /// - All data is re-encrypted with new key derivation
+    /// - No data is lost if operation fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use std::path::PathBuf;
+    ///
+    /// let storage = PasswordStorage::new(PathBuf::from("passwords.enc"));
+    ///
+    /// match storage.change_master_password("OldPassword123", "NewPassword456") {
+    ///     Ok(()) => println!("Password changed successfully"),
+    ///     Err(e) => eprintln!("Failed to change password: {}", e),
+    /// }
+    /// ```
+    pub fn change_master_password(
+        &self,
+        old_password: &str,
+        new_password: &str,
+    ) -> Result<(), SecurityError> {
+        // Verify storage file exists
+        if !self.exists() {
+            return Err(SecurityError::StorageError);
+        }
+
+        // Step 1: Load entries with old password (verifies old password is correct)
+        let entries = self.load_entries(old_password)?;
+
+        // Step 2: Validate new password strength
+        validate_password_strength(new_password)?;
+
+        // Step 3: Ensure new password is different from old password
+        if old_password == new_password {
+            return Err(SecurityError::InvalidInput(
+                "password: new password must be different from old password".into(),
+            ));
+        }
+
+        // Step 4: Save entries with new password (re-encrypts with new key)
+        self.save_entries(&entries, new_password)?;
+
         Ok(())
     }
 }
@@ -615,5 +749,44 @@ mod tests {
         assert_eq!(entry.title, deserialized.title);
         assert_eq!(entry.username, deserialized.username);
         assert_eq!(entry.password, deserialized.password);
+    }
+
+    #[test]
+    fn test_validate_password_strength_valid() {
+        assert!(validate_password_strength("SecurePass123").is_ok());
+        assert!(validate_password_strength("MyPassword1").is_ok());
+        assert!(validate_password_strength("Abc12345").is_ok());
+    }
+
+    #[test]
+    fn test_validate_password_strength_too_short() {
+        let result = validate_password_strength("Pass1");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("at least 8 characters"));
+    }
+
+    #[test]
+    fn test_validate_password_strength_no_uppercase() {
+        let result = validate_password_strength("password123");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("uppercase letter"));
+    }
+
+    #[test]
+    fn test_validate_password_strength_no_lowercase() {
+        let result = validate_password_strength("PASSWORD123");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("lowercase letter"));
+    }
+
+    #[test]
+    fn test_validate_password_strength_no_number() {
+        let result = validate_password_strength("PasswordOnly");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("number"));
     }
 }
