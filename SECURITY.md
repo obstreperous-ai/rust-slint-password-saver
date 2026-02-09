@@ -1152,7 +1152,7 @@ ui.on_save_password(move |master_password, title, username, password| {
 
 ---
 
-### Issue 10: 🔵 Improve Error Messages for Security
+### Issue 10: ✅ Improve Error Messages for Security - COMPLETED
 
 **Title:** Sanitize error messages to prevent information leakage
 
@@ -1168,111 +1168,50 @@ Some error messages may leak information about the internal state of the applica
 **Solution:**
 Implement structured error handling with generic user-facing messages.
 
-**Implementation Steps:**
+**Implementation Status:** ✅ **COMPLETED**
 
-1. Create error types in `src/errors.rs`:
-```rust
-use std::fmt;
+**What Was Done:**
 
-#[derive(Debug)]
-pub enum SecurityError {
-    AuthenticationFailed,
-    InvalidInput(String),
-    StorageError,
-    CryptographicError,
-    PermissionDenied,
-    RateLimitExceeded,
-}
+1. ✅ Created `src/errors.rs` with SecurityError enum containing:
+   - `AuthenticationFailed` - For wrong password or decryption failures
+   - `InvalidInput` - For invalid user input
+   - `StorageError` - For file I/O errors
+   - `CryptographicError` - For encryption/hashing errors
+   - `PermissionDenied` - For permission errors
+   - `RateLimitExceeded` - For future rate limiting
 
-impl SecurityError {
-    /// Returns user-friendly message that doesn't leak internal details
-    pub fn user_message(&self) -> String {
-        match self {
-            Self::AuthenticationFailed => {
-                "Incorrect master password. Please try again.".into()
-            }
-            Self::InvalidInput(field) => {
-                format!("Invalid {}", field)
-            }
-            Self::StorageError => {
-                "Unable to access password storage. Check file permissions.".into()
-            }
-            Self::CryptographicError => {
-                "Encryption error occurred. Data may be corrupted.".into()
-            }
-            Self::PermissionDenied => {
-                "Permission denied. Check file permissions.".into()
-            }
-            Self::RateLimitExceeded => {
-                "Too many attempts. Please try again later.".into()
-            }
-        }
-    }
-    
-    /// Returns detailed message for logging (not shown to user)
-    pub fn debug_message(&self) -> String {
-        format!("{:?}", self)
-    }
-}
-```
+2. ✅ Implemented `user_message()` method for generic, safe user-facing messages
+3. ✅ Implemented `debug_message()` method for detailed developer/debugging information
+4. ✅ Updated `src/storage.rs` to return `SecurityError` instead of `String`:
+   - `derive_key()` returns `SecurityError::CryptographicError` on failures
+   - `encrypt_data()` returns `SecurityError::CryptographicError` on failures
+   - `decrypt_data()` returns `SecurityError::AuthenticationFailed` on failures
+   - `save_entries()` returns appropriate errors for serialization, encryption, and I/O
+   - `load_entries()` returns appropriate errors for reading, decryption, and deserialization
 
-2. Update `src/storage.rs` to use structured errors:
-```rust
-pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, SecurityError> {
-    // ... existing code ...
-    
-    // Instead of:
-    // .map_err(|e| format!("Decryption failed: {}", e))?;
-    
-    // Use:
-    .map_err(|_| SecurityError::AuthenticationFailed)?;
-}
-```
+5. ✅ Updated `src/main.rs` to use generic error messages in UI:
+   - Shows user-friendly messages via `e.user_message()`
+   - Logs detailed errors to stderr via `e.debug_message()` using `eprintln!`
 
-3. Update UI handlers to use generic messages:
-```rust
-match storage.load_entries(&master_password) {
-    Ok(entries) => { /* ... */ }
-    Err(e) => {
-        // Show generic message to user
-        ui.set_status_message(e.user_message().into());
-        
-        // Log detailed error for debugging
-        log::error!("Load failed: {}", e.debug_message());
-    }
-}
-```
-
-4. Add logging for detailed errors (for developers/debugging):
-   - Log full error details with context
-   - Include timestamps and operation details
-   - Never show detailed crypto errors to users
-
-**Files to Create:**
-- `src/errors.rs` - Structured error types
-
-**Files to Modify:**
-- `src/lib.rs` - Add errors module
-- `src/storage.rs` - Use SecurityError types
-- `src/main.rs` - Handle errors with generic messages
-- `tests/` - Update tests for new error types
-
-**Testing:**
-- Verify user messages are generic
-- Verify detailed errors are logged
-- Test all error paths
-- Ensure no sensitive info in user messages
+6. ✅ All existing tests pass with new error types
+7. ✅ Added comprehensive unit tests for error types
 
 **Acceptance Criteria:**
-- [ ] Structured error types implemented
-- [ ] User-facing messages are generic and safe
-- [ ] Detailed errors logged for debugging
-- [ ] No cryptographic details in user messages
-- [ ] All error paths tested
-- [ ] Documentation updated
+- [x] Structured error types implemented
+- [x] User-facing messages are generic and safe
+- [x] Detailed errors logged for debugging
+- [x] No cryptographic details in user messages
+- [x] All error paths tested
+- [x] Documentation updated
+
+**Examples of Sanitized Messages:**
+- User sees: "Incorrect master password. Please try again."
+- Developer logs: "AuthenticationFailed" with full context
+- No exposure of: AES-GCM errors, Argon2 details, filesystem paths
 
 **Priority:** 🔵 LOW
 **Estimated Effort:** 2-3 hours
+**Actual Effort:** ~2 hours
 **Labels:** security, enhancement, code-quality
 
 ---
