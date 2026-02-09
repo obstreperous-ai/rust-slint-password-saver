@@ -14,6 +14,7 @@
 //! - **Zero-Knowledge**: Master password never stored
 //! - **Unique Encryption**: New salt and nonce per save operation
 
+use crate::errors::SecurityError;
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
@@ -25,6 +26,7 @@ use argon2::{
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Validates password strength requirements.
 ///
@@ -41,7 +43,7 @@ use std::path::PathBuf;
 ///
 /// # Returns
 ///
-/// `Ok(())` if password meets requirements, or an error message describing the issue
+/// `Ok(())` if password meets requirements, or a SecurityError describing the issue
 ///
 /// # Example
 ///
@@ -51,21 +53,29 @@ use std::path::PathBuf;
 /// assert!(validate_password_strength("SecurePass123").is_ok());
 /// assert!(validate_password_strength("weak").is_err());
 /// ```
-pub fn validate_password_strength(password: &str) -> Result<(), String> {
+pub fn validate_password_strength(password: &str) -> Result<(), SecurityError> {
     if password.len() < 8 {
-        return Err("Password must be at least 8 characters long".into());
+        return Err(SecurityError::InvalidInput(
+            "password: must be at least 8 characters".into(),
+        ));
     }
 
     if !password.chars().any(char::is_uppercase) {
-        return Err("Password must contain at least one uppercase letter".into());
+        return Err(SecurityError::InvalidInput(
+            "password: must contain at least one uppercase letter".into(),
+        ));
     }
 
     if !password.chars().any(char::is_lowercase) {
-        return Err("Password must contain at least one lowercase letter".into());
+        return Err(SecurityError::InvalidInput(
+            "password: must contain at least one lowercase letter".into(),
+        ));
     }
 
     if !password.chars().any(char::is_numeric) {
-        return Err("Password must contain at least one number".into());
+        return Err(SecurityError::InvalidInput(
+            "password: must contain at least one number".into(),
+        ));
     }
 
     Ok(())
@@ -77,8 +87,14 @@ pub fn validate_password_strength(password: &str) -> Result<(), String> {
 ///
 /// * `title` - The name/title of the password entry (e.g., "Gmail", "GitHub")
 /// * `username` - The username or email associated with this entry
-/// * `password` - The actual password to store
+/// * `password` - The actual password to store (securely cleared on drop)
 /// * `created_at` - Unix timestamp (seconds since epoch) when entry was created
+///
+/// # Security
+///
+/// This struct implements `ZeroizeOnDrop` to ensure that sensitive data (passwords)
+/// is securely cleared from memory when the struct is dropped. The `title` and
+/// `username` fields are skipped from zeroization as they are less sensitive.
 ///
 /// # Example
 ///
@@ -95,13 +111,17 @@ pub fn validate_password_strength(password: &str) -> Result<(), String> {
 ///         .unwrap()
 ///         .as_secs(),
 /// };
+/// // password field will be securely cleared when entry is dropped
 /// ```
 #[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct PasswordEntry {
+    #[zeroize(skip)]
     pub title: String,
+    #[zeroize(skip)]
     pub username: String,
     pub password: String,
+    #[zeroize(skip)]
     pub created_at: u64,
 }
 
@@ -186,11 +206,11 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// A 32-byte encryption key on success, or an error message on failure
+    /// A 32-byte encryption key on success, or a `SecurityError` on failure
     ///
     /// # Errors
     ///
-    /// Returns an error if:
+    /// Returns `SecurityError::CryptographicError` if:
     /// - Salt encoding fails
     /// - Password hashing fails
     /// - Generated hash is too short (< 32 bytes)
@@ -204,25 +224,24 @@ impl PasswordStorage {
     /// let key = PasswordStorage::derive_key("my_password", salt).unwrap();
     /// assert_eq!(key.len(), 32);
     /// ```
-    pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+    pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<[u8; 32], SecurityError> {
         let argon2 = Argon2::default();
         let salt_string =
-            SaltString::encode_b64(salt).map_err(|e| format!("Failed to encode salt: {}", e))?;
+            SaltString::encode_b64(salt).map_err(|_| SecurityError::CryptographicError)?;
 
         let password_hash = argon2
             .hash_password(master_password.as_bytes(), &salt_string)
-            .map_err(|e| format!("Failed to hash password: {}", e))?;
+            .map_err(|_| SecurityError::CryptographicError)?;
 
         // Extract the hash bytes and use first 32 bytes as key
-        let hash = password_hash.hash.ok_or("No hash generated")?;
+        let hash = password_hash
+            .hash
+            .ok_or(SecurityError::CryptographicError)?;
         let hash_bytes = hash.as_bytes();
 
         // Verify hash is at least 32 bytes
         if hash_bytes.len() < 32 {
-            return Err(format!(
-                "Hash too short: expected at least 32 bytes, got {}",
-                hash_bytes.len()
-            ));
+            return Err(SecurityError::CryptographicError);
         }
 
         let mut key = [0u8; 32];
@@ -244,11 +263,11 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// The encrypted ciphertext on success, or an error message on failure
+    /// The encrypted ciphertext on success, or a `SecurityError` on failure
     ///
     /// # Errors
     ///
-    /// Returns an error if encryption fails (e.g., due to invalid key or nonce)
+    /// Returns `SecurityError::CryptographicError` if encryption fails
     ///
     /// # Example
     ///
@@ -262,13 +281,17 @@ impl PasswordStorage {
     /// let encrypted = PasswordStorage::encrypt_data(data, &key, &nonce).unwrap();
     /// assert!(!encrypted.is_empty());
     /// ```
-    pub fn encrypt_data(data: &[u8], key: &[u8; 32], nonce: &[u8; 12]) -> Result<Vec<u8>, String> {
+    pub fn encrypt_data(
+        data: &[u8],
+        key: &[u8; 32],
+        nonce: &[u8; 12],
+    ) -> Result<Vec<u8>, SecurityError> {
         let cipher = Aes256Gcm::new(key.into());
         let nonce = Nonce::from_slice(nonce);
 
         cipher
             .encrypt(nonce, data)
-            .map_err(|e| format!("Encryption failed: {}", e))
+            .map_err(|_| SecurityError::CryptographicError)
     }
 
     /// Decrypts data using AES-256-GCM authenticated encryption.
@@ -285,11 +308,11 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// The decrypted plaintext on success, or an error message on failure
+    /// The decrypted plaintext on success, or a `SecurityError` on failure
     ///
     /// # Errors
     ///
-    /// Returns an error if:
+    /// Returns `SecurityError::AuthenticationFailed` if:
     /// - The key is incorrect
     /// - The nonce is incorrect
     /// - The encrypted data has been tampered with
@@ -312,13 +335,13 @@ impl PasswordStorage {
         encrypted_data: &[u8],
         key: &[u8; 32],
         nonce: &[u8; 12],
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, SecurityError> {
         let cipher = Aes256Gcm::new(key.into());
         let nonce = Nonce::from_slice(nonce);
 
         cipher
             .decrypt(nonce, encrypted_data)
-            .map_err(|e| format!("Decryption failed: {}", e))
+            .map_err(|_| SecurityError::AuthenticationFailed)
     }
 
     /// Saves password entries to disk with encryption.
@@ -337,15 +360,15 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// `Ok(())` on success, or an error message on failure
+    /// `Ok(())` on success, or a `SecurityError` on failure
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - JSON serialization fails
-    /// - Key derivation fails
-    /// - Encryption fails
-    /// - File write fails
+    /// - JSON serialization fails (`SecurityError::CryptographicError`)
+    /// - Key derivation fails (`SecurityError::CryptographicError`)
+    /// - Encryption fails (`SecurityError::CryptographicError`)
+    /// - File write fails (`SecurityError::StorageError`)
     ///
     /// # Security
     ///
@@ -378,10 +401,10 @@ impl PasswordStorage {
         &self,
         entries: &[PasswordEntry],
         master_password: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), SecurityError> {
         // Serialize entries to JSON
-        let json_data = serde_json::to_string(entries)
-            .map_err(|e| format!("Failed to serialize entries: {}", e))?;
+        let json_data =
+            serde_json::to_string(entries).map_err(|_| SecurityError::CryptographicError)?;
 
         // Generate cryptographically random salt for key derivation
         // Each save operation gets a new salt to prevent rainbow table attacks
@@ -408,11 +431,10 @@ impl PasswordStorage {
         };
 
         // Serialize storage data to JSON and write to disk
-        let storage_json = serde_json::to_string(&storage_data)
-            .map_err(|e| format!("Failed to serialize storage data: {}", e))?;
+        let storage_json =
+            serde_json::to_string(&storage_data).map_err(|_| SecurityError::CryptographicError)?;
 
-        fs::write(&self.storage_path, storage_json)
-            .map_err(|e| format!("Failed to write to disk: {}", e))?;
+        fs::write(&self.storage_path, storage_json).map_err(|_| SecurityError::StorageError)?;
 
         Ok(())
     }
@@ -432,17 +454,17 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// A vector of password entries on success, or an error message on failure
+    /// A vector of password entries on success, or a `SecurityError` on failure
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - Storage file cannot be read
-    /// - JSON deserialization fails
-    /// - Master password is incorrect
-    /// - Encrypted data has been tampered with
-    /// - Nonce size is invalid
-    /// - Decrypted data is not valid UTF-8
+    /// - Storage file cannot be read (`SecurityError::StorageError`)
+    /// - JSON deserialization fails (`SecurityError::CryptographicError`)
+    /// - Master password is incorrect (`SecurityError::AuthenticationFailed`)
+    /// - Encrypted data has been tampered with (`SecurityError::AuthenticationFailed`)
+    /// - Nonce size is invalid (`SecurityError::CryptographicError`)
+    /// - Decrypted data is not valid UTF-8 (`SecurityError::CryptographicError`)
     ///
     /// # Security
     ///
@@ -464,14 +486,14 @@ impl PasswordStorage {
     ///     Err(e) => eprintln!("Failed to load: {}", e),
     /// }
     /// ```
-    pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, String> {
+    pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, SecurityError> {
         // Read encrypted storage file from disk
-        let storage_json = fs::read_to_string(&self.storage_path)
-            .map_err(|e| format!("Failed to read storage file: {}", e))?;
+        let storage_json =
+            fs::read_to_string(&self.storage_path).map_err(|_| SecurityError::StorageError)?;
 
         // Deserialize storage data (salt, nonce, encrypted data)
-        let storage_data: StorageData = serde_json::from_str(&storage_json)
-            .map_err(|e| format!("Failed to deserialize storage data: {}", e))?;
+        let storage_data: StorageData =
+            serde_json::from_str(&storage_json).map_err(|_| SecurityError::CryptographicError)?;
 
         // Derive decryption key using the same salt that was used for encryption
         let key = Self::derive_key(master_password, &storage_data.salt)?;
@@ -481,18 +503,18 @@ impl PasswordStorage {
             .nonce
             .as_slice()
             .try_into()
-            .map_err(|_| "Invalid nonce size")?;
+            .map_err(|_| SecurityError::CryptographicError)?;
 
         // Decrypt data (will fail if password is wrong or data has been tampered with)
         let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)?;
 
         // Convert decrypted bytes to UTF-8 string
-        let json_str = String::from_utf8(decrypted_data)
-            .map_err(|e| format!("Failed to convert decrypted data to string: {}", e))?;
+        let json_str =
+            String::from_utf8(decrypted_data).map_err(|_| SecurityError::CryptographicError)?;
 
         // Deserialize password entries from JSON
-        let entries: Vec<PasswordEntry> = serde_json::from_str(&json_str)
-            .map_err(|e| format!("Failed to deserialize entries: {}", e))?;
+        let entries: Vec<PasswordEntry> =
+            serde_json::from_str(&json_str).map_err(|_| SecurityError::CryptographicError)?;
 
         Ok(entries)
     }
@@ -537,7 +559,7 @@ impl PasswordStorage {
     ///
     /// # Returns
     ///
-    /// `Ok(())` on success, or an error message if:
+    /// `Ok(())` on success, or a SecurityError if:
     /// - Old password is incorrect
     /// - New password doesn't meet strength requirements
     /// - New password is same as old password
@@ -568,10 +590,10 @@ impl PasswordStorage {
         &self,
         old_password: &str,
         new_password: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), SecurityError> {
         // Verify storage file exists
         if !self.exists() {
-            return Err("No password storage file exists".into());
+            return Err(SecurityError::StorageError);
         }
 
         // Step 1: Load entries with old password (verifies old password is correct)
@@ -582,7 +604,9 @@ impl PasswordStorage {
 
         // Step 3: Ensure new password is different from old password
         if old_password == new_password {
-            return Err("New password must be different from old password".into());
+            return Err(SecurityError::InvalidInput(
+                "password: new password must be different from old password".into(),
+            ));
         }
 
         // Step 4: Save entries with new password (re-encrypts with new key)
@@ -676,29 +700,31 @@ mod tests {
     fn test_validate_password_strength_too_short() {
         let result = validate_password_strength("Pass1");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("at least 8 characters long"));
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("at least 8 characters"));
     }
 
     #[test]
     fn test_validate_password_strength_no_uppercase() {
         let result = validate_password_strength("password123");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("uppercase letter"));
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("uppercase letter"));
     }
 
     #[test]
     fn test_validate_password_strength_no_lowercase() {
         let result = validate_password_strength("PASSWORD123");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("lowercase letter"));
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("lowercase letter"));
     }
 
     #[test]
     fn test_validate_password_strength_no_number() {
         let result = validate_password_strength("PasswordOnly");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("number"));
+        let error = result.unwrap_err();
+        assert!(error.user_message().contains("number"));
     }
 }
