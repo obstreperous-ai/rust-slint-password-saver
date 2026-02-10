@@ -4212,19 +4212,19 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "argon2",
- "lazy_static",
  "env_logger",
  "hex",
  "hmac",
  "hostname",
+ "lazy_static",
  "log",
  "serde",
  "serde_json",
  "sha2",
  "slint",
  "slint-build",
- "zxcvbn",
  "zeroize",
+ "zxcvbn",
 ]
 
 [[package]]
