@@ -25,19 +25,18 @@
 // Will migrate to std::sync::LazyLock when minimum version is 1.80+
 #![allow(clippy::non_std_lazy_statics)]
 
-mod errors;
-mod rate_limit;
-mod password_strength;
 mod audit_log;
 mod errors;
+mod password_strength;
+mod rate_limit;
 mod storage;
 mod validation;
 
-use lazy_static::lazy_static;
-use rate_limit::RateLimiter;
-use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
+use lazy_static::lazy_static;
 use log::warn;
+use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
+use rate_limit::RateLimiter;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

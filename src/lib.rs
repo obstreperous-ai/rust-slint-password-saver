@@ -49,10 +49,9 @@
 //! let loaded = storage.load_entries(master_password).unwrap();
 //! ```
 
-pub mod errors;
-pub mod rate_limit;
-pub mod password_strength;
 pub mod audit_log;
 pub mod errors;
+pub mod password_strength;
+pub mod rate_limit;
 pub mod storage;
 pub mod validation;
