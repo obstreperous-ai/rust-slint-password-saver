@@ -225,12 +225,13 @@ HorizontalBox {
 
 #### Visual Design Guidelines
 
-**Color Palette**:
-- Primary: `#4caf50` (green) - for primary actions and success
-- Error: `#f44336` (red) - for errors and warnings
+**Color Palette** (with WCAG AA contrast ratios):
+- Primary: `#4caf50` (green) - for primary actions and success (4.5:1 on white)
+- Error: `#f44336` (red) - for errors and warnings (4.5:1 on white)
 - Background: `white` or `#f5f5f5` (light gray)
-- Text: `#333` (dark gray) for primary text, `#666` for secondary text
+- Text: `#333` (dark gray) for primary text (12.6:1 on white), `#666` for secondary text (5.7:1 on white)
 - Borders: `#ddd` (light gray) for subtle borders
+- **Note**: Always verify contrast ratios meet WCAG AA minimum (4.5:1 for normal text, 3:1 for large text)
 
 **Typography**:
 ```slint
@@ -355,11 +356,12 @@ When reviewing UI changes, ALWAYS check:
    - Are sensitive operations properly guarded?
    - Is error messaging secure (no information leakage)?
 
-6. **Cross-Platform Testing**
-   - Test on macOS (if available)
-   - Test on Linux (Ubuntu/Debian)
-   - Verify fonts, spacing, and controls render correctly
-   - Check for platform-specific issues
+6. **Cross-Platform Testing** (MANDATORY)
+   - Test on macOS (required for cross-platform validation)
+   - Test on Linux (Ubuntu/Debian) (required for cross-platform validation)
+   - Verify fonts, spacing, and controls render correctly on both platforms
+   - Check for platform-specific issues (font rendering, native dialogs, keyboard shortcuts)
+   - **Note**: If you don't have access to one platform, request testing from team members
 
 7. **Documentation Review**
    - Are UI changes documented?
@@ -477,6 +479,10 @@ When assigned a UX-related issue:
 Areas where UX could be enhanced (reference for future work):
 
 1. **Password Strength Indicator**: Visual feedback for password strength during entry
+   - **Security Note**: Must be designed carefully to avoid revealing specific password requirements to attackers
+   - Use general strength levels (Weak/Fair/Strong) rather than specific composition rules
+   - Avoid showing which requirements are met (prevents information leakage)
+   - Focus on entropy and length rather than character class requirements
 2. **Search/Filter**: When many passwords stored, need quick way to find entries
 3. **Clipboard Integration**: Copy password to clipboard with auto-clear
 4. **Password Generation**: Built-in secure password generator
