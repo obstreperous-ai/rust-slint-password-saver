@@ -82,8 +82,20 @@ pub fn secure_delete_file(path: &Path) -> Result<(), SecurityError> {
     // Get file size
     let metadata = fs::metadata(path)
         .map_err(|e| SecurityError::InvalidInput(format!("Failed to get file metadata: {}", e)))?;
+
+    let file_size_u64 = metadata.len();
+
+    // Check if file size fits in usize (important for 32-bit systems)
+    // For password files, this should never be an issue as they're typically small
     #[allow(clippy::cast_possible_truncation)]
-    let file_size = metadata.len() as usize;
+    let file_size = if file_size_u64 > usize::MAX as u64 {
+        // Password files should never be this large, but handle gracefully
+        return Err(SecurityError::InvalidInput(
+            "File too large for secure deletion on this platform".to_string(),
+        ));
+    } else {
+        file_size_u64 as usize
+    };
 
     // Open file for writing
     let mut file = OpenOptions::new().write(true).open(path).map_err(|e| {
@@ -109,6 +121,9 @@ pub fn secure_delete_file(path: &Path) -> Result<(), SecurityError> {
 
 /// Overwrites a file with random data.
 ///
+/// This function writes random data in chunks to avoid memory pressure
+/// for large files.
+///
 /// # Arguments
 ///
 /// * `file` - File handle to overwrite
@@ -122,16 +137,26 @@ fn overwrite_with_random(file: &mut File, size: usize) -> Result<(), SecurityErr
         .map_err(|_| SecurityError::StorageError)?;
 
     let mut rng = rand::thread_rng();
-    let random_data: Vec<u8> = (0..size).map(|_| rng.gen::<u8>()).collect();
+    const CHUNK_SIZE: usize = 64 * 1024; // 64KB chunks to avoid memory pressure
+    let mut remaining = size;
 
-    file.write_all(&random_data)
-        .map_err(|_| SecurityError::StorageError)?;
+    while remaining > 0 {
+        let chunk_size = remaining.min(CHUNK_SIZE);
+        let random_data: Vec<u8> = (0..chunk_size).map(|_| rng.gen::<u8>()).collect();
+        file.write_all(&random_data)
+            .map_err(|_| SecurityError::StorageError)?;
+        remaining -= chunk_size;
+    }
+
     file.sync_all().map_err(|_| SecurityError::StorageError)?;
 
     Ok(())
 }
 
 /// Overwrites a file with zeros.
+///
+/// This function writes zeros in chunks to avoid memory pressure
+/// for large files.
 ///
 /// # Arguments
 ///
@@ -145,10 +170,17 @@ fn overwrite_with_zeros(file: &mut File, size: usize) -> Result<(), SecurityErro
     file.seek(SeekFrom::Start(0))
         .map_err(|_| SecurityError::StorageError)?;
 
-    let zero_data = vec![0u8; size];
+    const CHUNK_SIZE: usize = 64 * 1024; // 64KB chunks to avoid memory pressure
+    let zero_chunk = vec![0u8; CHUNK_SIZE];
+    let mut remaining = size;
 
-    file.write_all(&zero_data)
-        .map_err(|_| SecurityError::StorageError)?;
+    while remaining > 0 {
+        let chunk_size = remaining.min(CHUNK_SIZE);
+        file.write_all(&zero_chunk[..chunk_size])
+            .map_err(|_| SecurityError::StorageError)?;
+        remaining -= chunk_size;
+    }
+
     file.sync_all().map_err(|_| SecurityError::StorageError)?;
 
     Ok(())
@@ -190,7 +222,13 @@ fn overwrite_with_zeros(file: &mut File, size: usize) -> Result<(), SecurityErro
 /// secure_update_file(path, new_data).expect("Failed to update file");
 /// ```
 pub fn secure_update_file(path: &Path, new_data: &[u8]) -> Result<(), SecurityError> {
-    let backup_path = path.with_extension("enc.backup");
+    // Create backup path by appending .backup to the filename
+    let mut backup_path = path.to_path_buf();
+    let filename = path
+        .file_name()
+        .ok_or(SecurityError::StorageError)?
+        .to_string_lossy();
+    backup_path.set_file_name(format!("{}.backup", filename));
 
     // If file exists, rename to backup
     if path.exists() {
@@ -264,7 +302,10 @@ mod tests {
     fn test_secure_update_file_existing_file() {
         let temp_dir = std::env::temp_dir();
         let test_file = temp_dir.join("test_secure_update_existing.txt");
-        let backup_path = test_file.with_extension("enc.backup");
+
+        // Create correct backup path
+        let filename = test_file.file_name().unwrap().to_string_lossy();
+        let backup_path = temp_dir.join(format!("{}.backup", filename));
 
         // Create an existing file
         let old_data = b"old sensitive data";
