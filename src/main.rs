@@ -140,25 +140,21 @@ fn main() -> Result<(), slint::PlatformError> {
         loop {
             std::thread::sleep(Duration::from_secs(1));
 
+            // Check if UI is still alive, exit thread if not
+            let Some(ui) = ui_weak_timeout.upgrade() else {
+                break; // UI is gone, exit thread
+            };
+
             if session_manager.should_lock() && !session_manager.is_locked() {
                 session_manager.lock();
-
-                // Update UI to show lock screen
-                if let Some(ui) = ui_weak_timeout.upgrade() {
-                    ui.set_is_locked(true);
-                }
+                ui.set_is_locked(true);
             }
 
             // Update countdown timer (only show when less than 60 seconds remaining)
-            if let Some(ui) = ui_weak_timeout.upgrade() {
-                let time_left = session_manager.time_until_lock();
-                // Safely convert u64 to i32, capping at i32::MAX
-                let seconds = time_left
-                    .as_secs()
-                    .try_into()
-                    .unwrap_or(i32::MAX);
-                ui.set_seconds_until_lock(seconds);
-            }
+            let time_left = session_manager.time_until_lock();
+            // Safely convert u64 to i32, capping at i32::MAX
+            let seconds = time_left.as_secs().try_into().unwrap_or(i32::MAX);
+            ui.set_seconds_until_lock(seconds);
         }
     });
 

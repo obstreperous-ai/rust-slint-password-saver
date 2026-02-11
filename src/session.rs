@@ -161,9 +161,11 @@ impl SessionManager {
         if elapsed >= self.timeout_duration {
             Duration::from_secs(0)
         } else {
-            self.timeout_duration
-                .checked_sub(elapsed)
-                .unwrap_or_else(|| Duration::from_secs(0))
+            // Safe subtraction: we've verified elapsed < timeout_duration in the if condition above
+            #[allow(clippy::unchecked_time_subtraction)]
+            {
+                self.timeout_duration - elapsed
+            }
         }
     }
 }
