@@ -621,13 +621,13 @@ fn test_timing_attack_resistance_load_entries() {
     // Note: Correct password takes longer due to successful decryption and JSON parsing
     // The goal is to ensure jitter is applied and timing is not precisely predictable
     // We allow larger variance but verify jitter makes precise measurements harder
-    let timing_diff = avg_correct.abs_diff(avg_incorrect);
+    let avg_timing_difference = avg_correct.abs_diff(avg_incorrect);
 
     // This test verifies that timing jitter is present and timing is relatively consistent
     // The difference should be small relative to the total execution time
     println!(
         "Avg correct: {}ms, Avg incorrect: {}ms, Diff: {}ms",
-        avg_correct, avg_incorrect, timing_diff
+        avg_correct, avg_incorrect, avg_timing_difference
     );
 
     // With timing jitter (1-10ms per operation), we expect some variance
@@ -731,6 +731,12 @@ fn test_timing_jitter_is_applied() {
     }
 
     // Calculate variance to ensure jitter is present
+    // Guard against empty timings (should never happen, but safe to check)
+    assert!(
+        !timings.is_empty(),
+        "Timing measurements should not be empty"
+    );
+
     let mean: u128 = timings.iter().sum::<u128>() / timings.len() as u128;
     let variance: u128 = timings
         .iter()

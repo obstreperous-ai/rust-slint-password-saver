@@ -213,8 +213,8 @@ pub fn validate_password_strength(password: &str) -> Result<(), SecurityError> {
 /// ensuring the jitter is unpredictable and cannot be compensated for by averaging
 /// multiple measurements.
 fn add_timing_jitter() {
-    let jitter = rand::thread_rng().gen_range(1..=10);
-    thread::sleep(Duration::from_millis(jitter));
+    let jitter_ms = rand::thread_rng().gen_range(1..=10);
+    thread::sleep(Duration::from_millis(jitter_ms));
 }
 
 #[allow(dead_code)]
