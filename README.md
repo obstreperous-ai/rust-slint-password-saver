@@ -18,6 +18,7 @@ A cross-platform, secure desktop password manager application built with **Rust*
 - [Architecture](#-architecture)
 - [Development Setup](#-development-setup)
 - [CI/CD Pipeline](#-cicd-pipeline)
+- [Design & Style Guide](#-design--style-guide)
 - [Contributing](#-contributing)
 - [Future Tasks & Roadmap](#-future-tasks--roadmap)
 - [License](#-license)
@@ -490,6 +491,22 @@ The project uses GitHub Actions for continuous integration and deployment.
 - ✅ Automated security scanning
 - ✅ Release automation with version tagging
 - ✅ Build artifacts for all major platforms
+
+---
+
+## 🎨 Design & Style Guide
+
+This project follows a comprehensive design system inspired by Meiji era Japan, Edwardian England, early Apple design philosophy, and David Ogilvy's visual communication principles.
+
+**📖 See [STYLE_GUIDE.md](STYLE_GUIDE.md) for:**
+- Complete design vision and principles
+- Color palette, typography, and spacing specifications
+- Component design patterns and best practices
+- Current codebase analysis and UX findings
+- Prioritized list of actionable UI/UX improvement tasks
+- Implementation guidelines for AI agents and developers
+
+The style guide ensures consistent, elegant, and security-conscious design throughout the application while maintaining a minimal and refined aesthetic.
 
 ---
 
