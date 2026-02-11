@@ -29,6 +29,7 @@ mod audit_log;
 mod errors;
 mod password_strength;
 mod rate_limit;
+mod secure_delete;
 mod storage;
 mod validation;
 
