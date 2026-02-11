@@ -32,6 +32,9 @@ mod rate_limit;
 mod storage;
 mod validation;
 
+#[cfg(windows)]
+mod windows_permissions;
+
 use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use lazy_static::lazy_static;
 use log::warn;
@@ -93,6 +96,13 @@ fn get_storage_path() -> PathBuf {
             use std::os::unix::fs::PermissionsExt;
             let permissions = std::fs::Permissions::from_mode(0o700);
             let _ = std::fs::set_permissions(parent, permissions);
+        }
+
+        // Set secure permissions on the directory (ACL on Windows)
+        #[cfg(windows)]
+        {
+            use crate::windows_permissions::set_windows_directory_permissions;
+            let _ = set_windows_directory_permissions(parent);
         }
     }
 

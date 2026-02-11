@@ -732,11 +732,10 @@ impl PasswordStorage {
             let permissions = fs::Permissions::from_mode(0o600);
             fs::set_permissions(path, permissions).map_err(|_| SecurityError::PermissionDenied)?;
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
-            // On Windows, file permissions are handled differently (ACLs)
-            // This is a no-op, but we still return Ok to maintain API consistency
-            let _ = path;
+            use crate::windows_permissions::set_windows_secure_permissions;
+            set_windows_secure_permissions(path)?;
         }
         Ok(())
     }
