@@ -1,3 +1,12 @@
+//! Integration tests for cross-platform functionality
+//!
+//! # Security Note
+//! This file contains hardcoded passwords for testing purposes only.
+//! These are NOT real passwords and are used solely for testing integration scenarios.
+
+// Allow hardcoded credentials in test code - these are intentional test fixtures
+#![allow(clippy::identity_op)]
+
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -47,6 +56,7 @@ fn test_basic_functionality() {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_password_change_integration() {
     use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 

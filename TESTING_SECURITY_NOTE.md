@@ -28,7 +28,17 @@ All test files with hardcoded credentials have been marked with appropriate secu
    - Contains: Test master passwords and sample password entries
    - Suppressions: File-level comment and per-test CodeQL annotations
 
-3. **`src/validation.rs`**
+3. **`tests/integration_test.rs`**
+   - Purpose: Tests cross-platform integration and password change functionality
+   - Contains: Test master passwords and password change scenarios
+   - Suppressions: File-level comment and per-test CodeQL annotations
+
+4. **`tests/error_sanitization_test.rs`**
+   - Purpose: Tests error message sanitization
+   - Contains: Test passwords for authentication error testing
+   - Suppressions: File-level comment and per-test CodeQL annotations
+
+5. **`src/validation.rs`**
    - Purpose: Documentation examples for validation functions
    - Contains: Example passwords in doc comments
    - Suppressions: Module-level security note and inline CodeQL annotations
@@ -93,5 +103,5 @@ When adding new tests with passwords:
 
 ---
 
-Last Updated: 2026-02-09
+Last Updated: 2026-02-11
 Maintained by: GitHub Copilot AI

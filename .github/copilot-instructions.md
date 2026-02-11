@@ -131,6 +131,50 @@ cargo audit
   - Edge cases and error conditions
   - Security-critical code paths
 
+#### Hard-Coded Test Passwords
+
+**CRITICAL: When adding tests that use hard-coded passwords, you MUST mark them to prevent security scanner alerts.**
+
+This project uses CodeQL and other security scanners that flag hard-coded credentials. Test fixtures with passwords are legitimate and necessary, but must be properly marked.
+
+**Required suppression format:**
+
+```rust
+#[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+fn test_my_encryption_feature() {
+    let test_password = "test_password_123";
+    // ... rest of test
+}
+```
+
+**When to add suppression comments:**
+
+1. **ALWAYS** when a test contains hard-coded password strings (e.g., `let password = "..."`)
+2. When a test uses master passwords, user passwords, or any authentication credentials
+3. When examples in doc comments show password usage
+
+**What NOT to do:**
+
+- ❌ Do not commit tests with hard-coded passwords without the `// codeql[rust/hardcoded-credentials]` comment
+- ❌ Do not use real passwords in tests (always use obvious test data like "test_password_123")
+- ❌ Do not suppress the warning without the explanatory comment (e.g., just `// codeql[rust/hardcoded-credentials]` without "Test fixture...")
+
+**File-level suppression:**
+
+Test files that extensively use passwords should also include at the top:
+
+```rust
+//! # Security Note
+//! This file contains hardcoded passwords for testing purposes only.
+//! These are NOT real passwords and are used solely for testing the encryption/decryption functionality.
+
+// Allow hardcoded credentials in test code - these are intentional test fixtures
+#![allow(clippy::identity_op)]
+```
+
+**Reference:** See `TESTING_SECURITY_NOTE.md` for complete documentation on test password handling and `tests/storage_test.rs` and `tests/validation_test.rs` for examples of properly marked tests.
+
 ### Build Commands
 
 - Development build: `cargo build`
@@ -575,6 +619,7 @@ cargo fmt && cargo build && cargo test && cargo clippy --all-targets -- -D warni
 - ❌ Do not commit tests that are flaky or non-deterministic
 - ❌ Do not hardcode file paths in tests (use `std::env::temp_dir()`)
 - ❌ Do not leave test files or artifacts in the repository
+- ❌ **Do not add hard-coded passwords in tests without CodeQL suppression comments** (see "Hard-Coded Test Passwords" section below)
 
 ### Code Practice Violations
 
