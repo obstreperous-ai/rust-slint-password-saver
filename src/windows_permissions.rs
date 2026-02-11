@@ -114,6 +114,10 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
 
         // Create an explicit access entry for the current user
         // This grants the user full control (read, write, delete, etc.)
+        // Using SET_ACCESS mode to replace all existing permissions and ensure
+        // ONLY the current user has access (equivalent to Unix 0600).
+        // This is intentional for maximum security - we want to remove any
+        // inherited or default permissions that might grant access to other users.
         let mut ea = EXPLICIT_ACCESS_W {
             grfAccessPermissions: (FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0),
             grfAccessMode: SET_ACCESS,

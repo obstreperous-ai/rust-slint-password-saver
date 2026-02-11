@@ -742,8 +742,9 @@ impl PasswordStorage {
             // For other platforms (wasm, embedded, etc.), we cannot set permissions
             // This is a known limitation - return Ok to maintain API consistency
             // but log a warning
+            use log::warn;
             let _ = path;
-            eprintln!("Warning: Secure file permissions not supported on this platform");
+            warn!("Secure file permissions not supported on this platform");
         }
         Ok(())
     }
