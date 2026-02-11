@@ -22,6 +22,7 @@
 
 use crate::audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use crate::errors::SecurityError;
+use crate::secure_delete::secure_update_file;
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
@@ -525,7 +526,8 @@ impl PasswordStorage {
         let storage_json =
             serde_json::to_string(&storage_data).map_err(|_| SecurityError::CryptographicError)?;
 
-        fs::write(&self.storage_path, storage_json).map_err(|_| SecurityError::StorageError)?;
+        // Use secure update instead of direct write to prevent forensic recovery of old data
+        secure_update_file(&self.storage_path, storage_json.as_bytes())?;
 
         // Set secure permissions immediately after file creation (0600 on Unix)
         Self::set_secure_permissions(&self.storage_path)?;
