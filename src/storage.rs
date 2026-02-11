@@ -737,6 +737,14 @@ impl PasswordStorage {
             use crate::windows_permissions::set_windows_secure_permissions;
             set_windows_secure_permissions(path)?;
         }
+        #[cfg(not(any(unix, windows)))]
+        {
+            // For other platforms (wasm, embedded, etc.), we cannot set permissions
+            // This is a known limitation - return Ok to maintain API consistency
+            // but log a warning
+            let _ = path;
+            eprintln!("Warning: Secure file permissions not supported on this platform");
+        }
         Ok(())
     }
 

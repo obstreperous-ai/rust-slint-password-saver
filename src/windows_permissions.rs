@@ -14,14 +14,15 @@ use windows::core::PWSTR;
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, PSID};
 #[cfg(windows)]
 use windows::Win32::Security::{
-    GetSecurityInfo, SetSecurityInfo, DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION,
-    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, SE_FILE_OBJECT,
+    GetTokenInformation, SetEntriesInAclW, SetSecurityInfo, TokenUser, ACCESS_MODE,
+    DACL_SECURITY_INFORMATION, EXPLICIT_ACCESS_W, GRANT_ACCESS, INHERITED_ACE, NO_INHERITANCE,
+    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, SET_ACCESS, SE_FILE_OBJECT,
+    SUB_CONTAINERS_AND_OBJECTS_INHERIT, TOKEN_QUERY, TOKEN_USER, TRUSTEE_IS_SID, TRUSTEE_W,
 };
 #[cfg(windows)]
-use windows::Win32::Security::{GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER};
-#[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_ALL_ACCESS, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_NONE, OPEN_EXISTING,
+    CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, OPEN_EXISTING,
+    READ_CONTROL, WRITE_DAC,
 };
 #[cfg(windows)]
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
@@ -29,9 +30,9 @@ use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 /// Set secure Windows ACL permissions on a file (equivalent to Unix 0600).
 ///
 /// This function restricts file access to the current user only by:
-/// 1. Opening the file handle
+/// 1. Opening the file handle with appropriate permissions
 /// 2. Getting the current user's SID
-/// 3. Setting DACL to allow only the current user full control
+/// 3. Creating an explicit DACL with ACE that grants only the current user access
 /// 4. Protecting the DACL from inheritance
 ///
 /// # Arguments
@@ -45,9 +46,16 @@ use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 /// # Platform
 ///
 /// This function is only available on Windows platforms.
+///
+/// # Security
+///
+/// This creates an explicit DACL with Access Control Entries (ACEs) that grant
+/// the current user full control and denies all other access. This is more secure
+/// than using a NULL DACL which would grant everyone access.
 #[cfg(windows)]
 pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> {
     use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Security::{LocalFree, ACL};
 
     // Convert path to wide string for Windows API
     let path_str = path.to_str().ok_or(SecurityError::PermissionDenied)?;
@@ -55,14 +63,15 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
     wide_path.push(0); // Null terminator
 
     unsafe {
-        // Open file handle
+        // Open file handle with permissions needed to modify DACL
+        // Using READ_CONTROL and WRITE_DAC instead of FILE_ALL_ACCESS (principle of least privilege)
         let file_handle = CreateFileW(
             PWSTR(wide_path.as_mut_ptr()),
-            FILE_ALL_ACCESS.0,
-            FILE_SHARE_NONE,
+            READ_CONTROL.0 | WRITE_DAC.0,
+            FILE_SHARE_READ,
             None,
             OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
+            Default::default(),
             HANDLE(0),
         )
         .map_err(|_| SecurityError::PermissionDenied)?;
@@ -103,29 +112,56 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
         let token_user = &*(token_user_buffer.as_ptr() as *const TOKEN_USER);
         let user_sid = PSID(token_user.User.Sid.0);
 
-        // Set security information to restrict access to current user only
-        // This sets:
-        // - Owner to current user
-        // - Group to current user
-        // - DACL to null (which means no access except for owner)
-        // - Protected flag to prevent inheritance
-        let result = SetSecurityInfo(
+        // Create an explicit access entry for the current user
+        // This grants the user full control (read, write, delete, etc.)
+        let mut ea = EXPLICIT_ACCESS_W {
+            grfAccessPermissions: (FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0),
+            grfAccessMode: SET_ACCESS,
+            grfInheritance: NO_INHERITANCE,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: std::ptr::null_mut(),
+                MultipleTrusteeOperation: Default::default(),
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: Default::default(),
+                ptstrName: PWSTR(user_sid.0 as *mut u16),
+            },
+        };
+
+        // Create a new ACL with the explicit access entry
+        let mut new_acl: *mut ACL = std::ptr::null_mut();
+        let result = SetEntriesInAclW(
+            Some(&[ea]),
+            None, // No existing ACL - create a new one
+            &mut new_acl,
+        );
+
+        if result != ERROR_SUCCESS {
+            let _ = CloseHandle(token_handle);
+            let _ = CloseHandle(file_handle);
+            return Err(SecurityError::PermissionDenied);
+        }
+
+        // Set the new DACL on the file with protection from inheritance
+        let set_result = SetSecurityInfo(
             file_handle,
             SE_FILE_OBJECT,
             OWNER_SECURITY_INFORMATION
-                | GROUP_SECURITY_INFORMATION
                 | DACL_SECURITY_INFORMATION
                 | PROTECTED_DACL_SECURITY_INFORMATION,
             user_sid,
-            user_sid,
-            None, // NULL DACL means only owner has access
+            PSID::default(),
+            Some(new_acl),
             None,
         );
 
+        // Clean up resources
+        if !new_acl.is_null() {
+            let _ = LocalFree(HANDLE(new_acl as isize));
+        }
         let _ = CloseHandle(token_handle);
         let _ = CloseHandle(file_handle);
 
-        if result != ERROR_SUCCESS {
+        if set_result != ERROR_SUCCESS {
             return Err(SecurityError::PermissionDenied);
         }
 
