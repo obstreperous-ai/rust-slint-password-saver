@@ -26,6 +26,7 @@
 #![allow(clippy::non_std_lazy_statics)]
 
 mod audit_log;
+mod clipboard;
 mod errors;
 mod password_strength;
 mod rate_limit;
@@ -38,6 +39,7 @@ mod validation;
 mod windows_permissions;
 
 use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
+use clipboard::{ClipboardConfig, SecureClipboard};
 use lazy_static::lazy_static;
 use log::warn;
 use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
@@ -45,7 +47,7 @@ use rate_limit::RateLimiter;
 use session::SessionManager;
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use storage::{PasswordEntry, PasswordStorage};
 use validation::{validate_master_password, validate_password, validate_title, validate_username};
@@ -57,6 +59,8 @@ slint::include_modules!();
 lazy_static! {
     static ref RATE_LIMITER: RateLimiter = RateLimiter::new();
     static ref SESSION_MANAGER: Arc<SessionManager> = Arc::new(SessionManager::new(5)); // 5 minute timeout
+    static ref CLIPBOARD: Arc<Mutex<Option<SecureClipboard>>> = Arc::new(Mutex::new(None));
+    static ref CLIPBOARD_CONFIG: ClipboardConfig = ClipboardConfig::default();
 }
 
 /// Maximum number of password entries to display in status message
@@ -372,6 +376,48 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 // No storage file exists yet, can't verify password
                 ui.set_status_message("No passwords stored yet. Cannot verify unlock.".into());
+            }
+        }
+    });
+
+    // Set up copy password callback
+    // This is called when the user wants to copy a password to clipboard
+    let ui_weak = ui.as_weak();
+    ui.on_copy_password(move |password| {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
+        if let Some(ui) = ui_weak.upgrade() {
+            // Initialize clipboard if not already done
+            let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+            if clipboard_guard.is_none() {
+                match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
+                    Ok(clipboard) => {
+                        *clipboard_guard = Some(clipboard);
+                    }
+                    Err(e) => {
+                        ui.set_status_message(format!("Failed to initialize clipboard: {}", e).into());
+                        return;
+                    }
+                }
+            }
+
+            // Copy password to clipboard with auto-clear
+            if let Some(clipboard) = clipboard_guard.as_mut() {
+                match clipboard.copy_with_autoclear(password.to_string()) {
+                    Ok(()) => {
+                        ui.set_status_message(
+                            format!(
+                                "Password copied to clipboard (will auto-clear in {}s)",
+                                CLIPBOARD_CONFIG.clear_timeout_seconds
+                            )
+                            .into(),
+                        );
+                    }
+                    Err(e) => {
+                        ui.set_status_message(format!("Failed to copy password: {}", e).into());
+                    }
+                }
             }
         }
     });

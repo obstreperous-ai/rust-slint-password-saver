@@ -16,6 +16,7 @@ export component AppWindow inherits Window {
     callback change-master-password(string, string, string);
     callback unlock(string);
     callback lock-session();
+    callback copy-password(string);
     
     VerticalBox {
         padding: 20px;
@@ -131,6 +132,54 @@ export component AppWindow inherits Window {
                             root.show-change-password-dialog = true;
                         }
                     }
+                }
+            }
+        }
+        
+        GroupBox {
+            title: "Copy Password to Clipboard";
+            
+            VerticalBox {
+                spacing: 10px;
+                
+                HorizontalBox {
+                    Text {
+                        text: "Password to Copy:";
+                        vertical-alignment: center;
+                        min-width: 120px;
+                    }
+                    copy-value-input := LineEdit {
+                        placeholder-text: "Enter password value to copy";
+                        input-type: password;
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    Button {
+                        text: "📋 Copy to Clipboard";
+                        primary: true;
+                        enabled: copy-value-input.text != "";
+                        clicked => {
+                            root.copy-password(copy-value-input.text);
+                            // Don't clear the field immediately so user can copy again if needed
+                        }
+                    }
+                    
+                    Button {
+                        text: "Clear Field";
+                        enabled: copy-value-input.text != "";
+                        clicked => {
+                            copy-value-input.text = "";
+                        }
+                    }
+                }
+                
+                Text {
+                    text: "Password will be automatically cleared from clipboard after 30 seconds";
+                    font-size: 12px;
+                    color: #666;
                 }
             }
         }
