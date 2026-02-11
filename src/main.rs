@@ -30,6 +30,7 @@ mod errors;
 mod password_strength;
 mod rate_limit;
 mod secure_delete;
+mod session;
 mod storage;
 mod validation;
 
@@ -41,9 +42,11 @@ use lazy_static::lazy_static;
 use log::warn;
 use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 use rate_limit::RateLimiter;
+use session::SessionManager;
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use storage::{PasswordEntry, PasswordStorage};
 use validation::{validate_master_password, validate_password, validate_title, validate_username};
 
@@ -53,6 +56,7 @@ slint::include_modules!();
 // Note: Using lazy_static for compatibility with Rust 1.70+
 lazy_static! {
     static ref RATE_LIMITER: RateLimiter = RateLimiter::new();
+    static ref SESSION_MANAGER: Arc<SessionManager> = Arc::new(SessionManager::new(5)); // 5 minute timeout
 }
 
 /// Maximum number of password entries to display in status message
@@ -129,11 +133,38 @@ fn main() -> Result<(), slint::PlatformError> {
     // Initialize storage with cross-platform path
     let storage_path = get_storage_path();
 
+    // Start background thread to check for timeout
+    let ui_weak_timeout = ui.as_weak();
+    let session_manager = SESSION_MANAGER.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+
+            if session_manager.should_lock() && !session_manager.is_locked() {
+                session_manager.lock();
+
+                // Update UI to show lock screen
+                if let Some(ui) = ui_weak_timeout.upgrade() {
+                    ui.set_is_locked(true);
+                }
+            }
+
+            // Update countdown timer (only show when less than 60 seconds remaining)
+            if let Some(ui) = ui_weak_timeout.upgrade() {
+                let time_left = session_manager.time_until_lock();
+                ui.set_seconds_until_lock(time_left.as_secs() as i32);
+            }
+        }
+    });
+
     // Set up save password callback
     // This is called when the user clicks "Save Password" button
     let ui_weak = ui.as_weak();
     let storage_path_clone = storage_path.clone();
     ui.on_save_password(move |master_password, title, username, password| {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
         if let Some(ui) = ui_weak.upgrade() {
             // Validate master password
             if let Err(e) = validate_master_password(&master_password) {
@@ -240,6 +271,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let ui_weak = ui.as_weak();
     let storage_path_clone = storage_path.clone();
     ui.on_load_passwords(move |master_password| {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
         if let Some(ui) = ui_weak.upgrade() {
             // Validate master password
             if let Err(e) = validate_master_password(&master_password) {
@@ -293,6 +327,50 @@ fn main() -> Result<(), slint::PlatformError> {
                     // Log detailed error for debugging
                     eprintln!("Load passwords failed: {}", e.debug_message());
                 }
+            }
+        }
+    });
+
+    // Set up unlock callback
+    // This is called when the user tries to unlock the session
+    let ui_weak = ui.as_weak();
+    let storage_path_clone = storage_path.clone();
+    ui.on_unlock(move |password| {
+        if let Some(ui) = ui_weak.upgrade() {
+            // Validate master password
+            if let Err(e) = validate_master_password(&password) {
+                ui.set_status_message(format!("Invalid password: {}", e).into());
+                return;
+            }
+
+            // Check rate limit before attempting unlock
+            if let Err(e) = RATE_LIMITER.check_and_record_attempt() {
+                ui.set_status_message(e.into());
+                return;
+            }
+
+            let storage = PasswordStorage::new(storage_path_clone.clone());
+
+            // Verify password by attempting to load entries
+            // This ensures user enters correct master password to unlock
+            if storage.exists() {
+                match storage.load_entries(&password) {
+                    Ok(_) => {
+                        // Password is correct, unlock session
+                        RATE_LIMITER.record_success();
+                        SESSION_MANAGER.record_activity();
+                        ui.set_is_locked(false);
+                        ui.set_status_message("Session unlocked successfully".into());
+                    }
+                    Err(e) => {
+                        // Wrong password, remain locked
+                        ui.set_status_message(e.user_message().into());
+                        eprintln!("Unlock failed: {}", e.debug_message());
+                    }
+                }
+            } else {
+                // No storage file exists yet, can't verify password
+                ui.set_status_message("No passwords stored yet. Cannot verify unlock.".into());
             }
         }
     });
