@@ -1,3 +1,12 @@
+//! Error sanitization integration tests
+//!
+//! # Security Note
+//! This file contains hardcoded passwords for testing purposes only.
+//! These are NOT real passwords and are used solely for testing error message sanitization.
+
+// Allow hardcoded credentials in test code - these are intentional test fixtures
+#![allow(clippy::identity_op)]
+
 use rust_slint_password_saver::errors::SecurityError;
 use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 use std::fs;
@@ -12,6 +21,7 @@ fn current_timestamp() -> u64 {
 }
 
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_authentication_error_is_sanitized() {
     // Create a temporary test file
     let test_path = std::env::temp_dir().join("test_auth_error.enc");
