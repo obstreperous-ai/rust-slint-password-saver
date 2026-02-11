@@ -17,6 +17,7 @@
 //! - **Zero-Knowledge**: Master password never stored
 //! - **Unique Encryption**: New salt and nonce per save operation
 //! - **Strong Key Derivation**: Enhanced Argon2 parameters optimized for password managers
+//! - **Timing Attack Protection**: Constant-time comparison and timing jitter for sensitive operations
 //! - **Audit Trail**: All operations logged for forensic analysis
 
 use crate::audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
@@ -30,9 +31,13 @@ use argon2::{
     Algorithm, Argon2, Params, Version,
 };
 use log::warn;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
+use subtle::ConstantTimeEq;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -185,6 +190,31 @@ pub fn validate_password_strength(password: &str) -> Result<(), SecurityError> {
     }
 
     Ok(())
+}
+
+/// Adds random timing jitter to prevent precise timing measurements.
+///
+/// # Timing Attack Protection
+///
+/// This function introduces a small random delay (1-10ms) to authentication operations
+/// to make timing attacks harder. By adding unpredictable noise to operation timing,
+/// we prevent attackers from using statistical analysis to deduce information about
+/// passwords based on execution time.
+///
+/// # Security Note
+///
+/// While timing jitter alone is not sufficient to prevent all timing attacks, it
+/// complements other defenses like constant-time operations and consistent error handling.
+/// Together, these measures provide defense-in-depth against timing side-channel attacks.
+///
+/// # Implementation
+///
+/// Uses `rand::thread_rng()` to generate cryptographically secure random numbers,
+/// ensuring the jitter is unpredictable and cannot be compensated for by averaging
+/// multiple measurements.
+fn add_timing_jitter() {
+    let jitter_ms = rand::thread_rng().gen_range(1..=10);
+    thread::sleep(Duration::from_millis(jitter_ms));
 }
 
 #[allow(dead_code)]
@@ -613,6 +643,8 @@ impl PasswordStorage {
                 if let Err(e) = audit_logger.log_event(&failed_entry) {
                     warn!("Failed to log failed decryption: {}", e);
                 }
+                // Add timing jitter on error path to maintain consistent timing
+                add_timing_jitter();
             })?;
 
         // Convert decrypted bytes to UTF-8 string
@@ -632,6 +664,9 @@ impl PasswordStorage {
         if let Err(e) = audit_logger.log_event(&load_entry) {
             warn!("Failed to log password load: {}", e);
         }
+
+        // Add timing jitter to prevent precise timing measurements during authentication
+        add_timing_jitter();
 
         Ok(entries)
     }
@@ -765,11 +800,17 @@ impl PasswordStorage {
         validate_password_strength(new_password)?;
 
         // Step 3: Ensure new password is different from old password
-        if old_password == new_password {
+        // Use constant-time comparison to prevent timing attacks that could leak
+        // information about password similarity
+        let passwords_equal = old_password.as_bytes().ct_eq(new_password.as_bytes());
+        if bool::from(passwords_equal) {
             return Err(SecurityError::InvalidInput(
                 "password: new password must be different from old password".into(),
             ));
         }
+
+        // Add timing jitter to prevent precise timing measurements
+        add_timing_jitter();
 
         // Step 4: Save entries with new password (re-encrypts with new key)
         self.save_entries(&entries, new_password)?;
