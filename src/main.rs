@@ -152,7 +152,12 @@ fn main() -> Result<(), slint::PlatformError> {
             // Update countdown timer (only show when less than 60 seconds remaining)
             if let Some(ui) = ui_weak_timeout.upgrade() {
                 let time_left = session_manager.time_until_lock();
-                ui.set_seconds_until_lock(time_left.as_secs() as i32);
+                // Safely convert u64 to i32, capping at i32::MAX
+                let seconds = time_left
+                    .as_secs()
+                    .try_into()
+                    .unwrap_or(i32::MAX);
+                ui.set_seconds_until_lock(seconds);
             }
         }
     });

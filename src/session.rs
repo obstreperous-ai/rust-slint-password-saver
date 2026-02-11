@@ -161,7 +161,9 @@ impl SessionManager {
         if elapsed >= self.timeout_duration {
             Duration::from_secs(0)
         } else {
-            self.timeout_duration - elapsed
+            self.timeout_duration
+                .checked_sub(elapsed)
+                .unwrap_or_else(|| Duration::from_secs(0))
         }
     }
 }
