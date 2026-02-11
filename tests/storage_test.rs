@@ -334,9 +334,11 @@ fn test_directory_permissions_are_secure() {
 }
 
 #[test]
-#[cfg(not(unix))]
-fn test_permissions_no_op_on_windows() {
-    // This test just verifies that setting permissions doesn't fail on Windows
+#[cfg(windows)]
+fn test_windows_file_permissions_are_secure() {
+    use rust_slint_password_saver::windows_permissions::set_windows_secure_permissions;
+
+    // This test verifies that Windows ACL permissions are properly set
     let test_path = std::env::temp_dir().join("test_passwords_windows.enc");
 
     // Clean up any existing test file
@@ -354,7 +356,7 @@ fn test_permissions_no_op_on_windows() {
         created_at: current_timestamp(),
     }];
 
-    // This should succeed on Windows without trying to set Unix permissions
+    // This should succeed on Windows with ACL permissions set
     storage
         .save_entries(&entries, master_password)
         .expect("Failed to save entries on Windows");
@@ -362,8 +364,58 @@ fn test_permissions_no_op_on_windows() {
     // Verify file exists
     assert!(test_path.exists(), "File should exist after save");
 
+    // Explicitly verify that set_windows_secure_permissions works
+    let result = set_windows_secure_permissions(&test_path);
+    assert!(
+        result.is_ok(),
+        "Failed to set Windows secure permissions: {:?}",
+        result
+    );
+
     // Clean up
     let _ = fs::remove_file(&test_path);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_windows_directory_permissions_are_secure() {
+    use rust_slint_password_saver::windows_permissions::set_windows_directory_permissions;
+
+    let test_dir = std::env::temp_dir().join("test_password_saver_windows_dir");
+    let test_path = test_dir.join("passwords.enc");
+
+    // Clean up any existing test directory
+    let _ = fs::remove_dir_all(&test_dir);
+
+    // Create directory
+    fs::create_dir_all(&test_dir).expect("Failed to create directory");
+
+    // Set directory permissions using Windows ACLs
+    let result = set_windows_directory_permissions(&test_dir);
+    assert!(
+        result.is_ok(),
+        "Failed to set Windows directory permissions: {:?}",
+        result
+    );
+
+    // Test that saving a file in this directory works
+    let storage = PasswordStorage::new(test_path.clone());
+    let entries = vec![PasswordEntry {
+        title: "Test".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: current_timestamp(),
+    }];
+
+    storage
+        .save_entries(&entries, "test_password")
+        .expect("Failed to save entries");
+
+    // Verify the file was created
+    assert!(test_path.exists(), "File should exist after save");
+
+    // Clean up
+    let _ = fs::remove_dir_all(&test_dir);
 }
 
 #[test]

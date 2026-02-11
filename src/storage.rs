@@ -732,11 +732,19 @@ impl PasswordStorage {
             let permissions = fs::Permissions::from_mode(0o600);
             fs::set_permissions(path, permissions).map_err(|_| SecurityError::PermissionDenied)?;
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
-            // On Windows, file permissions are handled differently (ACLs)
-            // This is a no-op, but we still return Ok to maintain API consistency
+            use crate::windows_permissions::set_windows_secure_permissions;
+            set_windows_secure_permissions(path)?;
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            // For other platforms (wasm, embedded, etc.), we cannot set permissions
+            // This is a known limitation - return Ok to maintain API consistency
+            // but log a warning
+            use log::warn;
             let _ = path;
+            warn!("Secure file permissions not supported on this platform");
         }
         Ok(())
     }

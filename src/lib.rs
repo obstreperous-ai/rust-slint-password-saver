@@ -55,3 +55,6 @@ pub mod password_strength;
 pub mod rate_limit;
 pub mod storage;
 pub mod validation;
+
+#[cfg(windows)]
+pub mod windows_permissions;
