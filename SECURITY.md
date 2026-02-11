@@ -99,10 +99,17 @@ The automated security audit (cargo-audit) is passing. All critical vulnerabilit
 - Rate limiting for decryption attempts (prevents brute-force attacks)
 
 ❌ **Missing:**
-- Protection against timing attacks in password verification
-- Secure deletion of old encrypted data
-- Backup and recovery mechanisms
-- Windows-specific secure file permissions
+- Protection against timing attacks in password verification (Issue #11)
+- Secure deletion of old encrypted data (Issue #13)
+- Backup and recovery mechanisms (Issue #17)
+- Windows-specific secure file permissions (Issue #12)
+- Session timeout and auto-lock functionality (Issue #14)
+- Clipboard security with auto-clear (Issue #15)
+- Password generator for strong passwords (Issue #16)
+- Database integrity verification beyond GCM (Issue #18)
+- Password search and filtering (Issue #19)
+- Security update notifications (Issue #20)
+- Emergency access and recovery codes (Issue #21)
 
 ✅ **Recently Added:**
 - Password strength requirements/validation (v0.1.0) - Enforces strong master passwords on first use
@@ -403,6 +410,35 @@ Err(e) => format!("Decryption failed: {}", e)  // ⚠️ May leak crypto details
 ## Action Items
 
 The following tasks are formatted as GitHub issues ready to be picked up by Copilot or developers. Each task is self-contained and includes implementation guidance.
+
+### Summary of Security Action Items
+
+**Completed (✅ Resolved):**
+1. ✅ Fix bytes Crate Vulnerability
+2. ✅ Implement Secure Memory Clearing for Passwords  
+3. ✅ Set Secure File Permissions for Encrypted Storage
+4. ✅ Strengthen Argon2 Key Derivation Parameters
+5. ✅ Add Password Strength Validation
+6. ✅ Implement Decryption Rate Limiting
+7. ✅ Add Security Audit Logging
+8. ✅ Implement Master Password Change Functionality
+9. ✅ Add Input Validation and Sanitization
+10. ✅ Improve Error Messages for Security
+
+**New Action Items (🔵 To Be Implemented):**
+11. 🔵 Implement Timing Attack Protection for Password Verification
+12. 🔵 Implement Windows File Permissions
+13. 🔵 Implement Secure File Deletion
+14. 🔵 Add Session Timeout and Auto-Lock
+15. 🔵 Implement Clipboard Security and Auto-Clear
+16. 🔵 Add Secure Password Generator
+17. 🔵 Implement Backup and Export with Encryption
+18. 🔵 Add Database Integrity Verification
+19. 🔵 Implement Password Search and Filtering
+20. 🔵 Add Security Update and Version Check
+21. 🔵 Implement Emergency Access and Account Recovery
+
+---
 
 ### Issue 1: ✅ Fix bytes Crate Vulnerability (RESOLVED)
 
@@ -1312,6 +1348,2530 @@ Implement structured error handling with generic user-facing messages.
 
 ---
 
+### Issue 11: 🔵 Implement Timing Attack Protection for Password Verification
+
+**Title:** Add constant-time comparison for password verification operations
+
+**Description:**
+Currently, password verification and comparison operations may be vulnerable to timing attacks. Attackers who can measure the time it takes to verify a password could potentially use statistical analysis to deduce information about the correct password. This is particularly relevant for master password verification where timing differences in Argon2 key derivation or AES-GCM decryption could leak information.
+
+**Security Impact:**
+- Low-Medium severity
+- Timing side-channel could leak password information
+- Requires local access or network proximity to measure timing
+- Defense-in-depth principle - should be mitigated even if difficult to exploit
+
+**Current Vulnerable Operations:**
+1. Master password verification during load operations
+2. Password comparison during master password change
+3. Any string comparison of sensitive data
+
+**Solution:**
+Implement constant-time comparison operations for all password verification.
+
+**Implementation Steps:**
+
+1. Add constant-time comparison dependency to `Cargo.toml`:
+```toml
+[dependencies]
+subtle = "2.5"  # Constant-time cryptographic operations
+```
+
+2. Update `src/storage.rs` to use constant-time comparison for derived keys:
+```rust
+use subtle::ConstantTimeEq;
+
+// In decrypt_data or password verification:
+fn verify_password_derived_key(derived: &[u8], expected: &[u8]) -> bool {
+    derived.ct_eq(expected).into()
+}
+```
+
+3. Ensure consistent timing for authentication operations:
+```rust
+// In load_entries() - always perform full decryption attempt
+// Don't short-circuit on obvious errors (e.g., missing file)
+// This prevents timing analysis of different failure modes
+
+pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, SecurityError> {
+    // Always perform these operations in constant time:
+    // 1. Check file existence
+    // 2. Read file (or dummy operation if missing)
+    // 3. Derive key from password
+    // 4. Attempt decryption
+    // Return error only after all operations complete
+}
+```
+
+4. Add timing jitter to prevent precise measurements:
+```rust
+use std::time::Duration;
+use std::thread;
+
+fn add_timing_jitter() {
+    // Add small random delay (1-10ms) to make timing attacks harder
+    let jitter = rand::random::<u64>() % 10;
+    thread::sleep(Duration::from_millis(jitter));
+}
+```
+
+5. Document timing attack considerations in code comments
+
+**Files to Modify:**
+- `Cargo.toml` - Add `subtle` crate dependency
+- `src/storage.rs` - Implement constant-time comparisons in authentication paths
+- `src/main.rs` - Ensure UI callbacks don't leak timing information
+- `tests/storage_test.rs` - Add tests to verify timing consistency
+
+**Testing:**
+- Create test that measures timing variance for correct vs incorrect passwords
+- Verify timing differences are negligible (within noise threshold)
+- Test that authentication always takes similar time regardless of failure mode
+- Verify all password comparison operations use constant-time functions
+
+**Acceptance Criteria:**
+- [ ] `subtle` crate added to dependencies
+- [ ] All password comparisons use constant-time operations
+- [ ] Authentication operations have consistent timing
+- [ ] Timing jitter added to prevent precise measurements
+- [ ] Tests verify timing attack resistance
+- [ ] Documentation updated with timing attack considerations
+
+**Priority:** 🔵 MEDIUM
+**Estimated Effort:** 4-5 hours
+**Labels:** security, enhancement, cryptography, timing-attacks
+
+---
+
+### Issue 12: 🔵 Implement Windows File Permissions
+
+**Title:** Add secure file permissions for Windows platform
+
+**Description:**
+Currently, secure file permissions (0600/0700) are only implemented for Unix-like systems (macOS, Linux) using POSIX permissions. Windows systems use a different Access Control List (ACL) model that is not currently configured, potentially allowing other Windows users to read the encrypted password file.
+
+**Security Impact:**
+- Medium severity (Windows users only)
+- Other Windows users on the same system could read encrypted files
+- Defense-in-depth: encrypted data should also be protected at OS level
+- Violates principle of least privilege
+
+**Current State:**
+- Unix/Linux: ✅ Secure permissions implemented (0600 for file, 0700 for directory)
+- Windows: ❌ Default permissions used (potentially world-readable)
+
+**Solution:**
+Implement Windows ACL-based file permissions to restrict access to the current user only.
+
+**Implementation Steps:**
+
+1. Add Windows ACL dependency to `Cargo.toml`:
+```toml
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = ["Win32_Storage_FileSystem", "Win32_Security", "Win32_Foundation"] }
+```
+
+2. Create Windows-specific permission module `src/windows_permissions.rs`:
+```rust
+#[cfg(windows)]
+pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> {
+    use windows::Win32::Storage::FileSystem::*;
+    use windows::Win32::Security::*;
+    
+    // Set ACL to allow access only to current user
+    // Remove all other users and groups
+    // This is the Windows equivalent of chmod 0600
+    
+    // Steps:
+    // 1. Get current user SID
+    // 2. Create new ACL with only current user having full control
+    // 3. Remove BUILTIN\Users, BUILTIN\Administrators (except current user)
+    // 4. Apply ACL to file
+    
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityError> {
+    // Similar to file permissions, but for directory
+    // Windows equivalent of chmod 0700
+    Ok(())
+}
+```
+
+3. Update `src/storage.rs` to call Windows permission functions:
+```rust
+#[cfg(windows)]
+pub fn set_secure_permissions(path: &Path) -> Result<(), SecurityError> {
+    use crate::windows_permissions::set_windows_secure_permissions;
+    set_windows_secure_permissions(path)
+}
+```
+
+4. Update `src/main.rs` directory creation with Windows permissions:
+```rust
+#[cfg(windows)]
+{
+    use crate::windows_permissions::set_windows_directory_permissions;
+    let _ = set_windows_directory_permissions(parent);
+}
+```
+
+5. Add comprehensive tests for Windows permissions:
+```rust
+#[test]
+#[cfg(windows)]
+fn test_windows_file_permissions_secure() {
+    // Create file, set permissions, verify only current user can access
+}
+
+#[test]
+#[cfg(windows)]
+fn test_windows_directory_permissions_secure() {
+    // Create directory, set permissions, verify access restrictions
+}
+```
+
+**Files to Create:**
+- `src/windows_permissions.rs` - Windows ACL permission handling
+
+**Files to Modify:**
+- `Cargo.toml` - Add Windows-specific dependencies
+- `src/lib.rs` - Add windows_permissions module (conditional)
+- `src/storage.rs` - Add Windows permission functions
+- `src/main.rs` - Apply Windows directory permissions
+- `tests/storage_test.rs` - Add Windows permission tests
+
+**Testing:**
+- Verify file is not accessible by other Windows users
+- Verify directory is not accessible by other Windows users
+- Test that standard Windows users cannot read the file
+- Verify administrator can still access (this is Windows behavior)
+- Test on different Windows versions (10, 11)
+
+**Acceptance Criteria:**
+- [ ] Windows ACL implementation for file permissions
+- [ ] Windows ACL implementation for directory permissions
+- [ ] Permissions applied automatically on save operations
+- [ ] Only current user can read/write encrypted files on Windows
+- [ ] Tests verify Windows permission security
+- [ ] Documentation updated with Windows permission details
+- [ ] Cross-platform compatibility maintained
+
+**Priority:** 🟡 MEDIUM-HIGH (affects Windows users)
+**Estimated Effort:** 6-8 hours
+**Labels:** security, enhancement, windows, platform-specific
+
+---
+
+### Issue 13: 🔵 Implement Secure File Deletion
+
+**Title:** Add secure overwriting of files before deletion
+
+**Description:**
+When password data is updated or the master password is changed, old encrypted files are simply deleted using standard file operations. On many filesystems (HDD, some SSD configurations), deleted file data can be recovered using forensic tools until the disk space is overwritten. This could expose old encrypted password data to forensic recovery attacks.
+
+**Security Impact:**
+- Low severity (data is encrypted)
+- Old encrypted password data could be forensically recovered
+- Defense-in-depth: even encrypted data should be securely deleted
+- More relevant for HDDs than SSDs (due to wear-leveling)
+
+**Current Behavior:**
+- Old encrypted file is replaced with `std::fs::write()` 
+- No secure overwriting before deletion
+- Filesystem may leave old data in unallocated blocks
+
+**Solution:**
+Implement secure file deletion that overwrites data multiple times before removal.
+
+**Implementation Steps:**
+
+1. Add secure deletion crate to `Cargo.toml`:
+```toml
+[dependencies]
+# Option 1: Use existing secure_delete crate
+secure-delete = "0.1"
+
+# Option 2: Implement custom secure deletion
+```
+
+2. Create secure deletion module `src/secure_delete.rs`:
+```rust
+use std::fs::{File, OpenOptions};
+use std::io::{Write, Seek, SeekFrom};
+use crate::errors::SecurityError;
+
+/// Securely overwrites a file multiple times before deletion.
+///
+/// This implements a simple 3-pass overwrite:
+/// 1. Overwrite with random data
+/// 2. Overwrite with zeros
+/// 3. Overwrite with random data
+/// 4. Delete file
+///
+/// # Arguments
+///
+/// * `path` - Path to file to securely delete
+///
+/// # Security Notes
+///
+/// - Modern SSDs with wear-leveling may not actually overwrite the same physical blocks
+/// - Encrypting the filesystem (LUKS, FileVault, BitLocker) provides better protection
+/// - This provides defense-in-depth for HDDs and some SSD configurations
+pub fn secure_delete_file(path: &Path) -> Result<(), SecurityError> {
+    // Get file size
+    let metadata = fs::metadata(path)
+        .map_err(|e| SecurityError::storage_error(&format!("Failed to get file metadata: {}", e)))?;
+    let file_size = metadata.len() as usize;
+    
+    // Open file for writing
+    let mut file = OpenOptions::new()
+        .write(true)
+        .open(path)
+        .map_err(|e| SecurityError::storage_error(&format!("Failed to open file for secure deletion: {}", e)))?;
+    
+    // Pass 1: Overwrite with random data
+    let random_data: Vec<u8> = (0..file_size).map(|_| rand::random::<u8>()).collect();
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&random_data)?;
+    file.sync_all()?;
+    
+    // Pass 2: Overwrite with zeros
+    let zero_data = vec![0u8; file_size];
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&zero_data)?;
+    file.sync_all()?;
+    
+    // Pass 3: Overwrite with random data again
+    let random_data2: Vec<u8> = (0..file_size).map(|_| rand::random::<u8>()).collect();
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&random_data2)?;
+    file.sync_all()?;
+    
+    // Close file and delete
+    drop(file);
+    fs::remove_file(path)
+        .map_err(|e| SecurityError::storage_error(&format!("Failed to delete file: {}", e)))?;
+    
+    Ok(())
+}
+
+/// Creates a backup copy before secure deletion for atomic updates
+pub fn secure_update_file(path: &Path, new_data: &[u8]) -> Result<(), SecurityError> {
+    let backup_path = path.with_extension("enc.backup");
+    
+    // If file exists, rename to backup
+    if path.exists() {
+        fs::rename(path, &backup_path)?;
+    }
+    
+    // Write new data
+    fs::write(path, new_data)?;
+    
+    // If backup exists, securely delete it
+    if backup_path.exists() {
+        secure_delete_file(&backup_path)?;
+    }
+    
+    Ok(())
+}
+```
+
+3. Update `src/storage.rs` to use secure deletion:
+```rust
+use crate::secure_delete::secure_update_file;
+
+pub fn save_entries(&self, entries: &[PasswordEntry], master_password: &str) -> Result<(), SecurityError> {
+    // Serialize, encrypt...
+    
+    // Use secure update instead of direct write
+    secure_update_file(&self.storage_path, &encrypted_data_bytes)?;
+    
+    // Set permissions...
+    Ok(())
+}
+```
+
+4. Add configuration option for secure deletion:
+```rust
+pub struct SecureDeletionConfig {
+    pub enabled: bool,
+    pub passes: usize,  // Number of overwrite passes (1-7)
+}
+
+impl Default for SecureDeletionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            passes: 3,  // Balance between security and performance
+        }
+    }
+}
+```
+
+**Files to Create:**
+- `src/secure_delete.rs` - Secure file deletion implementation
+
+**Files to Modify:**
+- `Cargo.toml` - Add dependencies for secure deletion
+- `src/lib.rs` - Add secure_delete module
+- `src/storage.rs` - Use secure deletion for file updates
+- `tests/` - Add tests for secure deletion
+
+**Testing:**
+- Test secure deletion completes successfully
+- Test file is actually deleted after overwriting
+- Verify overwrite passes are executed (check file size during operation)
+- Test atomic updates (backup and restore on failure)
+- Performance test: measure impact on save operations
+
+**Acceptance Criteria:**
+- [ ] Secure deletion module implemented with multi-pass overwrite
+- [ ] Integrated into save_entries() for automatic use
+- [ ] Atomic updates with backup/restore on failure
+- [ ] Configurable number of overwrite passes
+- [ ] Tests verify secure deletion behavior
+- [ ] Documentation includes limitations (SSDs, encrypted filesystems)
+- [ ] Performance impact documented
+
+**Priority:** 🔵 LOW-MEDIUM
+**Estimated Effort:** 5-6 hours
+**Labels:** security, enhancement, filesystem
+
+**Notes:**
+- Modern SSDs with wear-leveling may not benefit from secure deletion
+- Filesystem encryption (LUKS, FileVault, BitLocker) is more effective
+- This provides defense-in-depth for systems without full disk encryption
+- Consider making this optional via configuration
+
+---
+
+### Issue 14: 🔵 Add Session Timeout and Auto-Lock
+
+**Title:** Implement automatic screen locking after inactivity period
+
+**Description:**
+Currently, the password manager application stays unlocked indefinitely once the master password is entered. If a user leaves their computer unattended, the application remains accessible to anyone with physical access. An auto-lock feature that requires re-entering the master password after a period of inactivity would significantly improve security.
+
+**Security Impact:**
+- Medium severity
+- Unlocked application exposes all stored passwords
+- Physical access security risk
+- Common attack vector: unattended computer
+
+**Current Behavior:**
+- Application remains unlocked after authentication
+- No automatic timeout or lock mechanism
+- User must manually close application to "lock" passwords
+
+**Solution:**
+Implement session timeout with configurable inactivity period and auto-lock functionality.
+
+**Implementation Steps:**
+
+1. Create session management module `src/session.rs`:
+```rust
+use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+
+pub struct SessionManager {
+    last_activity: Arc<Mutex<Instant>>,
+    timeout_duration: Duration,
+    is_locked: Arc<Mutex<bool>>,
+}
+
+impl SessionManager {
+    pub fn new(timeout_minutes: u64) -> Self {
+        Self {
+            last_activity: Arc::new(Mutex::new(Instant::now())),
+            timeout_duration: Duration::from_secs(timeout_minutes * 60),
+            is_locked: Arc::new(Mutex::new(false)),
+        }
+    }
+    
+    /// Record user activity (resets timeout timer)
+    pub fn record_activity(&self) {
+        let mut last_activity = self.last_activity.lock().unwrap();
+        *last_activity = Instant::now();
+        
+        // Unlock if locked
+        let mut is_locked = self.is_locked.lock().unwrap();
+        *is_locked = false;
+    }
+    
+    /// Check if session should be locked due to inactivity
+    pub fn should_lock(&self) -> bool {
+        let last_activity = self.last_activity.lock().unwrap();
+        let elapsed = Instant::now().duration_since(*last_activity);
+        elapsed >= self.timeout_duration
+    }
+    
+    /// Lock the session
+    pub fn lock(&self) {
+        let mut is_locked = self.is_locked.lock().unwrap();
+        *is_locked = true;
+    }
+    
+    /// Check if session is currently locked
+    pub fn is_locked(&self) -> bool {
+        *self.is_locked.lock().unwrap()
+    }
+    
+    /// Get remaining time before auto-lock
+    pub fn time_until_lock(&self) -> Duration {
+        let last_activity = self.last_activity.lock().unwrap();
+        let elapsed = Instant::now().duration_since(*last_activity);
+        
+        if elapsed >= self.timeout_duration {
+            Duration::from_secs(0)
+        } else {
+            self.timeout_duration - elapsed
+        }
+    }
+}
+```
+
+2. Update UI to show lock screen in `src/ui/main.slint`:
+```slint
+export component AppWindow inherits Window {
+    // ... existing properties ...
+    in-out property <bool> is-locked: false;
+    in-out property <int> seconds-until-lock: 0;
+    
+    callback unlock(string);
+    callback lock-session();
+    
+    // Lock screen overlay
+    if root.is-locked : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        
+        Rectangle {
+            width: 400px;
+            height: 300px;
+            background: white;
+            border-radius: 8px;
+            
+            VerticalBox {
+                padding: 30px;
+                spacing: 20px;
+                
+                Text {
+                    text: "🔒 Session Locked";
+                    font-size: 24px;
+                    horizontal-alignment: center;
+                }
+                
+                Text {
+                    text: "Enter master password to unlock";
+                    horizontal-alignment: center;
+                }
+                
+                unlock-password := LineEdit {
+                    placeholder-text: "Master password";
+                    input-type: password;
+                }
+                
+                Button {
+                    text: "Unlock";
+                    primary: true;
+                    clicked => {
+                        root.unlock(unlock-password.text);
+                        unlock-password.text = "";
+                    }
+                }
+            }
+        }
+    }
+    
+    // Timer countdown display (when not locked)
+    if !root.is-locked && root.seconds-until-lock > 0 : HorizontalBox {
+        Text {
+            text: "Auto-lock in: " + root.seconds-until-lock + "s";
+            color: #666;
+            font-size: 12px;
+        }
+    }
+}
+```
+
+3. Integrate session management in `src/main.rs`:
+```rust
+use session::SessionManager;
+use std::sync::Arc;
+
+lazy_static! {
+    static ref SESSION_MANAGER: Arc<SessionManager> = Arc::new(SessionManager::new(5)); // 5 minute timeout
+}
+
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    
+    // Start background thread to check for timeout
+    let ui_weak = ui.as_weak();
+    let session_manager = SESSION_MANAGER.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+            
+            if session_manager.should_lock() {
+                session_manager.lock();
+                
+                // Update UI to show lock screen
+                if let Some(ui) = ui_weak.upgrade() {
+                    ui.set_is_locked(true);
+                }
+            }
+            
+            // Update countdown timer
+            if let Some(ui) = ui_weak.upgrade() {
+                let time_left = session_manager.time_until_lock();
+                ui.set_seconds_until_lock(time_left.as_secs() as i32);
+            }
+        }
+    });
+    
+    // Record activity on any user interaction
+    ui.on_save_password(move |master_password, title, username, password| {
+        SESSION_MANAGER.record_activity();
+        // ... existing save logic ...
+    });
+    
+    ui.on_load_passwords(move |master_password| {
+        SESSION_MANAGER.record_activity();
+        // ... existing load logic ...
+    });
+    
+    // Handle unlock
+    ui.on_unlock(move |password| {
+        // Verify password by attempting to load entries
+        // If successful, unlock session
+        // If failed, show error and remain locked
+    });
+    
+    ui.run()
+}
+```
+
+4. Add configuration for timeout duration:
+```rust
+pub struct SessionConfig {
+    pub timeout_minutes: u64,
+    pub show_countdown: bool,
+    pub lock_on_minimize: bool,
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            timeout_minutes: 5,  // 5 minutes default
+            show_countdown: true,
+            lock_on_minimize: false,
+        }
+    }
+}
+```
+
+**Files to Create:**
+- `src/session.rs` - Session management and timeout logic
+
+**Files to Modify:**
+- `src/lib.rs` - Add session module
+- `src/main.rs` - Integrate session management with UI
+- `src/ui/main.slint` - Add lock screen UI
+- `Cargo.toml` - Add any threading dependencies if needed
+- `tests/` - Add session timeout tests
+
+**Testing:**
+- Test session locks after configured timeout period
+- Test user activity resets the timeout timer
+- Verify locked session requires correct master password to unlock
+- Test that incorrect password keeps session locked
+- Verify countdown timer displays correctly
+- Test edge case: timeout during active encryption operation
+
+**Acceptance Criteria:**
+- [ ] Session manager implemented with configurable timeout
+- [ ] UI shows lock screen when session times out
+- [ ] User activity resets timeout timer
+- [ ] Locked session requires master password to unlock
+- [ ] Countdown timer shows time remaining before lock (optional)
+- [ ] Manual lock button added to UI
+- [ ] Tests verify timeout and unlock behavior
+- [ ] Configuration options for timeout duration
+- [ ] Documentation updated with auto-lock feature
+
+**Priority:** 🟡 MEDIUM
+**Estimated Effort:** 6-8 hours
+**Labels:** security, enhancement, ux, session-management
+
+---
+
+### Issue 15: 🔵 Implement Clipboard Security and Auto-Clear
+
+**Title:** Add clipboard clearing after password copy operations
+
+**Description:**
+Password managers typically provide functionality to copy passwords to the clipboard for easy pasting into login forms. However, clipboard data persists in system memory and can be accessed by any application. Sensitive password data should be automatically cleared from the clipboard after a short period to minimize exposure risk.
+
+**Security Impact:**
+- Medium severity
+- Clipboard data accessible to any running application
+- Password remains in clipboard indefinitely
+- Malware or clipboard monitoring tools could capture passwords
+- Cross-application information leakage
+
+**Current Behavior:**
+- Application does not currently have copy-to-clipboard functionality
+- When implemented, clipboard should be automatically cleared
+
+**Solution:**
+Implement clipboard operations with automatic clearing after a configurable timeout period.
+
+**Implementation Steps:**
+
+1. Add clipboard dependency to `Cargo.toml`:
+```toml
+[dependencies]
+copypasta = "0.10"  # Cross-platform clipboard access
+# OR
+arboard = "3.4"     # Alternative clipboard library
+```
+
+2. Create clipboard management module `src/clipboard.rs`:
+```rust
+use arboard::Clipboard;
+use std::time::Duration;
+use std::thread;
+
+pub struct SecureClipboard {
+    clipboard: Clipboard,
+    clear_timeout: Duration,
+}
+
+impl SecureClipboard {
+    pub fn new(clear_timeout_seconds: u64) -> Result<Self, String> {
+        Ok(Self {
+            clipboard: Clipboard::new().map_err(|e| format!("Failed to initialize clipboard: {}", e))?,
+            clear_timeout: Duration::from_secs(clear_timeout_seconds),
+        })
+    }
+    
+    /// Copy text to clipboard and automatically clear after timeout
+    pub fn copy_with_autoclear(&mut self, text: String) -> Result<(), String> {
+        // Copy to clipboard
+        self.clipboard.set_text(&text)
+            .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
+        
+        // Spawn thread to clear clipboard after timeout
+        let clear_timeout = self.clear_timeout;
+        let text_to_clear = text.clone();
+        
+        thread::spawn(move || {
+            thread::sleep(clear_timeout);
+            
+            // Clear clipboard only if it still contains our text
+            // This prevents clearing user's subsequent clipboard operations
+            if let Ok(mut clipboard) = Clipboard::new() {
+                if let Ok(current_content) = clipboard.get_text() {
+                    if current_content == text_to_clear {
+                        let _ = clipboard.set_text(""); // Clear clipboard
+                    }
+                }
+            }
+        });
+        
+        Ok(())
+    }
+    
+    /// Immediately clear clipboard
+    pub fn clear(&mut self) -> Result<(), String> {
+        self.clipboard.set_text("")
+            .map_err(|e| format!("Failed to clear clipboard: {}", e))
+    }
+}
+
+/// Configuration for clipboard security
+pub struct ClipboardConfig {
+    pub auto_clear_enabled: bool,
+    pub clear_timeout_seconds: u64,
+}
+
+impl Default for ClipboardConfig {
+    fn default() -> Self {
+        Self {
+            auto_clear_enabled: true,
+            clear_timeout_seconds: 30,  // Clear after 30 seconds
+        }
+    }
+}
+```
+
+3. Add copy button to password display in `src/ui/main.slint`:
+```slint
+// In password display section:
+HorizontalBox {
+    spacing: 10px;
+    
+    Text {
+        text: "Password: ********";
+    }
+    
+    Button {
+        text: "📋 Copy";
+        clicked => {
+            root.copy-password(password-value);
+        }
+    }
+}
+```
+
+4. Integrate clipboard functionality in `src/main.rs`:
+```rust
+use clipboard::{SecureClipboard, ClipboardConfig};
+
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    
+    // Initialize clipboard with 30-second auto-clear
+    let clipboard_config = ClipboardConfig::default();
+    let clipboard = SecureClipboard::new(clipboard_config.clear_timeout_seconds);
+    
+    // Handle copy password operation
+    ui.on_copy_password(move |password| {
+        match clipboard.copy_with_autoclear(password.to_string()) {
+            Ok(()) => {
+                ui.set_status_message(
+                    format!("Password copied to clipboard (will auto-clear in {}s)", 
+                            clipboard_config.clear_timeout_seconds).into()
+                );
+            }
+            Err(e) => {
+                ui.set_status_message(format!("Failed to copy password: {}", e).into());
+            }
+        }
+    });
+    
+    ui.run()
+}
+```
+
+5. Add visual feedback for clipboard operations:
+```rust
+// Show temporary notification when password is copied
+// Show countdown timer until clipboard is cleared
+```
+
+**Files to Create:**
+- `src/clipboard.rs` - Secure clipboard management
+
+**Files to Modify:**
+- `Cargo.toml` - Add clipboard dependency
+- `src/lib.rs` - Add clipboard module
+- `src/main.rs` - Integrate clipboard operations
+- `src/ui/main.slint` - Add copy buttons to password display
+- `tests/` - Add clipboard security tests
+
+**Testing:**
+- Test password is copied to clipboard successfully
+- Verify clipboard is cleared after timeout period
+- Test that clipboard is not cleared if user copies something else
+- Test manual clipboard clear operation
+- Verify cross-platform clipboard access (macOS, Linux, Windows)
+- Test error handling for clipboard access failures
+
+**Acceptance Criteria:**
+- [ ] Clipboard copy functionality implemented
+- [ ] Automatic clipboard clearing after configurable timeout (30s default)
+- [ ] UI shows copy buttons for passwords
+- [ ] Visual feedback when password is copied
+- [ ] Countdown timer shows when clipboard will be cleared
+- [ ] Manual "Clear Clipboard" button available
+- [ ] Cross-platform clipboard support (macOS, Linux, Windows)
+- [ ] Tests verify clipboard security behavior
+- [ ] Configuration options for clipboard timeout
+- [ ] Documentation updated with clipboard security feature
+
+**Priority:** 🟡 MEDIUM
+**Estimated Effort:** 4-5 hours
+**Labels:** security, enhancement, ux, clipboard
+
+---
+
+### Issue 16: 🔵 Add Secure Password Generator
+
+**Title:** Implement cryptographically secure password generator
+
+**Description:**
+Users need to create strong, unique passwords for their accounts. A built-in password generator would improve security by making it easy to create high-entropy passwords that resist brute-force attacks. The generator should use cryptographically secure randomness and provide customizable options for password complexity.
+
+**Security Impact:**
+- Medium severity (missing security feature)
+- Users may create weak passwords without a generator
+- Strong generated passwords significantly improve account security
+- Encourages use of unique passwords per account
+
+**Current Behavior:**
+- No password generation functionality
+- Users must manually create passwords
+- No guidance on password strength beyond validation
+
+**Solution:**
+Implement a password generator with customizable options and cryptographically secure randomness.
+
+**Implementation Steps:**
+
+1. Add password generation dependency to `Cargo.toml`:
+```toml
+[dependencies]
+rand = "0.8"  # Cryptographically secure random number generation
+```
+
+2. Create password generator module `src/password_generator.rs`:
+```rust
+use rand::{Rng, thread_rng};
+use rand::distributions::Alphanumeric;
+
+pub struct PasswordGeneratorConfig {
+    pub length: usize,
+    pub use_uppercase: bool,
+    pub use_lowercase: bool,
+    pub use_digits: bool,
+    pub use_special: bool,
+    pub exclude_ambiguous: bool,  // Exclude O,0,I,l,1, etc.
+}
+
+impl Default for PasswordGeneratorConfig {
+    fn default() -> Self {
+        Self {
+            length: 16,
+            use_uppercase: true,
+            use_lowercase: true,
+            use_digits: true,
+            use_special: true,
+            exclude_ambiguous: true,
+        }
+    }
+}
+
+pub fn generate_password(config: &PasswordGeneratorConfig) -> Result<String, String> {
+    if config.length < 8 {
+        return Err("Password length must be at least 8 characters".to_string());
+    }
+    
+    if config.length > 128 {
+        return Err("Password length must not exceed 128 characters".to_string());
+    }
+    
+    // Build character set based on configuration
+    let mut charset = String::new();
+    
+    if config.use_lowercase {
+        if config.exclude_ambiguous {
+            charset.push_str("abcdefghjkmnpqrstuvwxyz");  // Exclude i, l, o
+        } else {
+            charset.push_str("abcdefghijklmnopqrstuvwxyz");
+        }
+    }
+    
+    if config.use_uppercase {
+        if config.exclude_ambiguous {
+            charset.push_str("ABCDEFGHJKLMNPQRSTUVWXYZ");  // Exclude I, O
+        } else {
+            charset.push_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        }
+    }
+    
+    if config.use_digits {
+        if config.exclude_ambiguous {
+            charset.push_str("23456789");  // Exclude 0, 1
+        } else {
+            charset.push_str("0123456789");
+        }
+    }
+    
+    if config.use_special {
+        charset.push_str("!@#$%^&*()_+-=[]{}|;:,.<>?");
+    }
+    
+    if charset.is_empty() {
+        return Err("At least one character type must be selected".to_string());
+    }
+    
+    let charset: Vec<char> = charset.chars().collect();
+    let mut rng = thread_rng();
+    
+    // Generate password
+    let password: String = (0..config.length)
+        .map(|_| {
+            let idx = rng.gen_range(0..charset.len());
+            charset[idx]
+        })
+        .collect();
+    
+    // Ensure password contains at least one character from each selected type
+    // If not, regenerate (recursive call with limit)
+    if !validate_generated_password(&password, config) {
+        return generate_password(config);
+    }
+    
+    Ok(password)
+}
+
+fn validate_generated_password(password: &str, config: &PasswordGeneratorConfig) -> bool {
+    if config.use_uppercase && !password.chars().any(|c| c.is_uppercase()) {
+        return false;
+    }
+    if config.use_lowercase && !password.chars().any(|c| c.is_lowercase()) {
+        return false;
+    }
+    if config.use_digits && !password.chars().any(|c| c.is_numeric()) {
+        return false;
+    }
+    if config.use_special && !password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c)) {
+        return false;
+    }
+    true
+}
+
+/// Calculate entropy bits for a generated password
+pub fn calculate_entropy(password: &str, charset_size: usize) -> f64 {
+    let length = password.len() as f64;
+    let charset_size = charset_size as f64;
+    length * charset_size.log2()
+}
+```
+
+3. Add password generator UI in `src/ui/main.slint`:
+```slint
+GroupBox {
+    title: "Password Generator";
+    
+    VerticalBox {
+        spacing: 10px;
+        
+        HorizontalBox {
+            Text {
+                text: "Length:";
+                min-width: 100px;
+            }
+            length-slider := Slider {
+                minimum: 8;
+                maximum: 32;
+                value: 16;
+            }
+            Text {
+                text: length-slider.value;
+            }
+        }
+        
+        HorizontalBox {
+            CheckBox {
+                text: "Uppercase (A-Z)";
+                checked: true;
+            }
+            CheckBox {
+                text: "Lowercase (a-z)";
+                checked: true;
+            }
+        }
+        
+        HorizontalBox {
+            CheckBox {
+                text: "Digits (0-9)";
+                checked: true;
+            }
+            CheckBox {
+                text: "Special (!@#$...)";
+                checked: true;
+            }
+        }
+        
+        HorizontalBox {
+            CheckBox {
+                text: "Exclude ambiguous (0,O,l,1)";
+                checked: true;
+            }
+        }
+        
+        HorizontalBox {
+            generated-password-display := LineEdit {
+                placeholder-text: "Generated password will appear here";
+                read-only: true;
+            }
+            
+            Button {
+                text: "🔄 Generate";
+                clicked => {
+                    root.generate-password();
+                }
+            }
+            
+            Button {
+                text: "📋 Copy";
+                enabled: generated-password-display.text != "";
+                clicked => {
+                    root.copy-generated-password(generated-password-display.text);
+                }
+            }
+            
+            Button {
+                text: "✓ Use";
+                enabled: generated-password-display.text != "";
+                clicked => {
+                    root.use-generated-password(generated-password-display.text);
+                }
+            }
+        }
+        
+        // Entropy display
+        Text {
+            text: "Entropy: XX bits (Very Strong)";
+            font-size: 12px;
+            color: #4caf50;
+        }
+    }
+}
+```
+
+4. Integrate generator in `src/main.rs`:
+```rust
+use password_generator::{generate_password, PasswordGeneratorConfig, calculate_entropy};
+
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    
+    ui.on_generate_password(move || {
+        let config = PasswordGeneratorConfig {
+            length: /* get from UI slider */,
+            use_uppercase: /* get from UI checkbox */,
+            // ... other options from UI
+            ..Default::default()
+        };
+        
+        match generate_password(&config) {
+            Ok(password) => {
+                ui.set_generated_password(password.into());
+                
+                // Calculate and display entropy
+                let charset_size = calculate_charset_size(&config);
+                let entropy = calculate_entropy(&password, charset_size);
+                ui.set_password_entropy(format!("{:.1} bits", entropy).into());
+            }
+            Err(e) => {
+                ui.set_status_message(format!("Password generation failed: {}", e).into());
+            }
+        }
+    });
+    
+    ui.on_use_generated_password(move |password| {
+        // Auto-fill password field with generated password
+        ui.set_password_input(password);
+    });
+    
+    ui.run()
+}
+```
+
+**Files to Create:**
+- `src/password_generator.rs` - Password generation logic
+
+**Files to Modify:**
+- `Cargo.toml` - Add `rand` dependency if not already present
+- `src/lib.rs` - Add password_generator module
+- `src/main.rs` - Integrate password generator
+- `src/ui/main.slint` - Add password generator UI
+- `tests/` - Add password generator tests
+
+**Testing:**
+- Test generated passwords meet specified criteria
+- Verify cryptographic randomness (statistical tests)
+- Test all character set combinations
+- Verify minimum length enforcement
+- Test exclusion of ambiguous characters
+- Verify entropy calculations
+- Test edge cases (min/max length, single character type)
+
+**Acceptance Criteria:**
+- [ ] Password generator implemented with customizable options
+- [ ] Cryptographically secure random number generation
+- [ ] UI for configuring generator options (length, character types)
+- [ ] Generated password displayed with entropy calculation
+- [ ] Copy and use buttons for generated passwords
+- [ ] Exclusion of ambiguous characters (optional)
+- [ ] Tests verify password generation quality
+- [ ] Documentation with usage examples
+
+**Priority:** 🔵 MEDIUM
+**Estimated Effort:** 4-6 hours
+**Labels:** security, enhancement, ux, password-generation
+
+---
+
+### Issue 17: 🔵 Implement Backup and Export with Encryption
+
+**Title:** Add encrypted backup and export functionality
+
+**Description:**
+Users need the ability to create encrypted backups of their password database for disaster recovery. Additionally, export functionality would allow migration to other password managers or devices. Both operations must maintain security by encrypting exports with a password or key.
+
+**Security Impact:**
+- Medium severity (missing critical feature)
+- No backup = risk of total data loss
+- Export without encryption = potential data exposure
+- Users cannot easily migrate to other devices
+
+**Current Behavior:**
+- No backup functionality
+- No export functionality
+- Users must manually copy `~/.password_saver/passwords.enc`
+- No import from other sources
+
+**Solution:**
+Implement encrypted backup/export and secure import functionality.
+
+**Implementation Steps:**
+
+1. Create backup module `src/backup.rs`:
+```rust
+use crate::storage::{PasswordStorage, PasswordEntry};
+use crate::errors::SecurityError;
+use serde::{Serialize, Deserialize};
+use std::path::Path;
+
+#[derive(Serialize, Deserialize)]
+pub struct PasswordBackup {
+    pub version: String,  // Backup format version
+    pub created_at: u64,  // Timestamp
+    pub hostname: String, // Device identifier
+    pub entries: Vec<PasswordEntry>,
+}
+
+pub struct BackupManager {
+    storage: PasswordStorage,
+}
+
+impl BackupManager {
+    pub fn new(storage: PasswordStorage) -> Self {
+        Self { storage }
+    }
+    
+    /// Create encrypted backup file
+    pub fn create_backup(
+        &self,
+        master_password: &str,
+        backup_path: &Path,
+    ) -> Result<(), SecurityError> {
+        // Load current entries
+        let entries = self.storage.load_entries(master_password)?;
+        
+        // Create backup structure
+        let backup = PasswordBackup {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            created_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            hostname: hostname::get()
+                .ok()
+                .and_then(|h| h.into_string().ok())
+                .unwrap_or_else(|| "unknown".to_string()),
+            entries,
+        };
+        
+        // Serialize and encrypt using same method as main storage
+        let backup_storage = PasswordStorage::new(backup_path.to_path_buf());
+        backup_storage.save_entries(&backup.entries, master_password)?;
+        
+        Ok(())
+    }
+    
+    /// Export to JSON format (encrypted)
+    pub fn export_encrypted(
+        &self,
+        master_password: &str,
+        export_password: &str,
+        export_path: &Path,
+    ) -> Result<(), SecurityError> {
+        // Load entries with master password
+        let entries = self.storage.load_entries(master_password)?;
+        
+        // Export encrypted with different password (allows secure sharing)
+        let export_storage = PasswordStorage::new(export_path.to_path_buf());
+        export_storage.save_entries(&entries, export_password)?;
+        
+        Ok(())
+    }
+    
+    /// Import from backup or export file
+    pub fn import_from_file(
+        &self,
+        import_path: &Path,
+        import_password: &str,
+        master_password: &str,
+    ) -> Result<usize, SecurityError> {
+        // Load entries from import file
+        let import_storage = PasswordStorage::new(import_path.to_path_buf());
+        let imported_entries = import_storage.load_entries(import_password)?;
+        
+        // Load current entries (if any)
+        let mut current_entries = if self.storage.exists() {
+            self.storage.load_entries(master_password)?
+        } else {
+            Vec::new()
+        };
+        
+        // Merge imported entries (check for duplicates by title)
+        let mut import_count = 0;
+        for entry in imported_entries {
+            if !current_entries.iter().any(|e| e.title == entry.title) {
+                current_entries.push(entry);
+                import_count += 1;
+            }
+        }
+        
+        // Save merged entries
+        self.storage.save_entries(&current_entries, master_password)?;
+        
+        Ok(import_count)
+    }
+    
+    /// List available backups in backup directory
+    pub fn list_backups(backup_dir: &Path) -> Result<Vec<PathBuf>, SecurityError> {
+        let mut backups = Vec::new();
+        
+        if !backup_dir.exists() {
+            return Ok(backups);
+        }
+        
+        for entry in fs::read_dir(backup_dir)
+            .map_err(|e| SecurityError::storage_error(&format!("Failed to read backup directory: {}", e)))?
+        {
+            let entry = entry.map_err(|e| SecurityError::storage_error(&format!("Failed to read directory entry: {}", e)))?;
+            let path = entry.path();
+            
+            if path.extension().and_then(|s| s.to_str()) == Some("bak") {
+                backups.push(path);
+            }
+        }
+        
+        // Sort by modification time (newest first)
+        backups.sort_by(|a, b| {
+            let a_time = fs::metadata(a).and_then(|m| m.modified()).ok();
+            let b_time = fs::metadata(b).and_then(|m| m.modified()).ok();
+            b_time.cmp(&a_time)
+        });
+        
+        Ok(backups)
+    }
+}
+```
+
+2. Add backup UI in `src/ui/main.slint`:
+```slint
+// Add to main menu or toolbar
+Button {
+    text: "💾 Backup";
+    clicked => {
+        root.show-backup-dialog = true;
+    }
+}
+
+Button {
+    text: "📥 Import";
+    clicked => {
+        root.show-import-dialog = true;
+    }
+}
+
+// Backup dialog
+if root.show-backup-dialog : Rectangle {
+    // ... dialog UI for backup/export options
+    VerticalBox {
+        Text { text: "Create Backup"; }
+        
+        LineEdit {
+            placeholder-text: "Backup filename";
+        }
+        
+        Button {
+            text: "Create Backup";
+            clicked => {
+                root.create-backup();
+            }
+        }
+        
+        Button {
+            text: "Export (with different password)";
+            clicked => {
+                root.export-encrypted();
+            }
+        }
+    }
+}
+```
+
+3. Integrate backup functionality in `src/main.rs`:
+```rust
+use backup::BackupManager;
+
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    let storage_path = get_storage_path();
+    
+    ui.on_create_backup(move |master_password, backup_filename| {
+        let storage = PasswordStorage::new(storage_path.clone());
+        let backup_manager = BackupManager::new(storage);
+        
+        let backup_dir = storage_path.parent().unwrap().join("backups");
+        fs::create_dir_all(&backup_dir)?;
+        
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let backup_path = backup_dir.join(format!("passwords_backup_{}.bak", timestamp));
+        
+        match backup_manager.create_backup(&master_password, &backup_path) {
+            Ok(()) => {
+                ui.set_status_message(format!("Backup created: {}", backup_path.display()).into());
+            }
+            Err(e) => {
+                ui.set_status_message(format!("Backup failed: {}", e.user_message()).into());
+            }
+        }
+    });
+    
+    ui.on_import_from_backup(move |master_password, import_path, import_password| {
+        let storage = PasswordStorage::new(storage_path.clone());
+        let backup_manager = BackupManager::new(storage);
+        
+        match backup_manager.import_from_file(&import_path, &import_password, &master_password) {
+            Ok(count) => {
+                ui.set_status_message(format!("Imported {} password entries", count).into());
+            }
+            Err(e) => {
+                ui.set_status_message(format!("Import failed: {}", e.user_message()).into());
+            }
+        }
+    });
+    
+    ui.run()
+}
+```
+
+4. Add automatic periodic backups:
+```rust
+pub struct AutoBackupConfig {
+    pub enabled: bool,
+    pub interval_days: u64,
+    pub max_backups: usize,  // Keep only N most recent backups
+}
+
+impl Default for AutoBackupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval_days: 7,  // Weekly backups
+            max_backups: 5,    // Keep 5 most recent
+        }
+    }
+}
+```
+
+**Files to Create:**
+- `src/backup.rs` - Backup and export functionality
+
+**Files to Modify:**
+- `src/lib.rs` - Add backup module
+- `src/main.rs` - Integrate backup operations
+- `src/ui/main.slint` - Add backup/import UI
+- `tests/` - Add backup/import tests
+
+**Testing:**
+- Test backup creation with correct password
+- Test backup restore functionality
+- Test export with different password
+- Test import merges entries correctly
+- Verify duplicate detection works
+- Test backup listing and cleanup
+- Test automatic backup scheduling
+
+**Acceptance Criteria:**
+- [ ] Backup creation with encryption
+- [ ] Export with different password option
+- [ ] Import from backup or export files
+- [ ] Duplicate detection during import
+- [ ] UI for backup/import operations
+- [ ] Automatic periodic backups (optional)
+- [ ] Backup file management (list, delete old backups)
+- [ ] Tests verify backup integrity
+- [ ] Documentation with backup procedures
+
+**Priority:** 🟡 MEDIUM-HIGH
+**Estimated Effort:** 6-8 hours
+**Labels:** security, enhancement, backup, disaster-recovery
+
+---
+
+### Issue 18: 🔵 Add Database Integrity Verification
+
+**Title:** Implement database corruption detection and integrity checks
+
+**Description:**
+Storage corruption can occur due to filesystem errors, incomplete writes, or malicious tampering. The application should detect and report database integrity issues before attempting to decrypt or use corrupted data. This provides early warning of potential data loss and security compromises.
+
+**Security Impact:**
+- Low-Medium severity
+- Corrupted database could expose partial data
+- Malicious tampering might go undetected beyond GCM authentication
+- Data loss risk from silent corruption
+
+**Current Security:**
+- ✅ AES-GCM provides authentication (detects tampering of encrypted data)
+- ❌ No detection of file truncation or incomplete writes
+- ❌ No checksum verification before decryption attempt
+- ❌ No warning signs of corruption before user loses data
+
+**Solution:**
+Add database integrity verification with checksums and corruption detection.
+
+**Implementation Steps:**
+
+1. Create integrity verification module `src/integrity.rs`:
+```rust
+use sha2::{Sha256, Digest};
+use crate::errors::SecurityError;
+
+pub struct IntegrityChecker {
+    path: PathBuf,
+}
+
+impl IntegrityChecker {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+    
+    /// Calculate SHA-256 checksum of file
+    pub fn calculate_checksum(&self) -> Result<String, SecurityError> {
+        let data = fs::read(&self.path)
+            .map_err(|e| SecurityError::storage_error(&format!("Failed to read file: {}", e)))?;
+        
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let result = hasher.finalize();
+        
+        Ok(hex::encode(result))
+    }
+    
+    /// Verify file integrity with stored checksum
+    pub fn verify_integrity(&self, expected_checksum: &str) -> Result<bool, SecurityError> {
+        let actual_checksum = self.calculate_checksum()?;
+        Ok(actual_checksum == expected_checksum)
+    }
+    
+    /// Check for common corruption patterns
+    pub fn check_corruption(&self) -> Result<CorruptionReport, SecurityError> {
+        let data = fs::read(&self.path)
+            .map_err(|e| SecurityError::storage_error(&format!("Failed to read file: {}", e)))?;
+        
+        let mut report = CorruptionReport::default();
+        
+        // Check if file is valid JSON
+        report.valid_json = serde_json::from_slice::<serde_json::Value>(&data).is_ok();
+        
+        // Check if file has expected structure
+        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&data) {
+            report.has_salt = json.get("salt").is_some();
+            report.has_nonce = json.get("nonce").is_some();
+            report.has_encrypted_data = json.get("encrypted_data").is_some();
+        }
+        
+        // Check for truncation (incomplete write)
+        report.file_size = data.len();
+        report.appears_truncated = data.len() < 100; // Suspiciously small
+        
+        // Check for null bytes (corruption indicator)
+        report.has_null_bytes = data.contains(&0);
+        
+        Ok(report)
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct CorruptionReport {
+    pub valid_json: bool,
+    pub has_salt: bool,
+    pub has_nonce: bool,
+    pub has_encrypted_data: bool,
+    pub file_size: usize,
+    pub appears_truncated: bool,
+    pub has_null_bytes: bool,
+}
+
+impl CorruptionReport {
+    pub fn is_healthy(&self) -> bool {
+        self.valid_json 
+            && self.has_salt 
+            && self.has_nonce 
+            && self.has_encrypted_data
+            && !self.appears_truncated
+            && !self.has_null_bytes
+    }
+    
+    pub fn issues(&self) -> Vec<String> {
+        let mut issues = Vec::new();
+        
+        if !self.valid_json {
+            issues.push("File is not valid JSON".to_string());
+        }
+        if !self.has_salt {
+            issues.push("Missing salt field".to_string());
+        }
+        if !self.has_nonce {
+            issues.push("Missing nonce field".to_string());
+        }
+        if !self.has_encrypted_data {
+            issues.push("Missing encrypted_data field".to_string());
+        }
+        if self.appears_truncated {
+            issues.push(format!("File appears truncated (only {} bytes)", self.file_size));
+        }
+        if self.has_null_bytes {
+            issues.push("File contains unexpected null bytes".to_string());
+        }
+        
+        issues
+    }
+}
+```
+
+2. Integrate integrity checks in `src/storage.rs`:
+```rust
+use crate::integrity::{IntegrityChecker, CorruptionReport};
+
+impl PasswordStorage {
+    /// Verify database integrity before loading
+    pub fn verify_integrity(&self) -> Result<CorruptionReport, SecurityError> {
+        let checker = IntegrityChecker::new(self.storage_path.clone());
+        checker.check_corruption()
+    }
+    
+    /// Load entries with integrity check
+    pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, SecurityError> {
+        // Verify integrity before attempting decryption
+        let report = self.verify_integrity()?;
+        
+        if !report.is_healthy() {
+            warn!("Database integrity issues detected: {:?}", report.issues());
+            return Err(SecurityError::storage_error(
+                &format!("Database integrity check failed: {}", report.issues().join(", "))
+            ));
+        }
+        
+        // ... existing load logic ...
+    }
+}
+```
+
+3. Add integrity check UI in `src/ui/main.slint`:
+```slint
+Button {
+    text: "🔍 Verify Database";
+    clicked => {
+        root.verify-database-integrity();
+    }
+}
+
+// Integrity report dialog
+if root.show-integrity-report : Rectangle {
+    VerticalBox {
+        Text { text: "Database Integrity Report"; }
+        
+        Text {
+            text: root.integrity-status;
+            color: root.integrity-healthy ? #4caf50 : #f44336;
+        }
+        
+        if !root.integrity-healthy : VerticalBox {
+            Text { text: "Issues detected:"; }
+            // List of issues
+        }
+    }
+}
+```
+
+4. Add automatic integrity checks:
+```rust
+// Check integrity on application startup
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    let storage_path = get_storage_path();
+    let storage = PasswordStorage::new(storage_path);
+    
+    // Automatic integrity check on startup
+    if storage.exists() {
+        match storage.verify_integrity() {
+            Ok(report) if !report.is_healthy() => {
+                warn!("Database integrity issues detected on startup: {:?}", report.issues());
+                ui.set_status_message(
+                    format!("⚠️ Database integrity warning: {}", report.issues().join(", ")).into()
+                );
+            }
+            Err(e) => {
+                warn!("Failed to verify database integrity: {}", e);
+            }
+            _ => {
+                // Database is healthy
+            }
+        }
+    }
+    
+    ui.run()
+}
+```
+
+**Files to Create:**
+- `src/integrity.rs` - Database integrity verification
+
+**Files to Modify:**
+- `src/lib.rs` - Add integrity module
+- `src/storage.rs` - Integrate integrity checks
+- `src/main.rs` - Add startup integrity check
+- `src/ui/main.slint` - Add integrity verification UI
+- `tests/` - Add integrity check tests
+
+**Testing:**
+- Test integrity check with healthy database
+- Test detection of truncated files
+- Test detection of invalid JSON
+- Test detection of missing required fields
+- Test detection of null bytes
+- Verify checksum calculation
+- Test automatic startup check
+
+**Acceptance Criteria:**
+- [ ] Integrity checker module implemented
+- [ ] Automatic integrity check on database load
+- [ ] Corruption detection for common issues
+- [ ] SHA-256 checksum calculation
+- [ ] UI for manual integrity verification
+- [ ] Startup integrity check with warning display
+- [ ] Tests verify corruption detection
+- [ ] Documentation with integrity check procedures
+
+**Priority:** 🔵 MEDIUM
+**Estimated Effort:** 4-5 hours
+**Labels:** security, enhancement, reliability, data-integrity
+
+---
+
+### Issue 19: 🔵 Implement Password Search and Filtering
+
+**Title:** Add secure search functionality with protection against information leakage
+
+**Description:**
+As users accumulate many password entries, they need efficient search and filtering capabilities to quickly find specific passwords. However, search functionality must be implemented securely to avoid timing attacks or information leakage through search patterns. This is both a security and usability feature.
+
+**Security Impact:**
+- Low severity (security through usability)
+- Poor search UX leads to password reuse or weak passwords
+- Search timing could leak information about password count
+- Improves security by making password manager more practical to use
+
+**Current Behavior:**
+- No search or filtering functionality
+- Users must scroll through all passwords to find entries
+- No way to organize or categorize passwords
+
+**Solution:**
+Implement efficient search with secure implementation and UI organization features.
+
+**Implementation Steps:**
+
+1. Create search module `src/search.rs`:
+```rust
+use crate::storage::PasswordEntry;
+
+pub struct SearchConfig {
+    pub case_sensitive: bool,
+    pub search_title: bool,
+    pub search_username: bool,
+    pub search_url: bool,  // Future field
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            case_sensitive: false,
+            search_title: true,
+            search_username: true,
+            search_url: false,
+        }
+    }
+}
+
+pub fn search_entries(
+    entries: &[PasswordEntry],
+    query: &str,
+    config: &SearchConfig,
+) -> Vec<usize> {
+    if query.is_empty() {
+        return (0..entries.len()).collect();
+    }
+    
+    let query = if config.case_sensitive {
+        query.to_string()
+    } else {
+        query.to_lowercase()
+    };
+    
+    entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| {
+            let matches_title = if config.search_title {
+                let title = if config.case_sensitive {
+                    entry.title.clone()
+                } else {
+                    entry.title.to_lowercase()
+                };
+                title.contains(&query)
+            } else {
+                false
+            };
+            
+            let matches_username = if config.search_username {
+                let username = if config.case_sensitive {
+                    entry.username.clone()
+                } else {
+                    entry.username.to_lowercase()
+                };
+                username.contains(&query)
+            } else {
+                false
+            };
+            
+            matches_title || matches_username
+        })
+        .map(|(idx, _)| idx)
+        .collect()
+}
+
+/// Sort entries by different criteria
+pub enum SortCriteria {
+    TitleAscending,
+    TitleDescending,
+    DateCreatedNewest,
+    DateCreatedOldest,
+    UsernameAscending,
+}
+
+pub fn sort_entries(entries: &mut [PasswordEntry], criteria: SortCriteria) {
+    match criteria {
+        SortCriteria::TitleAscending => {
+            entries.sort_by(|a, b| a.title.cmp(&b.title));
+        }
+        SortCriteria::TitleDescending => {
+            entries.sort_by(|a, b| b.title.cmp(&a.title));
+        }
+        SortCriteria::DateCreatedNewest => {
+            entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        }
+        SortCriteria::DateCreatedOldest => {
+            entries.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        }
+        SortCriteria::UsernameAscending => {
+            entries.sort_by(|a, b| a.username.cmp(&b.username));
+        }
+    }
+}
+```
+
+2. Add search UI in `src/ui/main.slint`:
+```slint
+GroupBox {
+    title: "Search Passwords";
+    
+    HorizontalBox {
+        search-input := LineEdit {
+            placeholder-text: "Search by title or username...";
+        }
+        
+        Button {
+            text: "🔍 Search";
+            clicked => {
+                root.search-passwords(search-input.text);
+            }
+        }
+        
+        Button {
+            text: "✕ Clear";
+            clicked => {
+                search-input.text = "";
+                root.search-passwords("");
+            }
+        }
+    }
+    
+    HorizontalBox {
+        Text {
+            text: "Sort by:";
+        }
+        ComboBox {
+            model: ["Title (A-Z)", "Title (Z-A)", "Newest First", "Oldest First", "Username"];
+            current-index <=> root.sort-option;
+        }
+    }
+}
+
+// Filtered results display
+GroupBox {
+    title: "Passwords (" + root.filtered-count + " of " + root.total-count + ")";
+    
+    ScrollView {
+        VerticalBox {
+            // Display filtered entries
+        }
+    }
+}
+```
+
+3. Integrate search in `src/main.rs`:
+```rust
+use search::{search_entries, sort_entries, SearchConfig, SortCriteria};
+
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    
+    // Keep loaded entries in memory for searching
+    let loaded_entries = Arc::new(Mutex::new(Vec::new()));
+    
+    ui.on_search_passwords(move |query| {
+        let entries = loaded_entries.lock().unwrap();
+        let config = SearchConfig::default();
+        
+        let matching_indices = search_entries(&entries, &query, &config);
+        
+        // Update UI with filtered results
+        ui.set_filtered_count(matching_indices.len() as i32);
+        ui.set_total_count(entries.len() as i32);
+        
+        // Display matching entries...
+    });
+    
+    ui.on_sort_passwords(move |sort_option| {
+        let mut entries = loaded_entries.lock().unwrap();
+        
+        let criteria = match sort_option {
+            0 => SortCriteria::TitleAscending,
+            1 => SortCriteria::TitleDescending,
+            2 => SortCriteria::DateCreatedNewest,
+            3 => SortCriteria::DateCreatedOldest,
+            4 => SortCriteria::UsernameAscending,
+            _ => SortCriteria::TitleAscending,
+        };
+        
+        sort_entries(&mut entries, criteria);
+        
+        // Refresh display...
+    });
+    
+    ui.run()
+}
+```
+
+4. Add fuzzy search for better UX:
+```rust
+// Optional: Add fuzzy string matching for typo tolerance
+pub fn fuzzy_search(entries: &[PasswordEntry], query: &str) -> Vec<(usize, f64)> {
+    // Calculate similarity scores using Levenshtein distance
+    // Return entries sorted by relevance score
+}
+```
+
+**Files to Create:**
+- `src/search.rs` - Search and filtering logic
+
+**Files to Modify:**
+- `src/lib.rs` - Add search module
+- `src/main.rs` - Integrate search functionality
+- `src/ui/main.slint` - Add search UI
+- `tests/` - Add search tests
+
+**Testing:**
+- Test search returns correct results
+- Test case-sensitive and case-insensitive search
+- Test search across multiple fields
+- Test empty query returns all entries
+- Test special characters in search query
+- Test sorting by different criteria
+- Performance test with large password databases
+
+**Acceptance Criteria:**
+- [ ] Search functionality implemented
+- [ ] Case-sensitive and case-insensitive options
+- [ ] Search across title and username fields
+- [ ] Sorting by multiple criteria
+- [ ] Real-time search results (as user types)
+- [ ] Display match count and total count
+- [ ] Clear search button
+- [ ] Tests verify search accuracy
+- [ ] Documentation with search usage
+
+**Priority:** 🔵 MEDIUM
+**Estimated Effort:** 4-5 hours
+**Labels:** security, enhancement, ux, usability
+
+---
+
+### Issue 20: 🔵 Add Security Update and Version Check
+
+**Title:** Implement automatic security update notifications
+
+**Description:**
+Users should be notified when security updates or new versions are available. This ensures users stay protected against newly discovered vulnerabilities and benefit from security improvements. The check should be privacy-preserving and not leak usage information.
+
+**Security Impact:**
+- Medium severity (user awareness)
+- Users may run outdated versions with known vulnerabilities
+- No notification of critical security patches
+- Manual update checking is inconvenient
+
+**Current Behavior:**
+- No version checking functionality
+- Users must manually check GitHub for updates
+- No notification of security advisories
+
+**Solution:**
+Implement privacy-preserving version check with security update notifications.
+
+**Implementation Steps:**
+
+1. Create version check module `src/update_checker.rs`:
+```rust
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct VersionInfo {
+    pub latest_version: String,
+    pub release_date: String,
+    pub security_update: bool,
+    pub download_url: String,
+    pub changelog_url: String,
+}
+
+pub struct UpdateChecker {
+    current_version: String,
+    check_url: String,
+}
+
+impl UpdateChecker {
+    pub fn new() -> Self {
+        Self {
+            current_version: env!("CARGO_PKG_VERSION").to_string(),
+            check_url: "https://api.github.com/repos/obstreperous-ai/rust-slint-password-saver/releases/latest".to_string(),
+        }
+    }
+    
+    /// Check for updates (privacy-preserving - no telemetry)
+    pub async fn check_for_updates(&self) -> Result<Option<VersionInfo>, String> {
+        // Make HTTP request to GitHub API
+        // Parse release information
+        // Compare versions
+        // Return update info if newer version available
+        
+        // Example implementation:
+        // let response = reqwest::get(&self.check_url).await?;
+        // let release: GitHubRelease = response.json().await?;
+        // 
+        // if is_newer_version(&release.tag_name, &self.current_version) {
+        //     return Ok(Some(VersionInfo {
+        //         latest_version: release.tag_name,
+        //         security_update: is_security_release(&release),
+        //         ...
+        //     }));
+        // }
+        
+        Ok(None)
+    }
+    
+    /// Parse version string and compare
+    fn is_newer_version(latest: &str, current: &str) -> bool {
+        // Parse semantic version (e.g., "v1.2.3")
+        // Compare major.minor.patch
+        semver::Version::parse(latest.trim_start_matches('v'))
+            .and_then(|latest_ver| {
+                semver::Version::parse(current.trim_start_matches('v'))
+                    .map(|current_ver| latest_ver > current_ver)
+            })
+            .unwrap_or(false)
+    }
+    
+    /// Check if release contains security fixes
+    fn is_security_release(release: &GitHubRelease) -> bool {
+        let body_lower = release.body.to_lowercase();
+        body_lower.contains("security") 
+            || body_lower.contains("vulnerability")
+            || body_lower.contains("cve")
+    }
+}
+
+pub struct UpdateCheckConfig {
+    pub enabled: bool,
+    pub check_interval_days: u64,
+    pub notify_security_only: bool,
+}
+
+impl Default for UpdateCheckConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            check_interval_days: 7,  // Check weekly
+            notify_security_only: false,
+        }
+    }
+}
+```
+
+2. Add update notification UI in `src/ui/main.slint`:
+```slint
+// Update notification banner
+if root.update-available : Rectangle {
+    background: root.is-security-update ? #ff9800 : #2196f3;
+    
+    HorizontalBox {
+        padding: 10px;
+        
+        Text {
+            text: root.is-security-update ? 
+                "⚠️ Security Update Available: " + root.latest-version :
+                "ℹ️ New Version Available: " + root.latest-version;
+            color: white;
+        }
+        
+        Button {
+            text: "View Release";
+            clicked => {
+                root.open-release-page();
+            }
+        }
+        
+        Button {
+            text: "Dismiss";
+            clicked => {
+                root.update-available = false;
+            }
+        }
+    }
+}
+
+// Manual update check button
+Button {
+    text: "Check for Updates";
+    clicked => {
+        root.check-for-updates();
+    }
+}
+```
+
+3. Integrate update checking in `src/main.rs`:
+```rust
+use update_checker::{UpdateChecker, UpdateCheckConfig};
+
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    
+    // Check for updates on startup (non-blocking)
+    let ui_weak = ui.as_weak();
+    std::thread::spawn(move || {
+        let checker = UpdateChecker::new();
+        
+        match checker.check_for_updates() {
+            Ok(Some(update_info)) => {
+                if let Some(ui) = ui_weak.upgrade() {
+                    ui.set_update_available(true);
+                    ui.set_latest_version(update_info.latest_version.into());
+                    ui.set_is_security_update(update_info.security_update);
+                    ui.set_download_url(update_info.download_url.into());
+                }
+            }
+            Ok(None) => {
+                // No update available
+            }
+            Err(e) => {
+                warn!("Failed to check for updates: {}", e);
+            }
+        }
+    });
+    
+    // Manual update check
+    ui.on_check_for_updates(move || {
+        // Trigger update check...
+    });
+    
+    ui.on_open_release_page(move || {
+        // Open browser to release page
+        let url = ui.get_download_url();
+        let _ = webbrowser::open(&url);
+    });
+    
+    ui.run()
+}
+```
+
+4. Add privacy-preserving telemetry option:
+```rust
+// Optional: Anonymous usage statistics (opt-in only)
+pub struct TelemetryConfig {
+    pub enabled: bool,  // Default: false (opt-in)
+    pub anonymous_id: String,  // Random UUID, not linked to user
+}
+```
+
+**Files to Create:**
+- `src/update_checker.rs` - Version checking logic
+
+**Files to Modify:**
+- `Cargo.toml` - Add dependencies (reqwest, semver)
+- `src/lib.rs` - Add update_checker module
+- `src/main.rs` - Integrate update checking
+- `src/ui/main.slint` - Add update notification UI
+- `tests/` - Add version comparison tests
+
+**Testing:**
+- Test version comparison logic
+- Test security release detection
+- Test update notification display
+- Test manual update check
+- Test privacy (no user data sent)
+- Test offline mode (graceful failure)
+
+**Acceptance Criteria:**
+- [ ] Automatic update check on startup
+- [ ] Manual "Check for Updates" button
+- [ ] Visual notification for available updates
+- [ ] Prominent warning for security updates
+- [ ] Link to release notes and download
+- [ ] Privacy-preserving (no user data sent)
+- [ ] Configurable check interval
+- [ ] Tests verify version comparison
+- [ ] Documentation with privacy policy
+
+**Priority:** 🔵 MEDIUM
+**Estimated Effort:** 5-6 hours
+**Labels:** security, enhancement, updates, maintenance
+
+---
+
+### Issue 21: 🔵 Implement Emergency Access and Account Recovery
+
+**Title:** Add emergency access mechanism for account recovery
+
+**Description:**
+Users may lose access to their password database due to forgotten master passwords, corrupted files, or other emergencies. An emergency recovery mechanism would help users regain access while maintaining security. This could include recovery codes, backup questions, or split-key recovery.
+
+**Security Impact:**
+- Medium severity (availability vs security tradeoff)
+- Lost master password = complete data loss
+- No recovery mechanism forces users to write down master passwords
+- Recovery mechanism must not weaken overall security
+
+**Current Behavior:**
+- No recovery mechanism
+- Forgotten master password = permanent data loss
+- No emergency access options
+
+**Solution:**
+Implement secure emergency recovery using recovery codes or split-key approach.
+
+**Implementation Steps:**
+
+1. Create recovery module `src/recovery.rs`:
+```rust
+use rand::Rng;
+use sha2::{Sha256, Digest};
+
+pub struct RecoveryCode {
+    code: String,
+    hash: String,  // Hash of code for verification
+}
+
+impl RecoveryCode {
+    /// Generate cryptographically secure recovery code
+    pub fn generate() -> Self {
+        let mut rng = rand::thread_rng();
+        
+        // Generate 6 words from word list (like BIP39)
+        // Or 12-16 random characters
+        let code = (0..16)
+            .map(|_| {
+                let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+                let idx = rng.gen_range(0..chars.len());
+                chars.chars().nth(idx).unwrap()
+            })
+            .collect::<String>();
+        
+        // Format as XXXX-XXXX-XXXX-XXXX
+        let formatted = format!(
+            "{}-{}-{}-{}",
+            &code[0..4],
+            &code[4..8],
+            &code[8..12],
+            &code[12..16]
+        );
+        
+        // Hash for verification
+        let mut hasher = Sha256::new();
+        hasher.update(formatted.as_bytes());
+        let hash = hex::encode(hasher.finalize());
+        
+        Self {
+            code: formatted,
+            hash,
+        }
+    }
+    
+    /// Verify recovery code matches hash
+    pub fn verify(&self, input: &str) -> bool {
+        let mut hasher = Sha256::new();
+        hasher.update(input.as_bytes());
+        let input_hash = hex::encode(hasher.finalize());
+        
+        input_hash == self.hash
+    }
+}
+
+pub struct EmergencyRecovery {
+    recovery_codes: Vec<RecoveryCode>,
+    recovery_master_key: Option<Vec<u8>>,
+}
+
+impl EmergencyRecovery {
+    /// Create emergency recovery during initial setup
+    pub fn create(master_password: &str) -> Self {
+        // Generate recovery codes
+        let codes: Vec<RecoveryCode> = (0..3).map(|_| RecoveryCode::generate()).collect();
+        
+        // Derive recovery key from recovery codes
+        // This key can decrypt the database if master password is lost
+        let recovery_master_key = derive_recovery_key(&codes);
+        
+        Self {
+            recovery_codes: codes,
+            recovery_master_key: Some(recovery_master_key),
+        }
+    }
+    
+    /// Verify recovery code and provide access
+    pub fn recover_access(&self, code: &str) -> Result<Vec<u8>, String> {
+        // Verify code matches one of the recovery codes
+        if self.recovery_codes.iter().any(|rc| rc.verify(code)) {
+            self.recovery_master_key.clone()
+                .ok_or_else(|| "No recovery key available".to_string())
+        } else {
+            Err("Invalid recovery code".to_string())
+        }
+    }
+}
+
+fn derive_recovery_key(codes: &[RecoveryCode]) -> Vec<u8> {
+    // Combine recovery codes to derive key
+    // Use KDF to generate recovery key
+    let combined = codes.iter()
+        .map(|c| c.code.as_str())
+        .collect::<Vec<&str>>()
+        .join("");
+    
+    let mut hasher = Sha256::new();
+    hasher.update(combined.as_bytes());
+    hasher.finalize().to_vec()
+}
+```
+
+2. Add recovery setup UI in `src/ui/main.slint`:
+```slint
+// First-time setup: show recovery codes
+if root.show-recovery-setup : Rectangle {
+    VerticalBox {
+        Text {
+            text: "⚠️ Important: Save Your Recovery Codes";
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        Text {
+            text: "Write down these recovery codes and store them securely.\nYou will need them if you forget your master password.";
+        }
+        
+        // Display recovery codes
+        Rectangle {
+            background: #f5f5f5;
+            border-radius: 4px;
+            
+            VerticalBox {
+                padding: 20px;
+                
+                Text {
+                    text: "Recovery Code 1: " + root.recovery-code-1;
+                    font-family: "monospace";
+                }
+                Text {
+                    text: "Recovery Code 2: " + root.recovery-code-2;
+                    font-family: "monospace";
+                }
+                Text {
+                    text: "Recovery Code 3: " + root.recovery-code-3;
+                    font-family: "monospace";
+                }
+            }
+        }
+        
+        HorizontalBox {
+            Button {
+                text: "📋 Copy All Codes";
+                clicked => {
+                    root.copy-recovery-codes();
+                }
+            }
+            
+            Button {
+                text: "🖨️ Print Codes";
+                clicked => {
+                    root.print-recovery-codes();
+                }
+            }
+        }
+        
+        CheckBox {
+            text: "I have saved my recovery codes in a secure location";
+            checked <=> root.recovery-codes-confirmed;
+        }
+        
+        Button {
+            text: "Continue";
+            enabled: root.recovery-codes-confirmed;
+            primary: true;
+            clicked => {
+                root.show-recovery-setup = false;
+            }
+        }
+    }
+}
+
+// Recovery mode login
+if root.show-recovery-login : Rectangle {
+    VerticalBox {
+        Text {
+            text: "Emergency Recovery";
+            font-size: 20px;
+        }
+        
+        Text {
+            text: "Enter one of your recovery codes to regain access:";
+        }
+        
+        recovery-code-input := LineEdit {
+            placeholder-text: "XXXX-XXXX-XXXX-XXXX";
+        }
+        
+        Button {
+            text: "Recover Access";
+            clicked => {
+                root.recover-with-code(recovery-code-input.text);
+            }
+        }
+    }
+}
+```
+
+3. Integrate recovery in `src/main.rs`:
+```rust
+use recovery::{EmergencyRecovery, RecoveryCode};
+
+fn main() -> Result<(), slint::PlatformError> {
+    let ui = AppWindow::new()?;
+    let storage_path = get_storage_path();
+    let storage = PasswordStorage::new(storage_path);
+    
+    // On first use: generate and display recovery codes
+    if !storage.exists() {
+        let recovery = EmergencyRecovery::create(&master_password);
+        
+        // Display recovery codes to user
+        ui.set_show_recovery_setup(true);
+        ui.set_recovery_code_1(recovery.recovery_codes[0].code.clone().into());
+        ui.set_recovery_code_2(recovery.recovery_codes[1].code.clone().into());
+        ui.set_recovery_code_3(recovery.recovery_codes[2].code.clone().into());
+        
+        // Store recovery hashes with encrypted data
+        // (encrypted separately with recovery key)
+    }
+    
+    // "Forgot Password?" link in UI
+    ui.on_show_recovery(move || {
+        ui.set_show_recovery_login(true);
+    });
+    
+    ui.on_recover_with_code(move |code| {
+        match recovery.recover_access(&code) {
+            Ok(recovery_key) => {
+                // Use recovery key to decrypt database
+                // Allow user to set new master password
+                ui.set_status_message("Recovery successful! Please set a new master password.".into());
+            }
+            Err(e) => {
+                ui.set_status_message(format!("Recovery failed: {}", e).into());
+            }
+        }
+    });
+    
+    ui.run()
+}
+```
+
+**Files to Create:**
+- `src/recovery.rs` - Emergency recovery logic
+
+**Files to Modify:**
+- `src/lib.rs` - Add recovery module
+- `src/main.rs` - Integrate recovery functionality
+- `src/storage.rs` - Store recovery data
+- `src/ui/main.slint` - Add recovery UI
+- `tests/` - Add recovery tests
+
+**Testing:**
+- Test recovery code generation
+- Test recovery code verification
+- Test successful account recovery
+- Test invalid recovery code rejection
+- Test recovery code display and copy
+- Verify security of recovery mechanism
+
+**Acceptance Criteria:**
+- [ ] Recovery code generation on first use
+- [ ] Display and storage of recovery codes
+- [ ] Recovery UI for forgotten master password
+- [ ] Account recovery with valid code
+- [ ] Option to regenerate recovery codes
+- [ ] Print/save recovery codes
+- [ ] Tests verify recovery mechanism security
+- [ ] Documentation with recovery procedures
+
+**Priority:** 🟡 MEDIUM-HIGH
+**Estimated Effort:** 6-8 hours
+**Labels:** security, enhancement, recovery, availability
+
+**Security Notes:**
+- Recovery codes must be as strong as master password
+- Users must store recovery codes securely (not in password manager!)
+- Consider limiting recovery attempts to prevent brute force
+- Recovery mechanism must not weaken overall security
+
+---
+
 ## Reporting Security Vulnerabilities
 
 ### Responsible Disclosure
@@ -1472,6 +4032,26 @@ Always test:
 
 ## Changelog
 
+### 2026-02-10 - Security Properties Expansion
+
+- Conducted comprehensive security review of all aspects
+- Identified 11 additional missing security properties
+- Added 11 new detailed actionable items (Issues #11-#21):
+  - Timing attack protection
+  - Windows file permissions
+  - Secure file deletion
+  - Session timeout and auto-lock
+  - Clipboard security
+  - Password generator
+  - Backup and export functionality
+  - Database integrity verification
+  - Password search and filtering
+  - Security update notifications
+  - Emergency access and recovery
+- Each item formatted as complete GitHub issue with implementation guidance
+- All items designed for agentic development workflows
+- Updated security status summary with new missing items
+
 ### 2026-02-08 - Initial Security Review
 
 - Conducted comprehensive security audit
@@ -1482,6 +4062,6 @@ Always test:
 
 ---
 
-**Last Updated:** 2026-02-08  
-**Security Audit Status:** ⚠️ FAILING (1 critical issue)  
-**Next Review Date:** 2026-03-08
+**Last Updated:** 2026-02-10  
+**Security Audit Status:** ⚠️ PASSING (0 critical issues, 2 non-critical warnings, 11 enhancement opportunities)  
+**Next Review Date:** 2026-03-10
