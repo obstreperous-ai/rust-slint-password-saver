@@ -23,7 +23,7 @@
 //! let mut clipboard = SecureClipboard::new(config.clear_timeout_seconds).unwrap();
 //!
 //! // Copy password with auto-clear after 30 seconds
-//! clipboard.copy_with_autoclear("MySecretPassword123!".to_string()).unwrap();
+//! clipboard.copy_with_autoclear("MySecretPassword123!").unwrap();
 //! ```
 
 use arboard::Clipboard;
@@ -83,18 +83,18 @@ impl SecureClipboard {
     /// use rust_slint_password_saver::clipboard::SecureClipboard;
     ///
     /// let mut clipboard = SecureClipboard::new(30).unwrap();
-    /// clipboard.copy_with_autoclear("MyPassword123!".to_string()).unwrap();
+    /// clipboard.copy_with_autoclear("MyPassword123!").unwrap();
     /// // Clipboard will be cleared after 30 seconds if content hasn't changed
     /// ```
-    pub fn copy_with_autoclear(&mut self, text: String) -> Result<(), String> {
+    pub fn copy_with_autoclear(&mut self, text: &str) -> Result<(), String> {
         // Copy to clipboard
         self.clipboard
-            .set_text(&text)
+            .set_text(text)
             .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
 
         // Spawn thread to clear clipboard after timeout
         let clear_timeout = self.clear_timeout;
-        let text_to_clear = text.clone();
+        let text_to_clear = text.to_string();
 
         thread::spawn(move || {
             thread::sleep(clear_timeout);
@@ -129,6 +129,7 @@ impl SecureClipboard {
     /// let mut clipboard = SecureClipboard::new(30).unwrap();
     /// clipboard.clear().unwrap();
     /// ```
+    #[allow(dead_code)] // Part of public API, may be used in future
     pub fn clear(&mut self) -> Result<(), String> {
         self.clipboard
             .set_text("")
@@ -137,6 +138,7 @@ impl SecureClipboard {
 }
 
 /// Configuration for clipboard security
+#[allow(dead_code)] // Part of public API, may be used in future
 pub struct ClipboardConfig {
     /// Whether auto-clear is enabled
     pub auto_clear_enabled: bool,

@@ -57,11 +57,11 @@ fn test_clipboard_config_various_timeouts() {
 // in CI environments without display servers.
 
 #[test]
-#[ignore] // Ignored by default as it requires display server
+#[ignore = "Requires display server - only run manually"]
 fn test_clipboard_initialization_with_display() {
     // This test should only be run manually on systems with clipboard support
     let result = SecureClipboard::new(30);
-    
+
     // In environments with clipboard support, this should succeed
     // In headless environments, this will fail with an error
     match result {
@@ -69,7 +69,10 @@ fn test_clipboard_initialization_with_display() {
             println!("Clipboard initialized successfully");
         }
         Err(e) => {
-            println!("Clipboard initialization failed (expected in headless environment): {}", e);
+            println!(
+                "Clipboard initialization failed (expected in headless environment): {}",
+                e
+            );
         }
     }
 }
@@ -80,19 +83,31 @@ fn test_clipboard_error_messages_are_informative() {
     // We can't actually trigger clipboard errors reliably, but we can
     // verify that the error handling structure is in place by checking
     // that the module compiles and basic instantiation works
-    
+
     // Attempt to create clipboard - may succeed or fail depending on environment
-    let _ = SecureClipboard::new(30);
-    
-    // If we get here, error handling is at least syntactically correct
-    assert!(true, "Error handling structure is valid");
+    let result = SecureClipboard::new(30);
+
+    // Verify that result is either Ok or contains an error message
+    match result {
+        Ok(_) => {
+            // Clipboard initialized successfully
+        }
+        Err(e) => {
+            // Error message should be non-empty and informative
+            assert!(!e.is_empty(), "Error message should not be empty");
+            assert!(
+                e.contains("clipboard") || e.contains("Clipboard"),
+                "Error message should mention clipboard"
+            );
+        }
+    }
 }
 
 #[test]
 fn test_clipboard_timeout_bounds() {
     // Test that various timeout values are accepted
     let timeouts = vec![1, 10, 30, 60, 120, 300, 600];
-    
+
     for timeout in timeouts {
         let config = ClipboardConfig {
             auto_clear_enabled: true,

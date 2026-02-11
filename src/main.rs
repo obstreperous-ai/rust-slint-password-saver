@@ -396,7 +396,9 @@ fn main() -> Result<(), slint::PlatformError> {
                         *clipboard_guard = Some(clipboard);
                     }
                     Err(e) => {
-                        ui.set_status_message(format!("Failed to initialize clipboard: {}", e).into());
+                        ui.set_status_message(
+                            format!("Failed to initialize clipboard: {}", e).into(),
+                        );
                         return;
                     }
                 }
@@ -404,7 +406,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
             // Copy password to clipboard with auto-clear
             if let Some(clipboard) = clipboard_guard.as_mut() {
-                match clipboard.copy_with_autoclear(password.to_string()) {
+                match clipboard.copy_with_autoclear(&password) {
                     Ok(()) => {
                         ui.set_status_message(
                             format!(
