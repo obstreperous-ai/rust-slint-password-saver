@@ -70,6 +70,10 @@ lazy_static! {
 /// Maximum number of password entries to display in status message
 const MAX_DISPLAY_ENTRIES: usize = 5;
 
+/// Status message for generated password copied to clipboard
+const GENERATED_PASSWORD_COPIED_MESSAGE: &str =
+    "Generated password copied to clipboard. Paste it into the Password field.";
+
 /// Get cross-platform path for storing encrypted passwords.
 ///
 /// This function determines the appropriate location for password storage
@@ -488,9 +492,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // Find the password input field in the "Add New Password" section
             // We need to set it through a property or find another way
             // For now, we'll just copy to clipboard and show a message
-            ui.set_status_message(
-                "Generated password copied to clipboard. Paste it into the Password field.".into()
-            );
+            ui.set_status_message(GENERATED_PASSWORD_COPIED_MESSAGE.into());
 
             // Copy to clipboard
             let mut clipboard_guard = CLIPBOARD.lock().unwrap();
@@ -511,9 +513,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(clipboard) = clipboard_guard.as_mut() {
                 match clipboard.copy_with_autoclear(&password) {
                     Ok(()) => {
-                        ui.set_status_message(
-                            "Generated password copied to clipboard. Paste it into the Password field.".into()
-                        );
+                        ui.set_status_message(GENERATED_PASSWORD_COPIED_MESSAGE.into());
                     }
                     Err(e) => {
                         ui.set_status_message(format!("Failed to copy password: {}", e).into());
