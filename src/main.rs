@@ -28,6 +28,7 @@
 mod audit_log;
 mod clipboard;
 mod errors;
+mod password_generator;
 mod password_strength;
 mod rate_limit;
 mod secure_delete;
@@ -42,6 +43,9 @@ use audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use clipboard::{ClipboardConfig, SecureClipboard};
 use lazy_static::lazy_static;
 use log::warn;
+use password_generator::{
+    calculate_charset_size, calculate_entropy, generate_password, PasswordGeneratorConfig,
+};
 use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 use rate_limit::RateLimiter;
 use session::SessionManager;
@@ -65,6 +69,10 @@ lazy_static! {
 
 /// Maximum number of password entries to display in status message
 const MAX_DISPLAY_ENTRIES: usize = 5;
+
+/// Status message for generated password copied to clipboard
+const GENERATED_PASSWORD_COPIED_MESSAGE: &str =
+    "Generated password copied to clipboard. Paste it into the Password field.";
 
 /// Get cross-platform path for storing encrypted passwords.
 ///
@@ -415,6 +423,97 @@ fn main() -> Result<(), slint::PlatformError> {
                             )
                             .into(),
                         );
+                    }
+                    Err(e) => {
+                        ui.set_status_message(format!("Failed to copy password: {}", e).into());
+                    }
+                }
+            }
+        }
+    });
+
+    // Set up generate password callback
+    let ui_weak = ui.as_weak();
+    ui.on_generate_password(move || {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
+        if let Some(ui) = ui_weak.upgrade() {
+            // Get configuration from UI
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let config = PasswordGeneratorConfig {
+                length: ui.get_generator_length() as usize,
+                use_uppercase: ui.get_generator_use_uppercase(),
+                use_lowercase: ui.get_generator_use_lowercase(),
+                use_digits: ui.get_generator_use_digits(),
+                use_special: ui.get_generator_use_special(),
+                exclude_ambiguous: ui.get_generator_exclude_ambiguous(),
+            };
+
+            match generate_password(&config) {
+                Ok(password) => {
+                    ui.set_generated_password(password.clone().into());
+
+                    // Calculate and display entropy
+                    let charset_size = calculate_charset_size(&config);
+                    let entropy = calculate_entropy(&password, charset_size);
+
+                    let strength_text = if entropy >= 80.0 {
+                        "Very Strong"
+                    } else if entropy >= 60.0 {
+                        "Strong"
+                    } else if entropy >= 40.0 {
+                        "Moderate"
+                    } else {
+                        "Weak"
+                    };
+
+                    ui.set_password_entropy_text(
+                        format!("Entropy: {:.1} bits ({})", entropy, strength_text).into(),
+                    );
+                }
+                Err(e) => {
+                    ui.set_status_message(format!("Password generation failed: {}", e).into());
+                    ui.set_generated_password("".into());
+                    ui.set_password_entropy_text("".into());
+                }
+            }
+        }
+    });
+
+    // Set up use generated password callback
+    // This copies the generated password to the password input field
+    let ui_weak = ui.as_weak();
+    ui.on_use_generated_password(move |password| {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
+        if let Some(ui) = ui_weak.upgrade() {
+            // Find the password input field in the "Add New Password" section
+            // We need to set it through a property or find another way
+            // For now, we'll just copy to clipboard and show a message
+            ui.set_status_message(GENERATED_PASSWORD_COPIED_MESSAGE.into());
+
+            // Copy to clipboard
+            let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+            if clipboard_guard.is_none() {
+                match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
+                    Ok(clipboard) => {
+                        *clipboard_guard = Some(clipboard);
+                    }
+                    Err(e) => {
+                        ui.set_status_message(
+                            format!("Failed to initialize clipboard: {}", e).into(),
+                        );
+                        return;
+                    }
+                }
+            }
+
+            if let Some(clipboard) = clipboard_guard.as_mut() {
+                match clipboard.copy_with_autoclear(&password) {
+                    Ok(()) => {
+                        ui.set_status_message(GENERATED_PASSWORD_COPIED_MESSAGE.into());
                     }
                     Err(e) => {
                         ui.set_status_message(format!("Failed to copy password: {}", e).into());

@@ -1,4 +1,4 @@
-import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox } from "std-widgets.slint";
+import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox, CheckBox, Slider } from "std-widgets.slint";
 
 export component AppWindow inherits Window {
     title: "Password Saver";
@@ -11,12 +11,24 @@ export component AppWindow inherits Window {
     in-out property <bool> is-locked: false;
     in-out property <int> seconds-until-lock: 0;
     
+    // Password generator properties
+    in-out property <float> generator-length: 16;
+    in-out property <bool> generator-use-uppercase: true;
+    in-out property <bool> generator-use-lowercase: true;
+    in-out property <bool> generator-use-digits: true;
+    in-out property <bool> generator-use-special: true;
+    in-out property <bool> generator-exclude-ambiguous: true;
+    in-out property <string> generated-password: "";
+    in-out property <string> password-entropy-text: "";
+    
     callback save-password(string, string, string, string);
     callback load-passwords(string);
     callback change-master-password(string, string, string);
     callback unlock(string);
     callback lock-session();
     callback copy-password(string);
+    callback generate-password();
+    callback use-generated-password(string);
     
     VerticalBox {
         padding: 20px;
@@ -132,6 +144,109 @@ export component AppWindow inherits Window {
                             root.show-change-password-dialog = true;
                         }
                     }
+                }
+            }
+        }
+        
+        GroupBox {
+            title: "Password Generator";
+            
+            VerticalBox {
+                spacing: 10px;
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    Text {
+                        text: "Length:";
+                        min-width: 100px;
+                        vertical-alignment: center;
+                    }
+                    Slider {
+                        minimum: 8;
+                        maximum: 32;
+                        value <=> root.generator-length;
+                        min-width: 150px;
+                    }
+                    Text {
+                        text: root.generator-length;
+                        min-width: 30px;
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    CheckBox {
+                        text: "Uppercase (A-Z)";
+                        checked <=> root.generator-use-uppercase;
+                    }
+                    CheckBox {
+                        text: "Lowercase (a-z)";
+                        checked <=> root.generator-use-lowercase;
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    CheckBox {
+                        text: "Digits (0-9)";
+                        checked <=> root.generator-use-digits;
+                    }
+                    CheckBox {
+                        text: "Special (!@#$...)";
+                        checked <=> root.generator-use-special;
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    CheckBox {
+                        text: "Exclude ambiguous (0,O,I,i,l,o,1)";
+                        checked <=> root.generator-exclude-ambiguous;
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 5px;
+                    
+                    generated-password-display := LineEdit {
+                        placeholder-text: "Generated password will appear here";
+                        read-only: true;
+                        text <=> root.generated-password;
+                        min-width: 250px;
+                    }
+                    
+                    Button {
+                        text: "🔄 Generate";
+                        clicked => {
+                            root.generate-password();
+                        }
+                    }
+                    
+                    Button {
+                        text: "📋 Copy";
+                        enabled: root.generated-password != "";
+                        clicked => {
+                            root.copy-password(root.generated-password);
+                        }
+                    }
+                    
+                    Button {
+                        text: "✓ Use";
+                        enabled: root.generated-password != "";
+                        clicked => {
+                            root.use-generated-password(root.generated-password);
+                        }
+                    }
+                }
+                
+                if root.password-entropy-text != "" : Text {
+                    text: root.password-entropy-text;
+                    font-size: 12px;
+                    color: #4caf50;
                 }
             }
         }
