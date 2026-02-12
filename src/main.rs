@@ -28,6 +28,7 @@
 mod audit_log;
 mod clipboard;
 mod errors;
+mod password_generator;
 mod password_strength;
 mod rate_limit;
 mod secure_delete;
