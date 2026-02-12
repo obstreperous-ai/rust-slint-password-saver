@@ -50,6 +50,7 @@
 //! ```
 
 pub mod audit_log;
+pub mod backup;
 pub mod clipboard;
 pub mod errors;
 pub mod password_generator;
