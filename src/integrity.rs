@@ -39,6 +39,16 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 
+/// Minimum size in bytes for a valid database file.
+///
+/// Files smaller than this are considered suspiciously truncated and likely corrupted.
+/// A valid encrypted database contains at least:
+/// - JSON structure overhead (~50 bytes)
+/// - Salt field (16 bytes base64-encoded ~24 bytes)
+/// - Nonce field (12 bytes base64-encoded ~16 bytes)
+/// - Encrypted data field (minimum viable encrypted entry ~30+ bytes)
+const MIN_VALID_DATABASE_SIZE: usize = 100;
+
 /// Database integrity checker that verifies file integrity and detects corruption.
 ///
 /// This structure provides methods to calculate checksums, verify integrity,
@@ -208,7 +218,7 @@ impl IntegrityChecker {
 
         // Check for truncation (incomplete write)
         let file_size = data.len();
-        let appears_truncated = data.len() < 100; // Suspiciously small
+        let appears_truncated = data.len() < MIN_VALID_DATABASE_SIZE;
 
         // Check for null bytes (corruption indicator)
         let has_null_bytes = data.contains(&0);

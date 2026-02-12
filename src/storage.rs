@@ -597,8 +597,9 @@ impl PasswordStorage {
         let report = self.verify_integrity()?;
 
         if !report.is_healthy() {
-            warn!("Database integrity issues detected: {:?}", report.issues());
-            return Err(SecurityError::CryptographicError);
+            let issues = report.issues();
+            warn!("Database integrity issues detected: {:?}", issues);
+            return Err(SecurityError::IntegrityError(issues.join(", ")));
         }
 
         // Initialize audit logger
