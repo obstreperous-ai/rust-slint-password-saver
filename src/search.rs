@@ -48,23 +48,21 @@ pub fn search_entries(
         .enumerate()
         .filter(|(_, entry)| {
             let matches_title = if config.search_title {
-                let title = if config.case_sensitive {
-                    entry.title.clone()
+                if config.case_sensitive {
+                    entry.title.contains(&query)
                 } else {
-                    entry.title.to_lowercase()
-                };
-                title.contains(&query)
+                    entry.title.to_lowercase().contains(&query)
+                }
             } else {
                 false
             };
 
             let matches_username = if config.search_username {
-                let username = if config.case_sensitive {
-                    entry.username.clone()
+                if config.case_sensitive {
+                    entry.username.contains(&query)
                 } else {
-                    entry.username.to_lowercase()
-                };
-                username.contains(&query)
+                    entry.username.to_lowercase().contains(&query)
+                }
             } else {
                 false
             };

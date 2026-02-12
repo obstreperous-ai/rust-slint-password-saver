@@ -344,15 +344,17 @@ fn main() -> Result<(), slint::PlatformError> {
 
                     let count = entries.len();
                     
-                    // Store entries in memory for search/filter
+                    // Store entries in memory for search/filter operations
+                    // We need a full clone to maintain a searchable cache
                     {
                         let mut loaded = loaded_entries_clone.lock().unwrap();
                         loaded.clone_from(&entries);
                     }
                     
-                    // Update UI with counts
-                    ui.set_total_count(count.try_into().unwrap_or(i32::MAX));
-                    ui.set_filtered_count(count.try_into().unwrap_or(i32::MAX));
+                    // Update UI with counts (cap at 999999 for display purposes)
+                    let max_display = 999_999;
+                    ui.set_total_count(count.try_into().unwrap_or(max_display));
+                    ui.set_filtered_count(count.try_into().unwrap_or(max_display));
                     
                     let mut message = format!("Loaded {} password(s):\n", count);
 
@@ -578,9 +580,10 @@ fn main() -> Result<(), slint::PlatformError> {
             let config = SearchConfig::default();
             let matching_indices = search_entries(&entries, query.as_str(), &config);
             
-            // Update UI with filtered count
-            let filtered_count: i32 = matching_indices.len().try_into().unwrap_or(i32::MAX);
-            let total_count: i32 = entries.len().try_into().unwrap_or(i32::MAX);
+            // Update UI with filtered count (cap at 999999 for display purposes)
+            let max_display = 999_999;
+            let filtered_count: i32 = matching_indices.len().try_into().unwrap_or(max_display);
+            let total_count: i32 = entries.len().try_into().unwrap_or(max_display);
             
             ui.set_filtered_count(filtered_count);
             ui.set_total_count(total_count);
