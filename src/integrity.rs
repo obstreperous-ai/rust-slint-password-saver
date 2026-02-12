@@ -19,7 +19,7 @@
 //! use std::path::PathBuf;
 //!
 //! let checker = IntegrityChecker::new(PathBuf::from("passwords.enc"));
-//! 
+//!
 //! // Check for corruption
 //! let report = checker.check_corruption().unwrap();
 //! if report.is_healthy() {
@@ -34,7 +34,6 @@
 //! ```
 
 use crate::errors::SecurityError;
-use hex;
 use log::warn;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -53,7 +52,7 @@ use std::path::PathBuf;
 ///
 /// let checker = IntegrityChecker::new(PathBuf::from("passwords.enc"));
 /// let report = checker.check_corruption().unwrap();
-/// 
+///
 /// if !report.is_healthy() {
 ///     eprintln!("Corruption detected: {:?}", report.issues());
 /// }
@@ -145,7 +144,7 @@ impl IntegrityChecker {
     ///
     /// let checker = IntegrityChecker::new(PathBuf::from("passwords.enc"));
     /// let checksum = checker.calculate_checksum().unwrap();
-    /// 
+    ///
     /// // Later, verify the file hasn't changed
     /// assert!(checker.verify_integrity(&checksum).unwrap());
     /// ```
@@ -159,7 +158,7 @@ impl IntegrityChecker {
     ///
     /// This method performs comprehensive checks for various corruption indicators:
     /// - Validates JSON structure
-    /// - Checks for required fields (salt, nonce, encrypted_data)
+    /// - Checks for required fields (salt, nonce, `encrypted_data`)
     /// - Detects file truncation (suspiciously small files)
     /// - Checks for null bytes (corruption indicator)
     ///
@@ -192,26 +191,37 @@ impl IntegrityChecker {
             SecurityError::StorageError
         })?;
 
-        let mut report = CorruptionReport::default();
-
         // Check if file is valid JSON
-        report.valid_json = serde_json::from_slice::<serde_json::Value>(&data).is_ok();
+        let valid_json = serde_json::from_slice::<serde_json::Value>(&data).is_ok();
 
         // Check if file has expected structure
-        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&data) {
-            report.has_salt = json.get("salt").is_some();
-            report.has_nonce = json.get("nonce").is_some();
-            report.has_encrypted_data = json.get("encrypted_data").is_some();
-        }
+        let (has_salt, has_nonce, has_encrypted_data) =
+            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&data) {
+                (
+                    json.get("salt").is_some(),
+                    json.get("nonce").is_some(),
+                    json.get("encrypted_data").is_some(),
+                )
+            } else {
+                (false, false, false)
+            };
 
         // Check for truncation (incomplete write)
-        report.file_size = data.len();
-        report.appears_truncated = data.len() < 100; // Suspiciously small
+        let file_size = data.len();
+        let appears_truncated = data.len() < 100; // Suspiciously small
 
         // Check for null bytes (corruption indicator)
-        report.has_null_bytes = data.contains(&0);
+        let has_null_bytes = data.contains(&0);
 
-        Ok(report)
+        Ok(CorruptionReport {
+            valid_json,
+            has_salt,
+            has_nonce,
+            has_encrypted_data,
+            file_size,
+            appears_truncated,
+            has_null_bytes,
+        })
     }
 }
 
@@ -240,6 +250,7 @@ impl IntegrityChecker {
 /// }
 /// ```
 #[derive(Default, Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CorruptionReport {
     /// Whether the file contains valid JSON
     pub valid_json: bool,
@@ -247,7 +258,7 @@ pub struct CorruptionReport {
     pub has_salt: bool,
     /// Whether the file has a nonce field
     pub has_nonce: bool,
-    /// Whether the file has an encrypted_data field
+    /// Whether the file has an `encrypted_data` field
     pub has_encrypted_data: bool,
     /// Size of the file in bytes
     pub file_size: usize,
@@ -262,7 +273,7 @@ impl CorruptionReport {
     ///
     /// A file is considered healthy if:
     /// - It is valid JSON
-    /// - It has all required fields (salt, nonce, encrypted_data)
+    /// - It has all required fields (salt, nonce, `encrypted_data`)
     /// - It doesn't appear truncated
     /// - It doesn't contain null bytes
     ///
@@ -345,8 +356,6 @@ impl CorruptionReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
-    use std::io::Write;
     use tempfile::TempDir;
 
     #[test]
@@ -493,9 +502,7 @@ mod tests {
 
         assert!(!report.is_healthy());
         let issues = report.issues();
-        assert!(issues
-            .iter()
-            .any(|i| i.contains("unexpected null bytes")));
+        assert!(issues.iter().any(|i| i.contains("unexpected null bytes")));
     }
 
     #[test]

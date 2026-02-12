@@ -152,7 +152,10 @@ fn main() -> Result<(), slint::PlatformError> {
         match storage.verify_integrity() {
             Ok(report) if !report.is_healthy() => {
                 let issues_str = report.issues().join(", ");
-                warn!("Database integrity issues detected on startup: {}", issues_str);
+                warn!(
+                    "Database integrity issues detected on startup: {}",
+                    issues_str
+                );
                 ui.set_status_message(
                     format!("⚠️ Database integrity warning: {}", issues_str).into(),
                 );

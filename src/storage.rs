@@ -712,7 +712,7 @@ impl PasswordStorage {
     /// This method performs comprehensive corruption detection checks on the
     /// storage file, including:
     /// - JSON validity
-    /// - Presence of required fields (salt, nonce, encrypted_data)
+    /// - Presence of required fields (salt, nonce, `encrypted_data`)
     /// - File truncation detection
     /// - Null byte detection
     ///
