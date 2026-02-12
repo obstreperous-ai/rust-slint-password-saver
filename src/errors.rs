@@ -165,7 +165,9 @@ mod tests {
 
     #[test]
     fn test_integrity_error_message() {
-        let error = SecurityError::IntegrityError("Missing salt field, File appears truncated (only 50 bytes)".to_string());
+        let error = SecurityError::IntegrityError(
+            "Missing salt field, File appears truncated (only 50 bytes)".to_string(),
+        );
         assert_eq!(
             error.user_message(),
             "Database integrity check failed: Missing salt field, File appears truncated (only 50 bytes)"
