@@ -297,9 +297,10 @@ impl BackupManager {
     ///
     /// ```no_run
     /// use rust_slint_password_saver::backup::BackupManager;
-    /// use std::path::Path;
+    /// use std::path::PathBuf;
     ///
-    /// let backups = BackupManager::list_backups(Path::new("~/.password_saver/backups")).unwrap();
+    /// let backup_dir = PathBuf::from("/home/user/.password_saver/backups");
+    /// let backups = BackupManager::list_backups(&backup_dir).unwrap();
     /// for backup in backups {
     ///     println!("Backup: {}", backup.display());
     /// }
@@ -383,9 +384,7 @@ mod tests {
 
         // Create backup
         let manager = BackupManager::new(storage);
-        manager
-            .create_backup("TestPass123", &backup_path)
-            .unwrap();
+        manager.create_backup("TestPass123", &backup_path).unwrap();
 
         // Verify backup file exists
         assert!(backup_path.exists());
