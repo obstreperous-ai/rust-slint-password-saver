@@ -2,6 +2,7 @@ use crate::storage::PasswordEntry;
 
 /// Configuration for search behavior
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SearchConfig {
     pub case_sensitive: bool,
     pub search_title: bool,
@@ -25,6 +26,7 @@ impl Default for SearchConfig {
 /// 
 /// Returns indices of matching entries to avoid timing attacks
 /// that could leak information about entry count
+#[must_use]
 pub fn search_entries(
     entries: &[PasswordEntry],
     query: &str,
@@ -150,8 +152,10 @@ mod tests {
             create_test_entry("GitHub", "gituser", "pass2", 2000),
         ];
 
-        let mut config = SearchConfig::default();
-        config.case_sensitive = true;
+        let config = SearchConfig {
+            case_sensitive: true,
+            ..Default::default()
+        };
         let results = search_entries(&entries, "gmail", &config);
 
         assert_eq!(results.len(), 0);
@@ -298,8 +302,10 @@ mod tests {
             create_test_entry("GitHub", "gmail_user", "pass2", 2000),
         ];
 
-        let mut config = SearchConfig::default();
-        config.search_username = false;
+        let config = SearchConfig {
+            search_username: false,
+            ..Default::default()
+        };
         let results = search_entries(&entries, "gmail", &config);
 
         assert_eq!(results, vec![0]); // Only matches title, not username
@@ -312,8 +318,10 @@ mod tests {
             create_test_entry("GitHub", "gmail_user", "pass2", 2000),
         ];
 
-        let mut config = SearchConfig::default();
-        config.search_title = false;
+        let config = SearchConfig {
+            search_title: false,
+            ..Default::default()
+        };
         let results = search_entries(&entries, "gmail", &config);
 
         assert_eq!(results, vec![1]); // Only matches username, not title

@@ -347,7 +347,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     // Store entries in memory for search/filter
                     {
                         let mut loaded = loaded_entries_clone.lock().unwrap();
-                        *loaded = entries.clone();
+                        loaded.clone_from(&entries);
                     }
                     
                     // Update UI with counts
@@ -576,7 +576,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let entries = loaded_entries_clone.lock().unwrap();
             
             let config = SearchConfig::default();
-            let matching_indices = search_entries(&entries, &query.to_string(), &config);
+            let matching_indices = search_entries(&entries, query.as_str(), &config);
             
             // Update UI with filtered count
             let filtered_count: i32 = matching_indices.len().try_into().unwrap_or(i32::MAX);
@@ -629,12 +629,11 @@ fn main() -> Result<(), slint::PlatformError> {
             let mut entries = loaded_entries_clone.lock().unwrap();
             
             let criteria = match sort_option {
-                0 => SortCriteria::TitleAscending,
                 1 => SortCriteria::TitleDescending,
                 2 => SortCriteria::DateCreatedNewest,
                 3 => SortCriteria::DateCreatedOldest,
                 4 => SortCriteria::UsernameAscending,
-                _ => SortCriteria::TitleAscending,
+                _ => SortCriteria::TitleAscending, // 0 or any other value defaults to TitleAscending
             };
             
             sort_entries(&mut entries, criteria);
