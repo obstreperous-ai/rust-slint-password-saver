@@ -40,6 +40,7 @@ use rand::{thread_rng, Rng};
 ///
 /// Specifies the length and character types to include in generated passwords.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PasswordGeneratorConfig {
     /// Length of the password (must be 8-128 characters)
     pub length: usize,
@@ -177,16 +178,19 @@ pub fn generate_password(config: &PasswordGeneratorConfig) -> Result<String, Str
 ///
 /// `true` if password meets all requirements, `false` otherwise
 fn validate_generated_password(password: &str, config: &PasswordGeneratorConfig) -> bool {
-    if config.use_uppercase && !password.chars().any(|c| c.is_uppercase()) {
+    if config.use_uppercase && !password.chars().any(char::is_uppercase) {
         return false;
     }
-    if config.use_lowercase && !password.chars().any(|c| c.is_lowercase()) {
+    if config.use_lowercase && !password.chars().any(char::is_lowercase) {
         return false;
     }
-    if config.use_digits && !password.chars().any(|c| c.is_numeric()) {
+    if config.use_digits && !password.chars().any(char::is_numeric) {
         return false;
     }
-    if config.use_special && !password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c))
+    if config.use_special
+        && !password
+            .chars()
+            .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c))
     {
         return false;
     }
@@ -195,7 +199,7 @@ fn validate_generated_password(password: &str, config: &PasswordGeneratorConfig)
 
 /// Calculate entropy bits for a password.
 ///
-/// Entropy is calculated as: length × log₂(charset_size)
+/// Entropy is calculated as: `length × log₂(charset_size)`
 /// Higher entropy indicates stronger passwords that are harder to crack.
 ///
 /// # Arguments
@@ -216,10 +220,12 @@ fn validate_generated_password(password: &str, config: &PasswordGeneratorConfig)
 /// let entropy = calculate_entropy("0123456789abcdef", 94);
 /// assert!((entropy - 104.88).abs() < 0.1);
 /// ```
+#[must_use]
+#[allow(clippy::cast_precision_loss)]
 pub fn calculate_entropy(password: &str, charset_size: usize) -> f64 {
     let length = password.len() as f64;
-    let charset_size = charset_size as f64;
-    length * charset_size.log2()
+    let charset_size_f64 = charset_size as f64;
+    length * charset_size_f64.log2()
 }
 
 /// Calculate the character set size for a given configuration.
@@ -234,6 +240,7 @@ pub fn calculate_entropy(password: &str, charset_size: usize) -> f64 {
 /// # Returns
 ///
 /// Number of characters in the charset
+#[must_use]
 pub fn calculate_charset_size(config: &PasswordGeneratorConfig) -> usize {
     let mut size = 0;
 

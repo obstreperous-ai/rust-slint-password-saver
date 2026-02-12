@@ -24,9 +24,9 @@ fn test_generate_password_default() {
     let password = generate_password(&config).expect("Failed to generate password");
 
     assert_eq!(password.len(), 16);
-    assert!(password.chars().any(|c| c.is_uppercase()));
-    assert!(password.chars().any(|c| c.is_lowercase()));
-    assert!(password.chars().any(|c| c.is_numeric()));
+    assert!(password.chars().any(char::is_uppercase));
+    assert!(password.chars().any(char::is_lowercase));
+    assert!(password.chars().any(char::is_numeric));
     assert!(password
         .chars()
         .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c)));
@@ -93,7 +93,7 @@ fn test_generate_password_lowercase_only() {
     let password = generate_password(&config).expect("Failed to generate password");
 
     assert_eq!(password.len(), 12);
-    assert!(password.chars().all(|c| c.is_lowercase()));
+    assert!(password.chars().all(char::is_lowercase));
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn test_generate_password_uppercase_only() {
     let password = generate_password(&config).expect("Failed to generate password");
 
     assert_eq!(password.len(), 12);
-    assert!(password.chars().all(|c| c.is_uppercase()));
+    assert!(password.chars().all(char::is_uppercase));
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn test_generate_password_digits_only() {
     let password = generate_password(&config).expect("Failed to generate password");
 
     assert_eq!(password.len(), 12);
-    assert!(password.chars().all(|c| c.is_numeric()));
+    assert!(password.chars().all(char::is_numeric));
 }
 
 #[test]
@@ -241,17 +241,17 @@ fn test_password_contains_all_selected_types() {
         let password = generate_password(&config).expect("Failed to generate password");
 
         assert!(
-            password.chars().any(|c| c.is_uppercase()),
+            password.chars().any(char::is_uppercase),
             "Password missing uppercase: {}",
             password
         );
         assert!(
-            password.chars().any(|c| c.is_lowercase()),
+            password.chars().any(char::is_lowercase),
             "Password missing lowercase: {}",
             password
         );
         assert!(
-            password.chars().any(|c| c.is_numeric()),
+            password.chars().any(char::is_numeric),
             "Password missing digits: {}",
             password
         );
@@ -289,11 +289,11 @@ fn test_password_randomness() {
     }
 
     // All passwords should be unique
-    let unique_count = passwords.iter().collect::<std::collections::HashSet<_>>().len();
-    assert_eq!(
-        unique_count, 10,
-        "Generated passwords should all be unique"
-    );
+    let unique_count = passwords
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    assert_eq!(unique_count, 10, "Generated passwords should all be unique");
 }
 
 #[test]
@@ -320,9 +320,9 @@ fn test_mixed_character_sets() {
         exclude_ambiguous: false,
     };
     let password = generate_password(&config).expect("Failed to generate password");
-    assert!(password.chars().any(|c| c.is_uppercase()));
-    assert!(password.chars().any(|c| c.is_lowercase()));
-    assert!(password.chars().all(|c| c.is_alphabetic()));
+    assert!(password.chars().any(char::is_uppercase));
+    assert!(password.chars().any(char::is_lowercase));
+    assert!(password.chars().all(char::is_alphabetic));
 
     // Test digits + special
     let config = PasswordGeneratorConfig {
@@ -334,7 +334,7 @@ fn test_mixed_character_sets() {
         exclude_ambiguous: false,
     };
     let password = generate_password(&config).expect("Failed to generate password");
-    assert!(password.chars().any(|c| c.is_numeric()));
+    assert!(password.chars().any(char::is_numeric));
     assert!(password
         .chars()
         .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c)));
