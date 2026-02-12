@@ -45,6 +45,9 @@ pub enum SecurityError {
     /// Cryptographic operation failed
     CryptographicError,
 
+    /// Database integrity check failed (with detailed issues)
+    IntegrityError(String),
+
     /// Permission denied for file operation
     PermissionDenied,
 
@@ -80,6 +83,9 @@ impl SecurityError {
                 "Unable to access password storage. Check file permissions.".into()
             }
             Self::CryptographicError => "Encryption error occurred. Data may be corrupted.".into(),
+            Self::IntegrityError(details) => {
+                format!("Database integrity check failed: {}", details)
+            }
             Self::PermissionDenied => "Permission denied. Check file permissions.".into(),
             Self::RateLimitExceeded => "Too many attempts. Please try again later.".into(),
         }
@@ -155,6 +161,18 @@ mod tests {
             error.user_message(),
             "Encryption error occurred. Data may be corrupted."
         );
+    }
+
+    #[test]
+    fn test_integrity_error_message() {
+        let error = SecurityError::IntegrityError(
+            "Missing salt field, File appears truncated (only 50 bytes)".to_string(),
+        );
+        assert_eq!(
+            error.user_message(),
+            "Database integrity check failed: Missing salt field, File appears truncated (only 50 bytes)"
+        );
+        assert!(error.debug_message().contains("IntegrityError"));
     }
 
     #[test]

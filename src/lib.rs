@@ -53,6 +53,7 @@ pub mod audit_log;
 pub mod backup;
 pub mod clipboard;
 pub mod errors;
+pub mod integrity;
 pub mod password_generator;
 pub mod password_strength;
 pub mod rate_limit;

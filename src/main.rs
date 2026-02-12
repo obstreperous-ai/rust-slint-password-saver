@@ -28,6 +28,7 @@
 mod audit_log;
 mod clipboard;
 mod errors;
+mod integrity;
 mod password_generator;
 mod password_strength;
 mod rate_limit;
@@ -144,6 +145,29 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Initialize storage with cross-platform path
     let storage_path = get_storage_path();
+
+    // Automatic integrity check on startup if database exists
+    let storage = PasswordStorage::new(storage_path.clone());
+    if storage.exists() {
+        match storage.verify_integrity() {
+            Ok(report) if !report.is_healthy() => {
+                let issues_str = report.issues().join(", ");
+                warn!(
+                    "Database integrity issues detected on startup: {}",
+                    issues_str
+                );
+                ui.set_status_message(
+                    format!("⚠️ Database integrity warning: {}", issues_str).into(),
+                );
+            }
+            Err(e) => {
+                warn!("Failed to verify database integrity: {}", e.debug_message());
+            }
+            _ => {
+                // Database is healthy
+            }
+        }
+    }
 
     // Start background thread to check for timeout
     let ui_weak_timeout = ui.as_weak();

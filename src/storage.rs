@@ -22,6 +22,7 @@
 
 use crate::audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
 use crate::errors::SecurityError;
+use crate::integrity::{CorruptionReport, IntegrityChecker};
 use crate::secure_delete::secure_update_file;
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
@@ -592,6 +593,15 @@ impl PasswordStorage {
     /// }
     /// ```
     pub fn load_entries(&self, master_password: &str) -> Result<Vec<PasswordEntry>, SecurityError> {
+        // Verify integrity before attempting decryption
+        let report = self.verify_integrity()?;
+
+        if !report.is_healthy() {
+            let issues = report.issues();
+            warn!("Database integrity issues detected: {:?}", issues);
+            return Err(SecurityError::IntegrityError(issues.join(", ")));
+        }
+
         // Initialize audit logger
         let audit_logger = AuditLogger::new(get_audit_log_path());
 
@@ -696,6 +706,45 @@ impl PasswordStorage {
     #[must_use]
     pub fn exists(&self) -> bool {
         self.storage_path.exists()
+    }
+
+    /// Verifies database integrity before loading.
+    ///
+    /// This method performs comprehensive corruption detection checks on the
+    /// storage file, including:
+    /// - JSON validity
+    /// - Presence of required fields (salt, nonce, `encrypted_data`)
+    /// - File truncation detection
+    /// - Null byte detection
+    ///
+    /// # Returns
+    ///
+    /// A `CorruptionReport` containing detailed health status and any issues found
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError::StorageError` if the file cannot be read
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use std::path::PathBuf;
+    ///
+    /// let storage = PasswordStorage::new(PathBuf::from("passwords.enc"));
+    ///
+    /// if storage.exists() {
+    ///     let report = storage.verify_integrity().unwrap();
+    ///     if report.is_healthy() {
+    ///         println!("Database is healthy");
+    ///     } else {
+    ///         println!("Issues found: {:?}", report.issues());
+    ///     }
+    /// }
+    /// ```
+    pub fn verify_integrity(&self) -> Result<CorruptionReport, SecurityError> {
+        let checker = IntegrityChecker::new(self.storage_path.clone());
+        checker.check_corruption()
     }
 
     /// Sets secure file permissions (0600) on the storage file.
