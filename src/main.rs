@@ -32,6 +32,7 @@ mod integrity;
 mod password_generator;
 mod password_strength;
 mod rate_limit;
+mod search;
 mod secure_delete;
 mod session;
 mod storage;
@@ -49,6 +50,7 @@ use password_generator::{
 };
 use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 use rate_limit::RateLimiter;
+use search::{search_entries, sort_entries, SearchConfig, SortCriteria};
 use session::SessionManager;
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -145,6 +147,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Initialize storage with cross-platform path
     let storage_path = get_storage_path();
+    
+    // Shared state for loaded password entries (for search/filter functionality)
+    let loaded_entries: Arc<Mutex<Vec<PasswordEntry>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Automatic integrity check on startup if database exists
     let storage = PasswordStorage::new(storage_path.clone());
@@ -307,6 +312,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // This is called when the user clicks "Load Passwords" button
     let ui_weak = ui.as_weak();
     let storage_path_clone = storage_path.clone();
+    let loaded_entries_clone = loaded_entries.clone();
     ui.on_load_passwords(move |master_password| {
         // Record user activity
         SESSION_MANAGER.record_activity();
@@ -337,6 +343,17 @@ fn main() -> Result<(), slint::PlatformError> {
                     RATE_LIMITER.record_success();
 
                     let count = entries.len();
+                    
+                    // Store entries in memory for search/filter
+                    {
+                        let mut loaded = loaded_entries_clone.lock().unwrap();
+                        *loaded = entries.clone();
+                    }
+                    
+                    // Update UI with counts
+                    ui.set_total_count(count.try_into().unwrap_or(i32::MAX));
+                    ui.set_filtered_count(count.try_into().unwrap_or(i32::MAX));
+                    
                     let mut message = format!("Loaded {} password(s):\n", count);
 
                     // Display first few entries to avoid overwhelming the status area
@@ -544,6 +561,101 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             }
+        }
+    });
+
+    // Set up search passwords callback
+    // This is called when the user types in the search box or clicks Search
+    let ui_weak = ui.as_weak();
+    let loaded_entries_clone = loaded_entries.clone();
+    ui.on_search_passwords(move |query| {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
+        if let Some(ui) = ui_weak.upgrade() {
+            let entries = loaded_entries_clone.lock().unwrap();
+            
+            let config = SearchConfig::default();
+            let matching_indices = search_entries(&entries, &query.to_string(), &config);
+            
+            // Update UI with filtered count
+            let filtered_count: i32 = matching_indices.len().try_into().unwrap_or(i32::MAX);
+            let total_count: i32 = entries.len().try_into().unwrap_or(i32::MAX);
+            
+            ui.set_filtered_count(filtered_count);
+            ui.set_total_count(total_count);
+            
+            // Display filtered entries in status message
+            if query.is_empty() {
+                ui.set_status_message(format!("Showing all {} passwords", total_count).into());
+            } else if matching_indices.is_empty() {
+                ui.set_status_message(format!("No passwords match '{}'", query).into());
+            } else {
+                let mut message = format!("Found {} password(s) matching '{}':\n", filtered_count, query);
+                
+                // Display first few matching entries
+                for &idx in matching_indices.iter().take(MAX_DISPLAY_ENTRIES) {
+                    if let Some(entry) = entries.get(idx) {
+                        let _ = write!(message, "- {}", entry.title);
+                        if !entry.username.is_empty() {
+                            let _ = write!(message, " ({})", entry.username);
+                        }
+                        message.push('\n');
+                    }
+                }
+                
+                if matching_indices.len() > MAX_DISPLAY_ENTRIES {
+                    let _ = write!(
+                        message,
+                        "... and {} more",
+                        matching_indices.len() - MAX_DISPLAY_ENTRIES
+                    );
+                }
+                
+                ui.set_status_message(message.into());
+            }
+        }
+    });
+
+    // Set up sort passwords callback
+    // This is called when the user selects a different sort option
+    let ui_weak = ui.as_weak();
+    let loaded_entries_clone = loaded_entries.clone();
+    ui.on_sort_passwords(move |sort_option| {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
+        if let Some(ui) = ui_weak.upgrade() {
+            let mut entries = loaded_entries_clone.lock().unwrap();
+            
+            let criteria = match sort_option {
+                0 => SortCriteria::TitleAscending,
+                1 => SortCriteria::TitleDescending,
+                2 => SortCriteria::DateCreatedNewest,
+                3 => SortCriteria::DateCreatedOldest,
+                4 => SortCriteria::UsernameAscending,
+                _ => SortCriteria::TitleAscending,
+            };
+            
+            sort_entries(&mut entries, criteria);
+            
+            let count = entries.len();
+            let mut message = format!("Sorted {} password(s):\n", count);
+            
+            // Display first few entries after sorting
+            for entry in entries.iter().take(MAX_DISPLAY_ENTRIES) {
+                let _ = write!(message, "- {}", entry.title);
+                if !entry.username.is_empty() {
+                    let _ = write!(message, " ({})", entry.username);
+                }
+                message.push('\n');
+            }
+            
+            if count > MAX_DISPLAY_ENTRIES {
+                let _ = write!(message, "... and {} more", count - MAX_DISPLAY_ENTRIES);
+            }
+            
+            ui.set_status_message(message.into());
         }
     });
 

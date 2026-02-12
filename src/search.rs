@@ -6,6 +6,7 @@ pub struct SearchConfig {
     pub case_sensitive: bool,
     pub search_title: bool,
     pub search_username: bool,
+    #[allow(dead_code)]
     pub search_url: bool, // Future field
 }
 

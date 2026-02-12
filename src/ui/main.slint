@@ -11,6 +11,12 @@ export component AppWindow inherits Window {
     in-out property <bool> is-locked: false;
     in-out property <int> seconds-until-lock: 0;
     
+    // Search and filter properties
+    in-out property <string> search-query: "";
+    in-out property <int> sort-option: 0;
+    in-out property <int> filtered-count: 0;
+    in-out property <int> total-count: 0;
+    
     // Password generator properties
     in-out property <float> generator-length: 16;
     in-out property <bool> generator-use-uppercase: true;
@@ -29,6 +35,8 @@ export component AppWindow inherits Window {
     callback copy-password(string);
     callback generate-password();
     callback use-generated-password(string);
+    callback search-passwords(string);
+    callback sort-passwords(int);
     
     VerticalBox {
         padding: 20px;
@@ -247,6 +255,98 @@ export component AppWindow inherits Window {
                     text: root.password-entropy-text;
                     font-size: 12px;
                     color: #4caf50;
+                }
+            }
+        }
+        
+        GroupBox {
+            title: "Search and Filter Passwords";
+            
+            VerticalBox {
+                spacing: 10px;
+                
+                HorizontalBox {
+                    spacing: 5px;
+                    
+                    search-input := LineEdit {
+                        placeholder-text: "Search by title or username...";
+                        text <=> root.search-query;
+                        edited => {
+                            root.search-passwords(search-input.text);
+                        }
+                    }
+                    
+                    Button {
+                        text: "🔍 Search";
+                        clicked => {
+                            root.search-passwords(search-input.text);
+                        }
+                    }
+                    
+                    Button {
+                        text: "✕ Clear";
+                        enabled: search-input.text != "";
+                        clicked => {
+                            search-input.text = "";
+                            root.search-passwords("");
+                        }
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 5px;
+                    
+                    Text {
+                        text: "Sort by:";
+                        vertical-alignment: center;
+                        min-width: 60px;
+                    }
+                    
+                    Button {
+                        text: "Title ↑";
+                        enabled: root.total-count > 0;
+                        clicked => {
+                            root.sort-passwords(0);
+                        }
+                    }
+                    
+                    Button {
+                        text: "Title ↓";
+                        enabled: root.total-count > 0;
+                        clicked => {
+                            root.sort-passwords(1);
+                        }
+                    }
+                    
+                    Button {
+                        text: "Newest";
+                        enabled: root.total-count > 0;
+                        clicked => {
+                            root.sort-passwords(2);
+                        }
+                    }
+                    
+                    Button {
+                        text: "Oldest";
+                        enabled: root.total-count > 0;
+                        clicked => {
+                            root.sort-passwords(3);
+                        }
+                    }
+                    
+                    Button {
+                        text: "User";
+                        enabled: root.total-count > 0;
+                        clicked => {
+                            root.sort-passwords(4);
+                        }
+                    }
+                }
+                
+                if root.total-count > 0 : Text {
+                    text: "Showing " + root.filtered-count + " of " + root.total-count + " passwords";
+                    font-size: 12px;
+                    color: #666;
                 }
             }
         }
