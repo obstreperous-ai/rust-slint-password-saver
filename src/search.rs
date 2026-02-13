@@ -106,6 +106,12 @@ pub fn sort_entries(entries: &mut [PasswordEntry], criteria: SortCriteria) {
 
 #[cfg(test)]
 mod tests {
+    //! Search module tests
+    //!
+    //! # Security Note
+    //! This test module contains hardcoded passwords for testing purposes only.
+    //! These are NOT real passwords and are used solely for testing the search and sorting functionality.
+    
     use super::*;
 
     fn create_test_entry(title: &str, username: &str, password: &str, created_at: u64) -> PasswordEntry {
@@ -118,6 +124,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_empty_query_returns_all() {
         let entries = vec![
             create_test_entry("Gmail", "user@gmail.com", "pass1", 1000),
@@ -131,6 +138,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_case_insensitive() {
         let entries = vec![
             create_test_entry("Gmail", "user@gmail.com", "pass1", 1000),
@@ -144,6 +152,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_case_sensitive() {
         let entries = vec![
             create_test_entry("Gmail", "user@example.com", "pass1", 1000),
@@ -163,6 +172,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_by_username() {
         let entries = vec![
             create_test_entry("Gmail", "user@gmail.com", "pass1", 1000),
@@ -176,6 +186,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_multiple_matches() {
         let entries = vec![
             create_test_entry("Gmail Work", "work@gmail.com", "pass1", 1000),
@@ -190,6 +201,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_no_matches() {
         let entries = vec![
             create_test_entry("Gmail", "user@gmail.com", "pass1", 1000),
@@ -203,6 +215,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_special_characters() {
         let entries = vec![
             create_test_entry("Email@Work", "user+tag@example.com", "pass1", 1000),
@@ -219,6 +232,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_sort_title_ascending() {
         let mut entries = vec![
             create_test_entry("Zebra", "user1", "pass1", 1000),
@@ -234,6 +248,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_sort_title_descending() {
         let mut entries = vec![
             create_test_entry("Apple", "user1", "pass1", 1000),
@@ -249,6 +264,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_sort_date_newest() {
         let mut entries = vec![
             create_test_entry("Site1", "user1", "pass1", 1000),
@@ -264,6 +280,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_sort_date_oldest() {
         let mut entries = vec![
             create_test_entry("Site1", "user1", "pass1", 3000),
@@ -279,6 +296,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_sort_username_ascending() {
         let mut entries = vec![
             create_test_entry("Site1", "zuser", "pass1", 1000),
@@ -294,6 +312,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_only_title() {
         let entries = vec![
             create_test_entry("Gmail", "otheruser", "pass1", 1000),
@@ -310,6 +329,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_search_only_username() {
         let entries = vec![
             create_test_entry("Gmail", "testuser", "pass1", 1000),
