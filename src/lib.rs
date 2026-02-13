@@ -61,6 +61,7 @@ pub mod search;
 pub mod secure_delete;
 pub mod session;
 pub mod storage;
+pub mod update_checker;
 pub mod validation;
 
 #[cfg(windows)]

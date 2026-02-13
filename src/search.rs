@@ -23,15 +23,11 @@ impl Default for SearchConfig {
 }
 
 /// Search password entries based on query and configuration
-/// 
+///
 /// Returns indices of matching entries to avoid timing attacks
 /// that could leak information about entry count
 #[must_use]
-pub fn search_entries(
-    entries: &[PasswordEntry],
-    query: &str,
-    config: &SearchConfig,
-) -> Vec<usize> {
+pub fn search_entries(entries: &[PasswordEntry], query: &str, config: &SearchConfig) -> Vec<usize> {
     // Empty query returns all entries
     if query.is_empty() {
         return (0..entries.len()).collect();
@@ -111,10 +107,15 @@ mod tests {
     //! # Security Note
     //! This test module contains hardcoded passwords for testing purposes only.
     //! These are NOT real passwords and are used solely for testing the search and sorting functionality.
-    
+
     use super::*;
 
-    fn create_test_entry(title: &str, username: &str, password: &str, created_at: u64) -> PasswordEntry {
+    fn create_test_entry(
+        title: &str,
+        username: &str,
+        password: &str,
+        created_at: u64,
+    ) -> PasswordEntry {
         PasswordEntry {
             title: title.to_string(),
             username: username.to_string(),
