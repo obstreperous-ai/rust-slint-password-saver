@@ -528,7 +528,9 @@ impl PasswordStorage {
         // - /dev/urandom on Unix/Linux
         // - BCryptGenRandom on Windows
         // - Similar secure sources on other platforms
-        let mut nonce_bytes = [0u8; 12];
+        // lgtm[cpp/hardcoded-credentials]
+        // codeql[rust/hardcoded-cryptographic-key]
+        let mut nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
         use aes_gcm::aead::rand_core::RngCore;
         OsRng.fill_bytes(&mut nonce_bytes);  // Overwrites all zeros with secure random data
 
@@ -955,7 +957,9 @@ impl PasswordStorage {
         // SECURITY NOTE: See comment in save_entries() regarding the nonce initialization
         // pattern. This follows the same secure approach: allocate buffer, immediately
         // fill with OsRng random data, no possibility of using zero values.
-        let mut nonce_bytes = [0u8; 12];
+        // lgtm[cpp/hardcoded-credentials]
+        // codeql[rust/hardcoded-cryptographic-key]
+        let mut nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
         use aes_gcm::aead::rand_core::RngCore;
         OsRng.fill_bytes(&mut nonce_bytes);
 
@@ -970,7 +974,9 @@ impl PasswordStorage {
         //
         // SECURITY NOTE: Same secure nonce generation pattern as above.
         // Each encryption operation requires a unique nonce.
-        let mut recovery_nonce_bytes = [0u8; 12];
+        // lgtm[cpp/hardcoded-credentials]
+        // codeql[rust/hardcoded-cryptographic-key]
+        let mut recovery_nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
         OsRng.fill_bytes(&mut recovery_nonce_bytes);
         let encrypted_recovery_key = Self::encrypt_data(recovery_key, &key, &recovery_nonce_bytes)?;
 
