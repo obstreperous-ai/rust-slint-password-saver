@@ -147,7 +147,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Initialize storage with cross-platform path
     let storage_path = get_storage_path();
-    
+
     // Shared state for loaded password entries (for search/filter functionality)
     let loaded_entries: Arc<Mutex<Vec<PasswordEntry>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -343,19 +343,19 @@ fn main() -> Result<(), slint::PlatformError> {
                     RATE_LIMITER.record_success();
 
                     let count = entries.len();
-                    
+
                     // Store entries in memory for search/filter operations
                     // We need a full clone to maintain a searchable cache
                     {
                         let mut loaded = loaded_entries_clone.lock().unwrap();
                         loaded.clone_from(&entries);
                     }
-                    
+
                     // Update UI with counts (cap at 999999 for display purposes)
                     let max_display = 999_999;
                     ui.set_total_count(count.try_into().unwrap_or(max_display));
                     ui.set_filtered_count(count.try_into().unwrap_or(max_display));
-                    
+
                     let mut message = format!("Loaded {} password(s):\n", count);
 
                     // Display first few entries to avoid overwhelming the status area
@@ -576,26 +576,29 @@ fn main() -> Result<(), slint::PlatformError> {
 
         if let Some(ui) = ui_weak.upgrade() {
             let entries = loaded_entries_clone.lock().unwrap();
-            
+
             let config = SearchConfig::default();
             let matching_indices = search_entries(&entries, query.as_str(), &config);
-            
+
             // Update UI with filtered count (cap at 999999 for display purposes)
             let max_display = 999_999;
             let filtered_count: i32 = matching_indices.len().try_into().unwrap_or(max_display);
             let total_count: i32 = entries.len().try_into().unwrap_or(max_display);
-            
+
             ui.set_filtered_count(filtered_count);
             ui.set_total_count(total_count);
-            
+
             // Display filtered entries in status message
             if query.is_empty() {
                 ui.set_status_message(format!("Showing all {} passwords", total_count).into());
             } else if matching_indices.is_empty() {
                 ui.set_status_message(format!("No passwords match '{}'", query).into());
             } else {
-                let mut message = format!("Found {} password(s) matching '{}':\n", filtered_count, query);
-                
+                let mut message = format!(
+                    "Found {} password(s) matching '{}':\n",
+                    filtered_count, query
+                );
+
                 // Display first few matching entries
                 for &idx in matching_indices.iter().take(MAX_DISPLAY_ENTRIES) {
                     if let Some(entry) = entries.get(idx) {
@@ -606,7 +609,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         message.push('\n');
                     }
                 }
-                
+
                 if matching_indices.len() > MAX_DISPLAY_ENTRIES {
                     let _ = write!(
                         message,
@@ -614,7 +617,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         matching_indices.len() - MAX_DISPLAY_ENTRIES
                     );
                 }
-                
+
                 ui.set_status_message(message.into());
             }
         }
@@ -630,7 +633,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
         if let Some(ui) = ui_weak.upgrade() {
             let mut entries = loaded_entries_clone.lock().unwrap();
-            
+
             let criteria = match sort_option {
                 1 => SortCriteria::TitleDescending,
                 2 => SortCriteria::DateCreatedNewest,
@@ -638,12 +641,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 4 => SortCriteria::UsernameAscending,
                 _ => SortCriteria::TitleAscending, // 0 or any other value defaults to TitleAscending
             };
-            
+
             sort_entries(&mut entries, criteria);
-            
+
             let count = entries.len();
             let mut message = format!("Sorted {} password(s):\n", count);
-            
+
             // Display first few entries after sorting
             for entry in entries.iter().take(MAX_DISPLAY_ENTRIES) {
                 let _ = write!(message, "- {}", entry.title);
@@ -652,11 +655,11 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
                 message.push('\n');
             }
-            
+
             if count > MAX_DISPLAY_ENTRIES {
                 let _ = write!(message, "... and {} more", count - MAX_DISPLAY_ENTRIES);
             }
-            
+
             ui.set_status_message(message.into());
         }
     });
