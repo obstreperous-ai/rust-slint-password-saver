@@ -1,5 +1,28 @@
 import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox, CheckBox, Slider } from "std-widgets.slint";
 
+// Color Palette
+global Colors {
+    // Primary Colors
+    out property <color> forest-green: #2d5016;
+    out property <color> charcoal: #2c2c2c;
+    out property <color> warm-grey: #6b6b6b;
+    out property <color> whisper-grey: #e8e8e8;
+
+    // Accent Colors
+    out property <color> vermillion: #c1440e;
+    out property <color> indigo: #1a365d;
+    out property <color> cream: #faf9f6;
+
+    // State Colors
+    out property <color> success-bg: #e6f4e7;
+    out property <color> success-border: forest-green;
+    out property <color> success-text: #1d3010;
+
+    out property <color> error-bg: #ffeaea;
+    out property <color> error-border: vermillion;
+    out property <color> error-text: #8b1a0a;
+}
+
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
@@ -126,7 +149,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: "This password is used to encrypt/decrypt your stored passwords";
                     font-size: 12px;
-                    color: #666;
+                    color: Colors.warm-grey;
                 }
             }
         }
@@ -317,7 +340,7 @@ export component AppWindow inherits Window {
                 if root.password-entropy-text != "" : Text {
                     text: root.password-entropy-text;
                     font-size: 12px;
-                    color: #4caf50;
+                    color: Colors.forest-green;
                 }
             }
         }
@@ -409,7 +432,7 @@ export component AppWindow inherits Window {
                 if root.total-count > 0 : Text {
                     text: "Showing " + root.filtered-count + " of " + root.total-count + " passwords";
                     font-size: 12px;
-                    color: #555;
+                    color: Colors.warm-grey;
                 }
             }
         }
@@ -457,7 +480,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: "Password will be automatically cleared from clipboard after 30 seconds";
                     font-size: 12px;
-                    color: #666;
+                    color: Colors.warm-grey;
                 }
             }
         }
@@ -471,7 +494,7 @@ export component AppWindow inherits Window {
                 VerticalBox {
                     Text {
                         text: "Password entries will appear here...";
-                        color: #888;
+                        color: Colors.warm-grey;
                         font-size: 14px;
                     }
                 }
@@ -480,14 +503,14 @@ export component AppWindow inherits Window {
         
         if status-message != "" : HorizontalBox {
             Rectangle {
-                background: #e8f5e9;
+                background: Colors.success-bg;
                 border-radius: 4px;
                 border-width: 1px;
-                border-color: #4caf50;
+                border-color: Colors.success-border;
                 
                 Text {
                     text: status-message;
-                    color: #2e7d32;
+                    color: Colors.success-text;
                 }
             }
         }
@@ -502,10 +525,10 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 500px;
             height: 450px;
-            background: white;
+            background: Colors.cream;
             border-radius: 8px;
             border-width: 2px;
-            border-color: #4caf50;
+            border-color: Colors.forest-green;
             
             VerticalBox {
                 padding: 20px;
@@ -571,25 +594,25 @@ export component AppWindow inherits Window {
                         Text {
                             text: "• At least 8 characters long";
                             font-size: 12px;
-                            color: #666;
+                            color: Colors.warm-grey;
                         }
                         
                         Text {
                             text: "• At least one uppercase letter";
                             font-size: 12px;
-                            color: #666;
+                            color: Colors.warm-grey;
                         }
                         
                         Text {
                             text: "• At least one lowercase letter";
                             font-size: 12px;
-                            color: #666;
+                            color: Colors.warm-grey;
                         }
                         
                         Text {
                             text: "• At least one number";
                             font-size: 12px;
-                            color: #666;
+                            color: Colors.warm-grey;
                         }
                     }
                 }
@@ -641,7 +664,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 400px;
             height: 300px;
-            background: white;
+            background: Colors.cream;
             border-radius: 8px;
             border-width: 2px;
             border-color: #ff9800;
@@ -660,7 +683,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: "Enter master password to unlock";
                     horizontal-alignment: center;
-                    color: #666;
+                    color: Colors.warm-grey;
                 }
                 
                 unlock-password := LineEdit {
@@ -687,7 +710,7 @@ export component AppWindow inherits Window {
                         
                         Text {
                             text: "Forgot Password?";
-                            color: #2196f3;
+                            color: Colors.indigo;
                             font-size: 12px;
                             horizontal-alignment: center;
                         }
@@ -733,7 +756,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 550px;
             height: 500px;
-            background: white;
+            background: Colors.cream;
             border-radius: 8px;
             border-width: 2px;
             border-color: #ff9800;
@@ -752,11 +775,11 @@ export component AppWindow inherits Window {
                 Text {
                     text: "Write down these recovery codes and store them securely.\nYou will need them if you forget your master password.";
                     horizontal-alignment: center;
-                    color: #666;
+                    color: Colors.warm-grey;
                 }
                 
                 Rectangle {
-                    background: #f5f5f5;
+                    background: Colors.whisper-grey;
                     border-radius: 4px;
                     border-width: 1px;
                     border-color: #ddd;
@@ -837,7 +860,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 450px;
             height: 350px;
-            background: white;
+            background: Colors.cream;
             border-radius: 8px;
             border-width: 2px;
             border-color: #ff9800;
@@ -856,7 +879,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: "Enter one of your recovery codes to regain access:";
                     horizontal-alignment: center;
-                    color: #666;
+                    color: Colors.warm-grey;
                 }
                 
                 recovery-code-input := LineEdit {
@@ -890,7 +913,7 @@ export component AppWindow inherits Window {
                     text: "⚠️ Recovery codes were provided during initial setup.\nContact support if you've lost all recovery codes.";
                     horizontal-alignment: center;
                     font-size: 11px;
-                    color: #999;
+                    color: Colors.warm-grey;
                 }
             }
         }

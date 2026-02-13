@@ -239,7 +239,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             let storage = PasswordStorage::new(storage_path_clone.clone());
-            
+
             // Check if this is first-time use
             let is_first_use = !storage.exists();
 
@@ -310,7 +310,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let recovery_codes = recovery.get_codes();
                 let recovery_hashes = recovery.get_code_hashes();
                 let recovery_key = recovery.get_recovery_key();
-                
+
                 // Save entries with recovery data
                 match storage.save_entries_with_recovery(&entries, &master_password, recovery_hashes, &recovery_key) {
                     Ok(()) => {
@@ -828,9 +828,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 ui.set_status_message(e.into());
                 return;
             }
-            
+
             let storage = PasswordStorage::new(storage_path_clone.clone());
-            
+
             // Check if recovery data exists
             match storage.load_recovery_data() {
                 Ok(Some((hashes, _encrypted_key))) => {
@@ -838,29 +838,29 @@ fn main() -> Result<(), slint::PlatformError> {
                     let mut hash_computer = Sha256::new();
                     hash_computer.update(recovery_code.as_bytes());
                     let code_hash = hex::encode(hash_computer.finalize());
-                    
+
                     // Check if the hash matches any stored hash
                     let hash_matches = hashes.iter().any(|stored_hash| {
                         stored_hash.as_bytes().ct_eq(code_hash.as_bytes()).into()
                     });
-                    
+
                     if hash_matches {
                         // Success! Clear rate limiter
                         RATE_LIMITER.record_success();
-                        
+
                         // Close recovery login dialog
                         ui.set_show_recovery_login(false);
-                        
+
                         // TODO: In current implementation, recovery codes verify identity but
                         // user still needs to know their master password to decrypt.
                         // Future enhancement: Store encrypted database key with recovery key
                         // to allow full recovery without master password.
-                        
+
                         // Inform user of successful verification
                         ui.set_status_message(
                             "✅ Recovery code verified! You are authenticated.\nEnter your master password to access passwords, or change it if forgotten.".into()
                         );
-                        
+
                         // Unlock the session UI
                         ui.set_is_locked(false);
                     } else {
