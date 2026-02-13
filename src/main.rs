@@ -775,7 +775,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 ui.get_recovery_code_2(),
                 ui.get_recovery_code_3()
             );
-            
+
             // Initialize clipboard if needed
             let mut clipboard_guard = CLIPBOARD.lock().unwrap();
             if clipboard_guard.is_none() {
@@ -784,12 +784,14 @@ fn main() -> Result<(), slint::PlatformError> {
                         *clipboard_guard = Some(clipboard);
                     }
                     Err(e) => {
-                        ui.set_status_message(format!("Failed to initialize clipboard: {}", e).into());
+                        ui.set_status_message(
+                            format!("Failed to initialize clipboard: {}", e).into(),
+                        );
                         return;
                     }
                 }
             }
-            
+
             // Copy codes to clipboard (don't auto-clear recovery codes)
             if let Some(clipboard) = clipboard_guard.as_mut() {
                 match clipboard.copy_with_autoclear(&codes) {
@@ -811,7 +813,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // For now, just show a message that printing is not yet implemented
             // In a full implementation, this would open a print dialog
             ui.set_status_message(
-                "Print functionality: Please copy the codes and print them manually.".into()
+                "Print functionality: Please copy the codes and print them manually.".into(),
             );
         }
     });

@@ -326,11 +326,11 @@ mod tests {
     #[test]
     fn test_recovery_code_generation() {
         let code = RecoveryCode::generate();
-        
+
         // Check format: XXXX-XXXX-XXXX-XXXX
         assert_eq!(code.code.len(), 19); // 16 chars + 3 dashes
         assert_eq!(code.code.matches('-').count(), 3);
-        
+
         // Check that hash is non-empty
         assert!(!code.hash.is_empty());
     }
@@ -339,10 +339,10 @@ mod tests {
     fn test_recovery_code_verification() {
         let code = RecoveryCode::generate();
         let code_str = code.code.clone();
-        
+
         // Correct code should verify
         assert!(code.verify(&code_str));
-        
+
         // Wrong code should not verify
         assert!(!code.verify("WRONG-CODE-HERE-XXXX"));
     }
@@ -351,7 +351,7 @@ mod tests {
     fn test_recovery_code_uniqueness() {
         let code1 = RecoveryCode::generate();
         let code2 = RecoveryCode::generate();
-        
+
         // Codes should be different
         assert_ne!(code1.code, code2.code);
         assert_ne!(code1.hash, code2.hash);
@@ -360,10 +360,10 @@ mod tests {
     #[test]
     fn test_emergency_recovery_creation() {
         let recovery = EmergencyRecovery::create("test_password");
-        
+
         // Should have 3 recovery codes
         assert_eq!(recovery.get_codes().len(), 3);
-        
+
         // Should have a recovery key
         assert!(!recovery.get_recovery_key().is_empty());
     }
@@ -372,11 +372,11 @@ mod tests {
     fn test_recover_access_with_valid_code() {
         let recovery = EmergencyRecovery::create("test_password");
         let code = recovery.get_codes()[0].clone();
-        
+
         // Should succeed with valid code
         let result = recovery.recover_access(&code);
         assert!(result.is_ok());
-        
+
         // Should return the recovery key
         let key = result.unwrap();
         assert_eq!(key, recovery.get_recovery_key());
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn test_recover_access_with_invalid_code() {
         let recovery = EmergencyRecovery::create("test_password");
-        
+
         // Should fail with invalid code
         let result = recovery.recover_access("INVALID-CODE-XXXX-YYYY");
         assert!(result.is_err());
@@ -397,10 +397,10 @@ mod tests {
         let recovery = EmergencyRecovery::create("test_password");
         let hashes = recovery.get_code_hashes();
         let key = recovery.get_recovery_key();
-        
+
         // Create new recovery from hashes
         let recovered = EmergencyRecovery::from_hashes(hashes, key.clone());
-        
+
         // Should be able to verify with original code
         let code = recovery.get_codes()[0].clone();
         let result = recovered.recover_access(&code);
@@ -412,7 +412,7 @@ mod tests {
     fn test_recovery_key_derivation_deterministic() {
         let recovery1 = EmergencyRecovery::create("test_password");
         let codes = recovery1.get_codes();
-        
+
         // Manually recreate recovery codes with same values
         let recovery_codes: Vec<RecoveryCode> = codes
             .iter()
@@ -426,10 +426,10 @@ mod tests {
                 }
             })
             .collect();
-        
+
         let key1 = EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password");
         let key2 = EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password");
-        
+
         // Keys should be identical
         assert_eq!(key1, key2);
     }
@@ -438,7 +438,7 @@ mod tests {
     fn test_recovery_key_different_for_different_passwords() {
         let recovery1 = EmergencyRecovery::create("password1");
         let recovery2 = EmergencyRecovery::create("password2");
-        
+
         // Keys should be different
         assert_ne!(recovery1.get_recovery_key(), recovery2.get_recovery_key());
     }
@@ -447,7 +447,7 @@ mod tests {
     fn test_all_recovery_codes_work() {
         let recovery = EmergencyRecovery::create("test_password");
         let codes = recovery.get_codes();
-        
+
         // All 3 codes should work
         for code in codes {
             let result = recovery.recover_access(&code);
