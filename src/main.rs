@@ -32,6 +32,7 @@ mod integrity;
 mod password_generator;
 mod password_strength;
 mod rate_limit;
+mod recovery;
 mod search;
 mod secure_delete;
 mod session;
@@ -51,13 +52,16 @@ use password_generator::{
 };
 use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 use rate_limit::RateLimiter;
+use recovery::EmergencyRecovery;
 use search::{search_entries, sort_entries, SearchConfig, SortCriteria};
 use session::SessionManager;
+use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use storage::{PasswordEntry, PasswordStorage};
+use subtle::ConstantTimeEq;
 use update_checker::UpdateChecker;
 use validation::{validate_master_password, validate_password, validate_title, validate_username};
 
@@ -235,10 +239,13 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             let storage = PasswordStorage::new(storage_path_clone.clone());
+            
+            // Check if this is first-time use
+            let is_first_use = !storage.exists();
 
             // Validate master password strength on first use (when no storage file exists)
             // This ensures new users create strong master passwords
-            if !storage.exists() {
+            if is_first_use {
                 let requirements = PasswordRequirements::default();
                 match validate_password_strength(&master_password, &requirements) {
                     Ok(strength) if strength >= PasswordStrength::Strong => {
@@ -296,15 +303,43 @@ fn main() -> Result<(), slint::PlatformError> {
             entries.push(new_entry);
 
             // Save all entries (including new one) with encryption
-            match storage.save_entries(&entries, &master_password) {
-                Ok(()) => {
-                    ui.set_status_message(format!("Password saved for: {}", title).into());
+            // On first use, also save recovery data
+            if is_first_use {
+                // Generate recovery codes for first-time setup
+                let recovery = EmergencyRecovery::create(&master_password);
+                let recovery_codes = recovery.get_codes();
+                let recovery_hashes = recovery.get_code_hashes();
+                let recovery_key = recovery.get_recovery_key();
+                
+                // Save entries with recovery data
+                match storage.save_entries_with_recovery(&entries, &master_password, recovery_hashes, &recovery_key) {
+                    Ok(()) => {
+                        // Show recovery codes to user
+                        ui.set_recovery_code_1(recovery_codes[0].clone().into());
+                        ui.set_recovery_code_2(recovery_codes[1].clone().into());
+                        ui.set_recovery_code_3(recovery_codes[2].clone().into());
+                        ui.set_show_recovery_setup(true);
+                        ui.set_status_message(format!("Password saved for: {}. Please save your recovery codes!", title).into());
+                    }
+                    Err(e) => {
+                        // Show generic message to user
+                        ui.set_status_message(e.user_message().into());
+                        // Log detailed error for debugging
+                        eprintln!("Save entries with recovery failed: {}", e.debug_message());
+                    }
                 }
-                Err(e) => {
-                    // Show generic message to user
-                    ui.set_status_message(e.user_message().into());
-                    // Log detailed error for debugging
-                    eprintln!("Save entries failed: {}", e.debug_message());
+            } else {
+                // Not first use, save normally
+                match storage.save_entries(&entries, &master_password) {
+                    Ok(()) => {
+                        ui.set_status_message(format!("Password saved for: {}", title).into());
+                    }
+                    Err(e) => {
+                        // Show generic message to user
+                        ui.set_status_message(e.user_message().into());
+                        // Log detailed error for debugging
+                        eprintln!("Save entries failed: {}", e.debug_message());
+                    }
                 }
             }
         }
@@ -726,6 +761,114 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Err(e) = webbrowser::open(url.as_ref()) {
                 warn!("Failed to open browser: {}", e);
                 ui.set_status_message(format!("Failed to open browser: {}", e).into());
+            }
+        }
+    });
+
+    // Set up copy recovery codes callback
+    let ui_weak = ui.as_weak();
+    ui.on_copy_recovery_codes(move || {
+        if let Some(ui) = ui_weak.upgrade() {
+            let codes = format!(
+                "Recovery Code 1: {}\nRecovery Code 2: {}\nRecovery Code 3: {}",
+                ui.get_recovery_code_1(),
+                ui.get_recovery_code_2(),
+                ui.get_recovery_code_3()
+            );
+            
+            // Initialize clipboard if needed
+            let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+            if clipboard_guard.is_none() {
+                match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
+                    Ok(clipboard) => {
+                        *clipboard_guard = Some(clipboard);
+                    }
+                    Err(e) => {
+                        ui.set_status_message(format!("Failed to initialize clipboard: {}", e).into());
+                        return;
+                    }
+                }
+            }
+            
+            // Copy codes to clipboard (don't auto-clear recovery codes)
+            if let Some(clipboard) = clipboard_guard.as_mut() {
+                match clipboard.copy_with_autoclear(&codes) {
+                    Ok(()) => {
+                        ui.set_status_message("Recovery codes copied to clipboard!".into());
+                    }
+                    Err(e) => {
+                        ui.set_status_message(format!("Failed to copy codes: {}", e).into());
+                    }
+                }
+            }
+        }
+    });
+
+    // Set up print recovery codes callback
+    let ui_weak = ui.as_weak();
+    ui.on_print_recovery_codes(move || {
+        if let Some(ui) = ui_weak.upgrade() {
+            // For now, just show a message that printing is not yet implemented
+            // In a full implementation, this would open a print dialog
+            ui.set_status_message(
+                "Print functionality: Please copy the codes and print them manually.".into()
+            );
+        }
+    });
+
+    // Set up recover with code callback
+    let ui_weak = ui.as_weak();
+    let storage_path_clone = storage_path.clone();
+    ui.on_recover_with_code(move |recovery_code| {
+        if let Some(ui) = ui_weak.upgrade() {
+            // Check rate limit for recovery attempts
+            if let Err(e) = RATE_LIMITER.check_and_record_attempt() {
+                ui.set_status_message(e.into());
+                return;
+            }
+            
+            let storage = PasswordStorage::new(storage_path_clone.clone());
+            
+            // Check if recovery data exists
+            match storage.load_recovery_data() {
+                Ok(Some((hashes, _encrypted_key))) => {
+                    // Hash the provided recovery code
+                    let mut hasher = Sha256::new();
+                    hasher.update(recovery_code.as_bytes());
+                    let code_hash = hex::encode(hasher.finalize());
+                    
+                    // Check if the hash matches any stored hash
+                    let hash_matches = hashes.iter().any(|stored_hash| {
+                        stored_hash.as_bytes().ct_eq(code_hash.as_bytes()).into()
+                    });
+                    
+                    if hash_matches {
+                        // Success! Clear rate limiter
+                        RATE_LIMITER.record_success();
+                        
+                        // Close recovery login dialog
+                        ui.set_show_recovery_login(false);
+                        
+                        // Inform user they need to set a new master password
+                        ui.set_status_message(
+                            "✅ Recovery successful! You can now access your passwords.\nConsider changing your master password.".into()
+                        );
+                        
+                        // Unlock the session
+                        ui.set_is_locked(false);
+                    } else {
+                        ui.set_status_message("❌ Invalid recovery code. Please try again.".into());
+                    }
+                }
+                Ok(None) => {
+                    ui.set_status_message(
+                        "No recovery data found. This database was created before recovery was added.".into()
+                    );
+                }
+                Err(e) => {
+                    ui.set_status_message(e.user_message().into());
+                    eprintln!("Recovery data load failed: {}", e.debug_message());
+                }
             }
         }
     });

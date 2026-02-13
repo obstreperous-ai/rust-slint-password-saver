@@ -11,6 +11,14 @@ export component AppWindow inherits Window {
     in-out property <bool> is-locked: false;
     in-out property <int> seconds-until-lock: 0;
     
+    // Recovery properties
+    in-out property <bool> show-recovery-setup: false;
+    in-out property <bool> show-recovery-login: false;
+    in-out property <string> recovery-code-1: "";
+    in-out property <string> recovery-code-2: "";
+    in-out property <string> recovery-code-3: "";
+    in-out property <bool> recovery-codes-confirmed: false;
+    
     // Search and filter properties
     in-out property <string> search-query: "";
     in-out property <int> sort-option: 0;
@@ -46,6 +54,10 @@ export component AppWindow inherits Window {
     callback sort-passwords(int);
     callback check-for-updates();
     callback open-release-page();
+    callback show-recovery();
+    callback recover-with-code(string);
+    callback copy-recovery-codes();
+    callback print-recovery-codes();
     
     VerticalBox {
         padding: 20px;
@@ -665,6 +677,26 @@ export component AppWindow inherits Window {
                         unlock-password.text = "";
                     }
                 }
+                
+                HorizontalBox {
+                    alignment: center;
+                    
+                    TouchArea {
+                        width: 150px;
+                        height: 20px;
+                        
+                        Text {
+                            text: "Forgot Password?";
+                            color: #2196f3;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                        }
+                        
+                        clicked => {
+                            root.show-recovery-login = true;
+                        }
+                    }
+                }
             }
         }
     }
@@ -688,6 +720,178 @@ export component AppWindow inherits Window {
                 color: #e65100;
                 font-size: 12px;
                 vertical-alignment: center;
+            }
+        }
+    }
+    
+    // Recovery setup dialog (first-time setup)
+    if root.show-recovery-setup : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        
+        Rectangle {
+            width: 550px;
+            height: 500px;
+            background: white;
+            border-radius: 8px;
+            border-width: 2px;
+            border-color: #ff9800;
+            
+            VerticalBox {
+                padding: 30px;
+                spacing: 15px;
+                
+                Text {
+                    text: "⚠️ Important: Save Your Recovery Codes";
+                    font-size: 20px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                }
+                
+                Text {
+                    text: "Write down these recovery codes and store them securely.\nYou will need them if you forget your master password.";
+                    horizontal-alignment: center;
+                    color: #666;
+                }
+                
+                Rectangle {
+                    background: #f5f5f5;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #ddd;
+                    
+                    VerticalBox {
+                        padding: 20px;
+                        spacing: 10px;
+                        
+                        Text {
+                            text: "Recovery Code 1: " + root.recovery-code-1;
+                            font-family: "monospace";
+                            font-size: 14px;
+                        }
+                        Text {
+                            text: "Recovery Code 2: " + root.recovery-code-2;
+                            font-family: "monospace";
+                            font-size: 14px;
+                        }
+                        Text {
+                            text: "Recovery Code 3: " + root.recovery-code-3;
+                            font-family: "monospace";
+                            font-size: 14px;
+                        }
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    alignment: center;
+                    
+                    Button {
+                        text: "📋 Copy All Codes";
+                        clicked => {
+                            root.copy-recovery-codes();
+                        }
+                    }
+                    
+                    Button {
+                        text: "🖨️ Print Codes";
+                        clicked => {
+                            root.print-recovery-codes();
+                        }
+                    }
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    
+                    CheckBox {
+                        text: "I have saved my recovery codes in a secure location";
+                        checked <=> root.recovery-codes-confirmed;
+                    }
+                }
+                
+                HorizontalBox {
+                    alignment: center;
+                    
+                    Button {
+                        text: "Continue";
+                        enabled: root.recovery-codes-confirmed;
+                        primary: true;
+                        clicked => {
+                            root.show-recovery-setup = false;
+                            root.recovery-codes-confirmed = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Recovery login dialog
+    if root.show-recovery-login : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        
+        Rectangle {
+            width: 450px;
+            height: 350px;
+            background: white;
+            border-radius: 8px;
+            border-width: 2px;
+            border-color: #ff9800;
+            
+            VerticalBox {
+                padding: 30px;
+                spacing: 20px;
+                
+                Text {
+                    text: "🔑 Emergency Recovery";
+                    font-size: 24px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                }
+                
+                Text {
+                    text: "Enter one of your recovery codes to regain access:";
+                    horizontal-alignment: center;
+                    color: #666;
+                }
+                
+                recovery-code-input := LineEdit {
+                    placeholder-text: "XXXX-XXXX-XXXX-XXXX";
+                }
+                
+                HorizontalBox {
+                    spacing: 10px;
+                    alignment: center;
+                    
+                    Button {
+                        text: "Recover Access";
+                        primary: true;
+                        enabled: recovery-code-input.text != "";
+                        clicked => {
+                            root.recover-with-code(recovery-code-input.text);
+                            recovery-code-input.text = "";
+                        }
+                    }
+                    
+                    Button {
+                        text: "Cancel";
+                        clicked => {
+                            root.show-recovery-login = false;
+                            recovery-code-input.text = "";
+                        }
+                    }
+                }
+                
+                Text {
+                    text: "⚠️ Recovery codes were provided during initial setup.\nContact support if you've lost all recovery codes.";
+                    horizontal-alignment: center;
+                    font-size: 11px;
+                    color: #999;
+                }
             }
         }
     }
