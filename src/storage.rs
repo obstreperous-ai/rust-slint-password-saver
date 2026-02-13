@@ -1019,6 +1019,11 @@ impl PasswordStorage {
     /// stored hashes, and if so, decrypts and returns the recovery key using
     /// the master password.
     ///
+    /// **Note**: Current implementation requires master password for decryption,
+    /// limiting recovery to identity verification only. Future enhancement will
+    /// store encrypted database key with recovery key to enable full recovery
+    /// without master password.
+    ///
     /// # Arguments
     ///
     /// * `recovery_code_hash` - SHA-256 hash of the recovery code to verify

@@ -3302,6 +3302,11 @@ A comprehensive emergency recovery system has been implemented that generates 3 
 **Actual Effort:** ~6 hours
 **Labels:** security, enhancement, recovery, availability, resolved
 
+**Current Implementation Note:**
+The current implementation provides identity verification through recovery codes. When a valid recovery code is entered, the application verifies your identity and unlocks the UI. However, you will still need your master password to decrypt and access your stored passwords. If you've completely forgotten your master password, you can use the "Change Master Password" feature to set a new one (requires knowing the old password currently).
+
+**Future Enhancement:** A planned enhancement will store an encrypted copy of the database key with the recovery key, enabling full password recovery without knowing the master password.
+
 **Recovery Usage Instructions:**
 
 1. **First-Time Setup:**
@@ -3311,11 +3316,12 @@ A comprehensive emergency recovery system has been implemented that generates 3 
    - Store them in a secure physical location (NOT in the password manager)
    - Check the confirmation box and click Continue
 
-2. **Using Recovery Codes:**
-   - If you forget your master password, click "Forgot Password?" in the lock screen
+2. **Using Recovery Codes (Current):**
+   - If you're locked out, click "Forgot Password?" in the lock screen
    - Enter one of your recovery codes
-   - Gain access to your password database
-   - Consider changing your master password after recovery
+   - The application will verify your identity and unlock the UI
+   - You can then enter your master password to access your passwords
+   - Use "Change Master Password" if you need to update it
 
 3. **Security Best Practices:**
    - Store recovery codes in multiple secure locations

@@ -849,12 +849,17 @@ fn main() -> Result<(), slint::PlatformError> {
                         // Close recovery login dialog
                         ui.set_show_recovery_login(false);
                         
-                        // Inform user they need to set a new master password
+                        // TODO: In current implementation, recovery codes verify identity but
+                        // user still needs to know their master password to decrypt.
+                        // Future enhancement: Store encrypted database key with recovery key
+                        // to allow full recovery without master password.
+                        
+                        // Inform user of successful verification
                         ui.set_status_message(
-                            "✅ Recovery successful! You can now access your passwords.\nConsider changing your master password.".into()
+                            "✅ Recovery code verified! You are authenticated.\nEnter your master password to access passwords, or change it if forgotten.".into()
                         );
                         
-                        // Unlock the session
+                        // Unlock the session UI
                         ui.set_is_locked(false);
                     } else {
                         ui.set_status_message("❌ Invalid recovery code. Please try again.".into());

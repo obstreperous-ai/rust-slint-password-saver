@@ -70,6 +70,8 @@ impl RecoveryCode {
         let mut rng = rand::thread_rng();
 
         // Use character set without ambiguous characters (0, O, 1, I, l)
+        // 30-character set provides ~77 bits of entropy (16 × log2(30) ≈ 77 bits)
+        // This is comparable to a 12-character alphanumeric password
         let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
         // Generate 16 random characters
