@@ -93,7 +93,7 @@ fn test_save_and_load_with_recovery() {
     // Save with recovery
     storage
         .save_entries_with_recovery(
-            &vec![entry.clone()],
+            std::slice::from_ref(&entry),
             TEST_PASSWORD,
             recovery_hashes,
             &recovery_key,
@@ -141,7 +141,7 @@ fn test_recovery_with_valid_code() {
     // Save with recovery
     storage
         .save_entries_with_recovery(
-            &vec![entry.clone()],
+            std::slice::from_ref(&entry),
             TEST_PASSWORD,
             recovery_hashes.clone(),
             &recovery_key,
@@ -203,7 +203,7 @@ fn test_recovery_with_invalid_code() {
     // Save with recovery
     storage
         .save_entries_with_recovery(
-            &vec![entry.clone()],
+            std::slice::from_ref(&entry),
             TEST_PASSWORD,
             recovery_hashes,
             &recovery_key,
@@ -243,7 +243,7 @@ fn test_backward_compatibility_no_recovery_data() {
     
     // Save WITHOUT recovery (old behavior)
     storage
-        .save_entries(&vec![entry.clone()], TEST_PASSWORD)
+        .save_entries(std::slice::from_ref(&entry), TEST_PASSWORD)
         .expect("Should save entries without recovery");
     
     // Try to load recovery data
@@ -268,9 +268,9 @@ fn test_recovery_codes_are_properly_hashed() {
     // Verify each hash corresponds to its code
     for (code, hash) in codes.iter().zip(hashes.iter()) {
         use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(code.as_bytes());
-        let computed_hash = hex::encode(hasher.finalize());
+        let mut hash_computer = Sha256::new();
+        hash_computer.update(code.as_bytes());
+        let computed_hash = hex::encode(hash_computer.finalize());
         
         assert_eq!(
             &computed_hash, hash,
@@ -318,7 +318,7 @@ fn test_full_recovery_workflow() {
     
     storage
         .save_entries_with_recovery(
-            &vec![entry.clone()],
+            std::slice::from_ref(&entry),
             TEST_PASSWORD,
             recovery_hashes,
             &recovery_key,

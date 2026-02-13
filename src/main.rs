@@ -833,9 +833,9 @@ fn main() -> Result<(), slint::PlatformError> {
             match storage.load_recovery_data() {
                 Ok(Some((hashes, _encrypted_key))) => {
                     // Hash the provided recovery code
-                    let mut hasher = Sha256::new();
-                    hasher.update(recovery_code.as_bytes());
-                    let code_hash = hex::encode(hasher.finalize());
+                    let mut hash_computer = Sha256::new();
+                    hash_computer.update(recovery_code.as_bytes());
+                    let code_hash = hex::encode(hash_computer.finalize());
                     
                     // Check if the hash matches any stored hash
                     let hash_matches = hashes.iter().any(|stored_hash| {

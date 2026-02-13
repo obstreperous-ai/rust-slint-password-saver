@@ -125,6 +125,8 @@ impl RecoveryCode {
     /// assert!(code.verify(&code_str));
     /// assert!(!code.verify("WRONG-CODE-HERE-XXXX"));
     /// ```
+    #[must_use]
+    #[allow(dead_code)] // Public API method
     pub fn verify(&self, input: &str) -> bool {
         let mut hasher = Sha256::new();
         hasher.update(input.as_bytes());
@@ -247,6 +249,7 @@ impl EmergencyRecovery {
     ///     Err(e) => println!("Access denied: {}", e),
     /// }
     /// ```
+    #[allow(dead_code)] // Public API method
     pub fn recover_access(&self, code: &str) -> Result<Vec<u8>, String> {
         // Verify code matches one of the recovery codes
         if self.recovery_codes.iter().any(|rc| rc.verify(code)) {
@@ -299,6 +302,7 @@ impl EmergencyRecovery {
     ///
     /// An `EmergencyRecovery` instance that can verify codes.
     #[must_use]
+    #[allow(dead_code)] // Public API method
     pub fn from_hashes(hashes: Vec<String>, recovery_key: Vec<u8>) -> Self {
         let recovery_codes: Vec<RecoveryCode> = hashes
             .into_iter()

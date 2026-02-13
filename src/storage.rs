@@ -993,6 +993,7 @@ impl PasswordStorage {
     /// `Ok(Some((hashes, encrypted_key)))` if recovery data exists,
     /// `Ok(None)` if no recovery data is stored (backward compatibility),
     /// `Err(SecurityError)` if file operations fail
+    #[allow(clippy::type_complexity)]
     pub fn load_recovery_data(&self) -> Result<Option<(Vec<String>, Vec<u8>)>, SecurityError> {
         if !self.storage_path.exists() {
             return Ok(None);
