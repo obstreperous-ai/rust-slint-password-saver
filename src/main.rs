@@ -731,9 +731,10 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     // Check for updates on startup (non-blocking)
+    // Give the UI time to fully initialize before checking (2 seconds)
+    // This prevents blocking the initial UI render and ensures a smooth startup experience
     let ui_weak = ui.as_weak();
     std::thread::spawn(move || {
-        // Give the UI time to fully initialize
         std::thread::sleep(Duration::from_secs(2));
 
         let checker = UpdateChecker::new();

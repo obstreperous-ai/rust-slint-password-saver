@@ -52,6 +52,10 @@ struct GitHubRelease {
 }
 
 /// Update checker configuration
+///
+/// This configuration struct is part of the public API for future enhancements.
+/// It allows users to configure update checking behavior once persistent settings
+/// are implemented. Currently not used in the UI but available for future use.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct UpdateCheckConfig {
