@@ -36,6 +36,7 @@ mod search;
 mod secure_delete;
 mod session;
 mod storage;
+mod update_checker;
 mod validation;
 
 #[cfg(windows)]
@@ -57,6 +58,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use storage::{PasswordEntry, PasswordStorage};
+use update_checker::UpdateChecker;
 use validation::{validate_master_password, validate_password, validate_title, validate_username};
 
 slint::include_modules!();
@@ -661,6 +663,97 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             ui.set_status_message(message.into());
+        }
+    });
+
+    // Set up update check callback (manual check)
+    let ui_weak = ui.as_weak();
+    ui.on_check_for_updates(move || {
+        if let Some(ui) = ui_weak.upgrade() {
+            ui.set_checking_for_updates(true);
+            ui.set_status_message("Checking for updates...".into());
+
+            // Spawn a thread for blocking update check
+            let ui_weak_inner = ui.as_weak();
+            std::thread::spawn(move || {
+                let checker = UpdateChecker::new();
+
+                match checker.check_for_updates() {
+                    Ok(Some(update_info)) => {
+                        if let Some(ui) = ui_weak_inner.upgrade() {
+                            ui.set_update_available(true);
+                            ui.set_latest_version(update_info.latest_version.clone().into());
+                            ui.set_is_security_update(update_info.security_update);
+                            ui.set_download_url(update_info.download_url.clone().into());
+                            ui.set_checking_for_updates(false);
+
+                            let message = if update_info.security_update {
+                                format!(
+                                    "⚠️ Security update available: {}",
+                                    update_info.latest_version
+                                )
+                            } else {
+                                format!("New version available: {}", update_info.latest_version)
+                            };
+                            ui.set_status_message(message.into());
+                        }
+                    }
+                    Ok(None) => {
+                        if let Some(ui) = ui_weak_inner.upgrade() {
+                            ui.set_checking_for_updates(false);
+                            ui.set_status_message("You are running the latest version".into());
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to check for updates: {}", e);
+                        if let Some(ui) = ui_weak_inner.upgrade() {
+                            ui.set_checking_for_updates(false);
+                            ui.set_status_message(
+                                format!("Failed to check for updates: {}", e).into(),
+                            );
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    // Set up open release page callback
+    let ui_weak = ui.as_weak();
+    ui.on_open_release_page(move || {
+        if let Some(ui) = ui_weak.upgrade() {
+            let url = ui.get_download_url();
+            if let Err(e) = webbrowser::open(url.as_ref()) {
+                warn!("Failed to open browser: {}", e);
+                ui.set_status_message(format!("Failed to open browser: {}", e).into());
+            }
+        }
+    });
+
+    // Check for updates on startup (non-blocking)
+    let ui_weak = ui.as_weak();
+    std::thread::spawn(move || {
+        // Give the UI time to fully initialize
+        std::thread::sleep(Duration::from_secs(2));
+
+        let checker = UpdateChecker::new();
+
+        match checker.check_for_updates() {
+            Ok(Some(update_info)) => {
+                if let Some(ui) = ui_weak.upgrade() {
+                    ui.set_update_available(true);
+                    ui.set_latest_version(update_info.latest_version.into());
+                    ui.set_is_security_update(update_info.security_update);
+                    ui.set_download_url(update_info.download_url.into());
+                }
+            }
+            Ok(None) => {
+                // No update available - silently continue
+            }
+            Err(e) => {
+                warn!("Failed to check for updates on startup: {}", e);
+                // Don't show error to user on automatic startup check
+            }
         }
     });
 

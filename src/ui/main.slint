@@ -27,6 +27,13 @@ export component AppWindow inherits Window {
     in-out property <string> generated-password: "";
     in-out property <string> password-entropy-text: "";
     
+    // Update notification properties
+    in-out property <bool> update-available: false;
+    in-out property <bool> is-security-update: false;
+    in-out property <string> latest-version: "";
+    in-out property <string> download-url: "";
+    in-out property <bool> checking-for-updates: false;
+    
     callback save-password(string, string, string, string);
     callback load-passwords(string);
     callback change-master-password(string, string, string);
@@ -37,6 +44,8 @@ export component AppWindow inherits Window {
     callback use-generated-password(string);
     callback search-passwords(string);
     callback sort-passwords(int);
+    callback check-for-updates();
+    callback open-release-page();
     
     VerticalBox {
         padding: 20px;
@@ -47,6 +56,40 @@ export component AppWindow inherits Window {
             font-size: 24px;
             font-weight: 700;
             horizontal-alignment: center;
+        }
+        
+        // Update notification banner
+        if root.update-available : Rectangle {
+            background: root.is-security-update ? #ff9800 : #2196f3;
+            border-radius: 4px;
+            
+            HorizontalBox {
+                padding: 10px;
+                spacing: 10px;
+                
+                Text {
+                    text: root.is-security-update ? 
+                        "⚠️ Security Update Available: " + root.latest-version :
+                        "ℹ️ New Version Available: " + root.latest-version;
+                    color: white;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                
+                Button {
+                    text: "View Release";
+                    clicked => {
+                        root.open-release-page();
+                    }
+                }
+                
+                Button {
+                    text: "Dismiss";
+                    clicked => {
+                        root.update-available = false;
+                    }
+                }
+            }
         }
         
         GroupBox {
@@ -150,6 +193,14 @@ export component AppWindow inherits Window {
                         enabled: root.master-password != "";
                         clicked => {
                             root.show-change-password-dialog = true;
+                        }
+                    }
+                    
+                    Button {
+                        text: "🔄 Check for Updates";
+                        enabled: !root.checking-for-updates;
+                        clicked => {
+                            root.check-for-updates();
                         }
                     }
                 }
