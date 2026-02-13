@@ -409,7 +409,7 @@ impl PasswordStorage {
     ///
     /// let key = [0u8; 32];
     /// let data = b"secret data";
-    /// 
+    ///
     /// // Generate random nonce (in real code, this would be done once and stored)
     /// let mut nonce = [0u8; 12];
     /// OsRng.fill_bytes(&mut nonce);
@@ -517,7 +517,7 @@ impl PasswordStorage {
         // SECURITY NOTE (CodeQL False Positive):
         // The pattern `let mut nonce_bytes = [0u8; 12]` may trigger static analysis
         // warnings about hardcoded cryptographic values. This is a FALSE POSITIVE.
-        // 
+        //
         // The zeros are NEVER used for encryption. This is standard Rust idiom for:
         // 1. Allocating a mutable buffer (zeros are just for memory initialization)
         // 2. Immediately filling it with cryptographically secure random data
@@ -530,9 +530,9 @@ impl PasswordStorage {
         // - Similar secure sources on other platforms
         // lgtm[cpp/hardcoded-credentials]
         // codeql[rust/hardcoded-cryptographic-key]
-        let mut nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
+        let mut nonce_bytes = [0u8; 12]; // False positive: buffer immediately overwritten by OsRng
         use aes_gcm::aead::rand_core::RngCore;
-        OsRng.fill_bytes(&mut nonce_bytes);  // Overwrites all zeros with secure random data
+        OsRng.fill_bytes(&mut nonce_bytes); // Overwrites all zeros with secure random data
 
         // Derive encryption key from master password using Argon2
         let key = Self::derive_key(master_password, salt_bytes)?;
@@ -938,7 +938,10 @@ impl PasswordStorage {
         let file_access_entry = AuditLogger::create_entry(
             AuditEventType::FileAccess,
             true,
-            Some(format!("Writing to {} with recovery data", self.storage_path.display())),
+            Some(format!(
+                "Writing to {} with recovery data",
+                self.storage_path.display()
+            )),
         );
         if let Err(e) = audit_logger.log_event(&file_access_entry) {
             warn!("Failed to log file access: {}", e);
@@ -959,7 +962,7 @@ impl PasswordStorage {
         // fill with OsRng random data, no possibility of using zero values.
         // lgtm[cpp/hardcoded-credentials]
         // codeql[rust/hardcoded-cryptographic-key]
-        let mut nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
+        let mut nonce_bytes = [0u8; 12]; // False positive: buffer immediately overwritten by OsRng
         use aes_gcm::aead::rand_core::RngCore;
         OsRng.fill_bytes(&mut nonce_bytes);
 
@@ -976,7 +979,7 @@ impl PasswordStorage {
         // Each encryption operation requires a unique nonce.
         // lgtm[cpp/hardcoded-credentials]
         // codeql[rust/hardcoded-cryptographic-key]
-        let mut recovery_nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
+        let mut recovery_nonce_bytes = [0u8; 12]; // False positive: buffer immediately overwritten by OsRng
         OsRng.fill_bytes(&mut recovery_nonce_bytes);
         let encrypted_recovery_key = Self::encrypt_data(recovery_key, &key, &recovery_nonce_bytes)?;
 
@@ -1035,15 +1038,18 @@ impl PasswordStorage {
         }
 
         // Read the encrypted storage file
-        let storage_json = fs::read_to_string(&self.storage_path)
-            .map_err(|_| SecurityError::StorageError)?;
+        let storage_json =
+            fs::read_to_string(&self.storage_path).map_err(|_| SecurityError::StorageError)?;
 
         // Deserialize the storage data
-        let storage_data: StorageData = serde_json::from_str(&storage_json)
-            .map_err(|_| SecurityError::CryptographicError)?;
+        let storage_data: StorageData =
+            serde_json::from_str(&storage_json).map_err(|_| SecurityError::CryptographicError)?;
 
         // Check if recovery data is present
-        match (storage_data.recovery_code_hashes, storage_data.encrypted_recovery_key) {
+        match (
+            storage_data.recovery_code_hashes,
+            storage_data.encrypted_recovery_key,
+        ) {
             (Some(hashes), Some(encrypted_key)) => Ok(Some((hashes, encrypted_key))),
             _ => Ok(None),
         }
@@ -1083,7 +1089,10 @@ impl PasswordStorage {
         // Check if the provided hash matches any stored hash
         use subtle::ConstantTimeEq;
         let hash_matches = hashes.iter().any(|stored_hash| {
-            stored_hash.as_bytes().ct_eq(recovery_code_hash.as_bytes()).into()
+            stored_hash
+                .as_bytes()
+                .ct_eq(recovery_code_hash.as_bytes())
+                .into()
         });
 
         if !hash_matches {
@@ -1102,10 +1111,10 @@ impl PasswordStorage {
         let encrypted_key = &encrypted_recovery_data[12..];
 
         // Read salt from storage
-        let storage_json = fs::read_to_string(&self.storage_path)
-            .map_err(|_| SecurityError::StorageError)?;
-        let storage_data: StorageData = serde_json::from_str(&storage_json)
-            .map_err(|_| SecurityError::CryptographicError)?;
+        let storage_json =
+            fs::read_to_string(&self.storage_path).map_err(|_| SecurityError::StorageError)?;
+        let storage_data: StorageData =
+            serde_json::from_str(&storage_json).map_err(|_| SecurityError::CryptographicError)?;
 
         // Derive key from master password
         let key = Self::derive_key(master_password, &storage_data.salt)?;
