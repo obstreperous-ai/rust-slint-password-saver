@@ -926,12 +926,14 @@ ui.on_save_password(move |master_password, title, username, password| {
 
 ---
 
-### Issue 6: 🔵 Implement Decryption Rate Limiting
+### Issue 6: ✅ Implement Decryption Rate Limiting [COMPLETED]
 
 **Title:** Add rate limiting to prevent brute-force attacks on master password
 
+**Status:** ✅ **COMPLETED** (Core functionality implemented)
+
 **Description:**
-Currently, there is no protection against an attacker making unlimited attempts to guess the master password. If an attacker gains access to the encrypted file, they can attempt brute-force attacks offline without rate limiting.
+Rate limiting has been implemented to protect against brute-force attacks on the master password with configurable thresholds and lockout periods.
 
 **Security Impact:**
 - Medium severity
@@ -1045,12 +1047,14 @@ ui.on_load_passwords(move |master_password| {
 
 ---
 
-### Issue 7: 🔵 Add Security Audit Logging
+### Issue 7: ✅ Add Security Audit Logging [COMPLETED]
 
 **Title:** Implement audit logging for security-relevant events
 
+**Status:** ✅ **COMPLETED** (2026-02-08)
+
 **Description:**
-Currently, no audit trail exists for security events like successful/failed authentication attempts, file access, or data modifications. Audit logs are essential for detecting unauthorized access attempts and forensic analysis.
+Comprehensive audit logging with HMAC-based integrity protection has been implemented for all security-relevant events.
 
 **Security Impact:**
 - Low-Medium severity
@@ -1164,12 +1168,14 @@ impl AuditLogger {
 
 ---
 
-### Issue 8: 🔵 Implement Master Password Change Functionality
+### Issue 8: ✅ Implement Master Password Change Functionality [RESOLVED]
 
 **Title:** Add ability to change master password
 
+**Status:** ✅ **RESOLVED** (2026-02-08)
+
 **Description:**
-Users currently have no way to change their master password after initial setup. This is a critical feature for password managers, as users may need to change passwords due to compromise, sharing, or routine security practices.
+Master password change functionality has been implemented with secure re-encryption of all stored password data.
 
 **Security Impact:**
 - Medium severity (missing feature)
