@@ -57,6 +57,7 @@ pub mod integrity;
 pub mod password_generator;
 pub mod password_strength;
 pub mod rate_limit;
+pub mod recovery;
 pub mod search;
 pub mod secure_delete;
 pub mod session;

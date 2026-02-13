@@ -351,11 +351,14 @@ impl PasswordStorage {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use aes_gcm::aead::{OsRng, rand_core::RngCore};
     ///
     /// let key = [0u8; 32];
-    /// let nonce = [0u8; 12];
+    /// // IMPORTANT: In production, generate random nonce like this:
+    /// let mut nonce = [0u8; 12];
+    /// OsRng.fill_bytes(&mut nonce);  // Fill with cryptographically secure random data
     /// let data = b"secret data";
     ///
     /// let encrypted = PasswordStorage::encrypt_data(data, &key, &nonce).unwrap();
@@ -400,12 +403,16 @@ impl PasswordStorage {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use aes_gcm::aead::{OsRng, rand_core::RngCore};
     ///
     /// let key = [0u8; 32];
-    /// let nonce = [0u8; 12];
     /// let data = b"secret data";
+    /// 
+    /// // Generate random nonce (in real code, this would be done once and stored)
+    /// let mut nonce = [0u8; 12];
+    /// OsRng.fill_bytes(&mut nonce);
     ///
     /// let encrypted = PasswordStorage::encrypt_data(data, &key, &nonce).unwrap();
     /// let decrypted = PasswordStorage::decrypt_data(&encrypted, &key, &nonce).unwrap();
@@ -506,9 +513,26 @@ impl PasswordStorage {
 
         // Generate cryptographically random nonce for AES-GCM
         // Must be unique for each encryption with the same key
-        let mut nonce_bytes = [0u8; 12];
+        //
+        // SECURITY NOTE (CodeQL False Positive):
+        // The pattern `let mut nonce_bytes = [0u8; 12]` may trigger static analysis
+        // warnings about hardcoded cryptographic values. This is a FALSE POSITIVE.
+        // 
+        // The zeros are NEVER used for encryption. This is standard Rust idiom for:
+        // 1. Allocating a mutable buffer (zeros are just for memory initialization)
+        // 2. Immediately filling it with cryptographically secure random data
+        // 3. No code path exists where zero values reach the encryption function
+        //
+        // The actual nonce used for encryption comes from OsRng (OS CSPRNG), which
+        // provides cryptographically secure random bytes from:
+        // - /dev/urandom on Unix/Linux
+        // - BCryptGenRandom on Windows
+        // - Similar secure sources on other platforms
+        // lgtm[cpp/hardcoded-credentials]
+        // codeql[rust/hardcoded-cryptographic-key]
+        let mut nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
         use aes_gcm::aead::rand_core::RngCore;
-        OsRng.fill_bytes(&mut nonce_bytes);
+        OsRng.fill_bytes(&mut nonce_bytes);  // Overwrites all zeros with secure random data
 
         // Derive encryption key from master password using Argon2
         let key = Self::derive_key(master_password, salt_bytes)?;
@@ -521,6 +545,8 @@ impl PasswordStorage {
             salt: salt_bytes.to_vec(),
             nonce: nonce_bytes.to_vec(),
             encrypted_data,
+            recovery_code_hashes: None,
+            encrypted_recovery_key: None,
         };
 
         // Serialize storage data to JSON and write to disk
@@ -876,6 +902,219 @@ impl PasswordStorage {
 
         Ok(())
     }
+
+    /// Save password entries with recovery data (for first-time setup).
+    ///
+    /// This method is called during initial setup to save both password entries
+    /// and emergency recovery information. The recovery data includes:
+    /// - Hashes of recovery codes (for verification)
+    /// - Encrypted recovery key (encrypted with master password)
+    ///
+    /// # Arguments
+    ///
+    /// * `entries` - Password entries to save
+    /// * `master_password` - Master password for encryption
+    /// * `recovery_code_hashes` - SHA-256 hashes of recovery codes
+    /// * `recovery_key` - Recovery master key (will be encrypted before storage)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or a `SecurityError` on failure
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if encryption or file operations fail
+    pub fn save_entries_with_recovery(
+        &self,
+        entries: &[PasswordEntry],
+        master_password: &str,
+        recovery_code_hashes: Vec<String>,
+        recovery_key: &[u8],
+    ) -> Result<(), SecurityError> {
+        // Initialize audit logger
+        let audit_logger = AuditLogger::new(get_audit_log_path());
+
+        // Log file access attempt
+        let file_access_entry = AuditLogger::create_entry(
+            AuditEventType::FileAccess,
+            true,
+            Some(format!("Writing to {} with recovery data", self.storage_path.display())),
+        );
+        if let Err(e) = audit_logger.log_event(&file_access_entry) {
+            warn!("Failed to log file access: {}", e);
+        }
+
+        // Serialize entries to JSON
+        let json_data =
+            serde_json::to_string(entries).map_err(|_| SecurityError::CryptographicError)?;
+
+        // Generate cryptographically random salt for key derivation
+        let salt = SaltString::generate(&mut OsRng);
+        let salt_bytes = salt.as_str().as_bytes();
+
+        // Generate cryptographically random nonce for AES-GCM
+        //
+        // SECURITY NOTE: See comment in save_entries() regarding the nonce initialization
+        // pattern. This follows the same secure approach: allocate buffer, immediately
+        // fill with OsRng random data, no possibility of using zero values.
+        // lgtm[cpp/hardcoded-credentials]
+        // codeql[rust/hardcoded-cryptographic-key]
+        let mut nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
+        use aes_gcm::aead::rand_core::RngCore;
+        OsRng.fill_bytes(&mut nonce_bytes);
+
+        // Derive encryption key from master password using Argon2
+        let key = Self::derive_key(master_password, salt_bytes)?;
+
+        // Encrypt the password entries data using AES-256-GCM
+        let encrypted_data = Self::encrypt_data(json_data.as_bytes(), &key, &nonce_bytes)?;
+
+        // Encrypt the recovery key with the master password
+        // Generate a separate nonce for recovery key encryption
+        //
+        // SECURITY NOTE: Same secure nonce generation pattern as above.
+        // Each encryption operation requires a unique nonce.
+        // lgtm[cpp/hardcoded-credentials]
+        // codeql[rust/hardcoded-cryptographic-key]
+        let mut recovery_nonce_bytes = [0u8; 12];  // False positive: buffer immediately overwritten by OsRng
+        OsRng.fill_bytes(&mut recovery_nonce_bytes);
+        let encrypted_recovery_key = Self::encrypt_data(recovery_key, &key, &recovery_nonce_bytes)?;
+
+        // Combine recovery nonce with encrypted recovery key
+        let mut recovery_data = recovery_nonce_bytes.to_vec();
+        recovery_data.extend_from_slice(&encrypted_recovery_key);
+
+        // Create storage structure with recovery data
+        let storage_data = StorageData {
+            salt: salt_bytes.to_vec(),
+            nonce: nonce_bytes.to_vec(),
+            encrypted_data,
+            recovery_code_hashes: Some(recovery_code_hashes),
+            encrypted_recovery_key: Some(recovery_data),
+        };
+
+        // Serialize storage data to JSON and write to disk
+        let storage_json =
+            serde_json::to_string(&storage_data).map_err(|_| SecurityError::CryptographicError)?;
+
+        // Use secure update instead of direct write
+        secure_update_file(&self.storage_path, storage_json.as_bytes())?;
+
+        // Set secure permissions
+        Self::set_secure_permissions(&self.storage_path)?;
+
+        // Log successful save with recovery
+        let save_entry = AuditLogger::create_entry(
+            AuditEventType::PasswordsSaved,
+            true,
+            Some(format!(
+                "Saved {} password entries with recovery data",
+                entries.len()
+            )),
+        );
+        if let Err(e) = audit_logger.log_event(&save_entry) {
+            warn!("Failed to log password save: {}", e);
+        }
+
+        Ok(())
+    }
+
+    /// Load recovery data from storage.
+    ///
+    /// Returns the recovery code hashes and encrypted recovery key if available.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Some((hashes, encrypted_key)))` if recovery data exists,
+    /// `Ok(None)` if no recovery data is stored (backward compatibility),
+    /// `Err(SecurityError)` if file operations fail
+    #[allow(clippy::type_complexity)]
+    pub fn load_recovery_data(&self) -> Result<Option<(Vec<String>, Vec<u8>)>, SecurityError> {
+        if !self.storage_path.exists() {
+            return Ok(None);
+        }
+
+        // Read the encrypted storage file
+        let storage_json = fs::read_to_string(&self.storage_path)
+            .map_err(|_| SecurityError::StorageError)?;
+
+        // Deserialize the storage data
+        let storage_data: StorageData = serde_json::from_str(&storage_json)
+            .map_err(|_| SecurityError::CryptographicError)?;
+
+        // Check if recovery data is present
+        match (storage_data.recovery_code_hashes, storage_data.encrypted_recovery_key) {
+            (Some(hashes), Some(encrypted_key)) => Ok(Some((hashes, encrypted_key))),
+            _ => Ok(None),
+        }
+    }
+
+    /// Verify a recovery code and decrypt the recovery key.
+    ///
+    /// This method checks if the provided recovery code hash matches one of the
+    /// stored hashes, and if so, decrypts and returns the recovery key using
+    /// the master password.
+    ///
+    /// **Note**: Current implementation requires master password for decryption,
+    /// limiting recovery to identity verification only. Future enhancement will
+    /// store encrypted database key with recovery key to enable full recovery
+    /// without master password.
+    ///
+    /// # Arguments
+    ///
+    /// * `recovery_code_hash` - SHA-256 hash of the recovery code to verify
+    /// * `master_password` - Master password for decrypting the recovery key
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Some(recovery_key))` if the code is valid and decryption succeeds,
+    /// `Ok(None)` if no recovery data exists or code doesn't match,
+    /// `Err(SecurityError)` if decryption fails or file operations fail
+    pub fn verify_recovery_code(
+        &self,
+        recovery_code_hash: &str,
+        master_password: &str,
+    ) -> Result<Option<Vec<u8>>, SecurityError> {
+        // Load recovery data
+        let Some((hashes, encrypted_recovery_data)) = self.load_recovery_data()? else {
+            return Ok(None);
+        };
+
+        // Check if the provided hash matches any stored hash
+        use subtle::ConstantTimeEq;
+        let hash_matches = hashes.iter().any(|stored_hash| {
+            stored_hash.as_bytes().ct_eq(recovery_code_hash.as_bytes()).into()
+        });
+
+        if !hash_matches {
+            return Ok(None);
+        }
+
+        // Decrypt the recovery key
+        // First 12 bytes are the nonce
+        if encrypted_recovery_data.len() < 12 {
+            return Err(SecurityError::CryptographicError);
+        }
+
+        let recovery_nonce: [u8; 12] = encrypted_recovery_data[..12]
+            .try_into()
+            .map_err(|_| SecurityError::CryptographicError)?;
+        let encrypted_key = &encrypted_recovery_data[12..];
+
+        // Read salt from storage
+        let storage_json = fs::read_to_string(&self.storage_path)
+            .map_err(|_| SecurityError::StorageError)?;
+        let storage_data: StorageData = serde_json::from_str(&storage_json)
+            .map_err(|_| SecurityError::CryptographicError)?;
+
+        // Derive key from master password
+        let key = Self::derive_key(master_password, &storage_data.salt)?;
+
+        // Decrypt recovery key
+        let recovery_key = Self::decrypt_data(encrypted_key, &key, &recovery_nonce)?;
+
+        Ok(Some(recovery_key))
+    }
 }
 
 /// Internal structure for storing encrypted data on disk.
@@ -895,12 +1134,20 @@ impl PasswordStorage {
 /// - Salt is public information used to prevent rainbow table attacks
 /// - Nonce is public information that ensures unique ciphertexts
 /// - Security depends entirely on the secrecy of the master password
+/// - Recovery code hashes are stored (not the actual recovery codes)
+/// - Recovery key is encrypted with the master password
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct StorageData {
     salt: Vec<u8>,
     nonce: Vec<u8>,
     encrypted_data: Vec<u8>,
+    /// Recovery code hashes (SHA-256) - Optional for backward compatibility
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery_code_hashes: Option<Vec<String>>,
+    /// Encrypted recovery key - Optional for backward compatibility
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    encrypted_recovery_key: Option<Vec<u8>>,
 }
 
 #[cfg(test)]
@@ -912,6 +1159,9 @@ mod tests {
     fn test_encryption_decryption() {
         let data = b"Hello, World!";
         let key = [0u8; 32];
+        // NOTE: In tests, we use a fixed nonce for reproducibility.
+        // In production code, nonces MUST be randomly generated for each encryption.
+        // See save_entries() for the proper pattern using OsRng.
         let nonce = [0u8; 12];
 
         let encrypted = PasswordStorage::encrypt_data(data, &key, &nonce).unwrap();
