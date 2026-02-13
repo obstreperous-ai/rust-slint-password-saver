@@ -305,7 +305,73 @@ OsRng.fill_bytes(&mut nonce_bytes);
 **Impact:** ✅ **GOOD** - Already using cryptographically secure RNG
 **Recommendation:** Add comments documenting the security properties
 
-#### 7. Missing Input Sanitization
+#### 7. CodeQL Alert: Hardcoded Cryptographic Nonce Pattern ✅ SECURE (FALSE POSITIVE)
+
+**Location:** `src/storage.rs:509`, `src/storage.rs:932`, `src/storage.rs:944`
+
+**CodeQL Alert:** Static analysis tools flag the pattern `let mut nonce_bytes = [0u8; 12];` as potentially using a hardcoded cryptographic nonce.
+
+**Analysis:**
+
+This is a **false positive**. The code follows a secure and industry-standard pattern:
+
+```rust
+// Step 1: Allocate buffer (initialized to zeros for memory allocation)
+let mut nonce_bytes = [0u8; 12];
+
+// Step 2: IMMEDIATELY fill with cryptographically secure random data
+use aes_gcm::aead::rand_core::RngCore;
+OsRng.fill_bytes(&mut nonce_bytes);
+
+// Step 3: Use the random nonce for encryption
+let encrypted = Self::encrypt_data(data, &key, &nonce_bytes)?;
+```
+
+**Why This Pattern is Secure:**
+
+1. **Zero initialization is just memory allocation** - The `[0u8; 12]` creates a mutable buffer but never uses the zero values
+2. **Immediate overwrite** - The very next line after allocation fills the entire buffer with cryptographically secure random bytes from `OsRng`
+3. **No gap for vulnerability** - There's no code path where the zero-initialized nonce could be used for encryption
+4. **Standard Rust pattern** - This is the idiomatic way in Rust to create a mutable byte array that will be filled by an external source
+5. **OsRng is cryptographically secure** - Uses the operating system's CSPRNG (e.g., `/dev/urandom` on Unix, `BCryptGenRandom` on Windows)
+
+**Alternative Patterns Considered:**
+
+```rust
+// Alternative 1: Direct array creation (requires Copy trait, not available for RNG)
+// let nonce_bytes = OsRng.gen::<[u8; 12]>(); // ❌ Requires additional traits
+
+// Alternative 2: Vec allocation (adds heap overhead)
+// let mut nonce_bytes = vec![0u8; 12]; // ✅ Works but less efficient
+
+// Alternative 3: Uninit memory (unsafe and unnecessary complexity)
+// let mut nonce_bytes = MaybeUninit::<[u8; 12]>::uninit(); // ❌ Unsafe, overkill
+```
+
+**Recommendation:**
+
+✅ **CURRENT IMPLEMENTATION IS SECURE** - No changes needed to the algorithm
+
+However, to satisfy static analysis tools and improve code clarity:
+
+1. **Add explicit comments** explaining the pattern (already done in this commit)
+2. **Consider suppressing the CodeQL warning** with an annotation if needed
+3. **Document in SECURITY.md** that this is a known false positive (this section)
+
+**Impact:** 🟢 **SECURE** - False positive from static analysis; actual implementation uses proper cryptographic random number generation
+
+**Evidence of Security:**
+- Nonces are generated using `OsRng` which is backed by platform-specific CSPRNGs
+- Each encryption operation generates a unique nonce (lines 509, 932, 944, 945)
+- Nonces are never reused (new random value for each `save_entries` call)
+- The zero initialization is immediately overwritten before any use
+
+**Test Coverage:**
+- Tests in `tests/storage_test.rs` verify encryption produces different outputs with different nonces
+- Integration tests confirm multiple save operations generate unique encrypted data
+- No test path exists where zero-initialized nonces reach encryption functions
+
+#### 8. Missing Input Sanitization
 
 **Location:** `src/main.rs:84-92`
 
@@ -320,7 +386,7 @@ if master_password.is_empty() {
 **Impact:** 🔵 **LOW** - Potential for denial of service with extreme inputs
 **Recommendation:** Add maximum length limits and input sanitization
 
-#### 8. Error Messages Leak Information
+#### 9. Error Messages Leak Information
 
 **Location:** `src/storage.rs:276`, `src/main.rs:178-184`
 

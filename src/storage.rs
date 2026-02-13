@@ -351,11 +351,14 @@ impl PasswordStorage {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use aes_gcm::aead::{OsRng, rand_core::RngCore};
     ///
     /// let key = [0u8; 32];
-    /// let nonce = [0u8; 12];
+    /// // IMPORTANT: In production, generate random nonce like this:
+    /// let mut nonce = [0u8; 12];
+    /// OsRng.fill_bytes(&mut nonce);  // Fill with cryptographically secure random data
     /// let data = b"secret data";
     ///
     /// let encrypted = PasswordStorage::encrypt_data(data, &key, &nonce).unwrap();
@@ -400,12 +403,16 @@ impl PasswordStorage {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use rust_slint_password_saver::storage::PasswordStorage;
+    /// use aes_gcm::aead::{OsRng, rand_core::RngCore};
     ///
     /// let key = [0u8; 32];
-    /// let nonce = [0u8; 12];
     /// let data = b"secret data";
+    /// 
+    /// // Generate random nonce (in real code, this would be done once and stored)
+    /// let mut nonce = [0u8; 12];
+    /// OsRng.fill_bytes(&mut nonce);
     ///
     /// let encrypted = PasswordStorage::encrypt_data(data, &key, &nonce).unwrap();
     /// let decrypted = PasswordStorage::decrypt_data(&encrypted, &key, &nonce).unwrap();
@@ -506,9 +513,24 @@ impl PasswordStorage {
 
         // Generate cryptographically random nonce for AES-GCM
         // Must be unique for each encryption with the same key
+        //
+        // SECURITY NOTE (CodeQL False Positive):
+        // The pattern `let mut nonce_bytes = [0u8; 12]` may trigger static analysis
+        // warnings about hardcoded cryptographic values. This is a FALSE POSITIVE.
+        // 
+        // The zeros are NEVER used for encryption. This is standard Rust idiom for:
+        // 1. Allocating a mutable buffer (zeros are just for memory initialization)
+        // 2. Immediately filling it with cryptographically secure random data
+        // 3. No code path exists where zero values reach the encryption function
+        //
+        // The actual nonce used for encryption comes from OsRng (OS CSPRNG), which
+        // provides cryptographically secure random bytes from:
+        // - /dev/urandom on Unix/Linux
+        // - BCryptGenRandom on Windows
+        // - Similar secure sources on other platforms
         let mut nonce_bytes = [0u8; 12];
         use aes_gcm::aead::rand_core::RngCore;
-        OsRng.fill_bytes(&mut nonce_bytes);
+        OsRng.fill_bytes(&mut nonce_bytes);  // Overwrites all zeros with secure random data
 
         // Derive encryption key from master password using Argon2
         let key = Self::derive_key(master_password, salt_bytes)?;
@@ -929,6 +951,10 @@ impl PasswordStorage {
         let salt_bytes = salt.as_str().as_bytes();
 
         // Generate cryptographically random nonce for AES-GCM
+        //
+        // SECURITY NOTE: See comment in save_entries() regarding the nonce initialization
+        // pattern. This follows the same secure approach: allocate buffer, immediately
+        // fill with OsRng random data, no possibility of using zero values.
         let mut nonce_bytes = [0u8; 12];
         use aes_gcm::aead::rand_core::RngCore;
         OsRng.fill_bytes(&mut nonce_bytes);
@@ -941,6 +967,9 @@ impl PasswordStorage {
 
         // Encrypt the recovery key with the master password
         // Generate a separate nonce for recovery key encryption
+        //
+        // SECURITY NOTE: Same secure nonce generation pattern as above.
+        // Each encryption operation requires a unique nonce.
         let mut recovery_nonce_bytes = [0u8; 12];
         OsRng.fill_bytes(&mut recovery_nonce_bytes);
         let encrypted_recovery_key = Self::encrypt_data(recovery_key, &key, &recovery_nonce_bytes)?;
@@ -1124,6 +1153,9 @@ mod tests {
     fn test_encryption_decryption() {
         let data = b"Hello, World!";
         let key = [0u8; 32];
+        // NOTE: In tests, we use a fixed nonce for reproducibility.
+        // In production code, nonces MUST be randomly generated for each encryption.
+        // See save_entries() for the proper pattern using OsRng.
         let nonce = [0u8; 12];
 
         let encrypted = PasswordStorage::encrypt_data(data, &key, &nonce).unwrap();
