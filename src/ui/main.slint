@@ -114,6 +114,36 @@ component PrimaryButton {
     }
 }
 
+// Secondary Button Component
+component SecondaryButton {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    
+    Rectangle {
+        background: transparent;
+        border-width: 1px;
+        border-color: root.enabled ? Colors.forest-green : #d3d3d3;
+        border-radius: 4px;
+        min-width: 100px;
+        height: 36px;
+        
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { root.clicked(); }
+        }
+        
+        Text {
+            text: root.text;
+            color: root.enabled ? Colors.forest-green : #999999;
+            font-size: Typography.body-size;
+            font-weight: 500;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
@@ -309,7 +339,7 @@ export component AppWindow inherits Window {
                         }
                     }
                     
-                    Button {
+                    SecondaryButton {
                         text: "Load Passwords";
                         enabled: root.master-password != "";
                         clicked => {
@@ -317,7 +347,7 @@ export component AppWindow inherits Window {
                         }
                     }
                     
-                    Button {
+                    SecondaryButton {
                         text: "Change Master Password";
                         enabled: root.master-password != "";
                         clicked => {
