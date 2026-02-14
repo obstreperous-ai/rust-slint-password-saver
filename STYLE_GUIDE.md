@@ -828,7 +828,7 @@ Slint v1.14's standard LineEdit widget does not support custom border properties
 **Technical Limitation:**
 The standard LineEdit widget from `std-widgets.slint` does not expose these properties for customization:
 - `border-color` - NOT available
-- `border-width` - NOT available  
+- `border-width` - NOT available
 - `border-radius` - NOT available
 
 **Why Custom Component Not Used:**
