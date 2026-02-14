@@ -144,6 +144,45 @@ component SecondaryButton {
     }
 }
 
+// Task 2.3: Input Field Styling Limitation
+// ===========================================
+// LIMITATION: Slint v1.14's standard LineEdit widget does not support custom border properties
+// (border-color, border-width, border-radius) as documented in GitHub issue #3173.
+//
+// The following properties are NOT available on LineEdit:
+// - border-color
+// - border-width
+// - border-radius
+//
+// CURRENT STATE: All LineEdit components in this application use Slint's default styling, which
+// includes built-in focus states and platform-native appearance.
+//
+// DESIRED STYLING (cannot be applied directly):
+// - border-color: #d3d3d3 (Colors.disabled)
+// - border-width: 1px
+// - border-radius: 4px
+//
+// WORKAROUND OPTIONS (not implemented due to complexity and usability trade-offs):
+// 1. Create custom input component wrapping Rectangle + TextInput (loses LineEdit features)
+// 2. Wait for Slint v1.15+ which may add these styling properties (see GitHub issues #3173, #5392)
+//
+// RECOMMENDATION: Continue using standard LineEdit with default styling until Slint adds
+// native support for custom border properties. The default styling provides good usability
+// and consistent platform-native appearance.
+//
+// All 12 LineEdit instances in this file:
+// - master-password-input (Initial Setup screen)
+// - title-input (Add Password section)
+// - username-input (Add Password section)
+// - password-input (Add Password section)
+// - generated-password-display (Password Generator section)
+// - search-input (Search and Filter section)
+// - copy-value-input (Copy Password section)
+// - current-password-input (Change Master Password dialog)
+// - new-password-input (Change Master Password dialog)
+// - confirm-password-input (Change Master Password dialog)
+// - unlock-password (Lock Screen)
+// - recovery-code-input (Recovery Login screen)
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
