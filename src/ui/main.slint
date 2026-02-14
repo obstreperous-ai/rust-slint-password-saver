@@ -183,6 +183,41 @@ component SecondaryButton {
 // - confirm-password-input (Change Master Password dialog)
 // - unlock-password (Lock Screen)
 // - recovery-code-input (Recovery Login screen)
+
+// Task 2.4: Custom Card Component (replaces GroupBox)
+// ====================================================
+// Custom Card component with refined styling for more elegant appearance.
+// Replaces standard GroupBox which doesn't support custom styling in Slint v1.14.
+//
+// Styling specifications:
+// - Background: Colors.cream (#faf9f6)
+// - Border: 1px solid Colors.whisper-grey (#e8e8e8)
+// - Border radius: 6px
+// - Padding: Spacing.lg (16px)
+// - Title font: 16px, weight 600, color charcoal (#2c2c2c)
+component Card inherits Rectangle {
+    in property <string> title;
+    
+    background: Colors.cream;
+    border-width: 1px;
+    border-color: Colors.whisper-grey;
+    border-radius: 6px;
+    
+    VerticalBox {
+        padding: Spacing.lg;
+        spacing: Spacing.lg;
+        
+        if title != "" : Text {
+            text: title;
+            font-size: 16px;
+            font-weight: 600;
+            color: Colors.charcoal;
+        }
+        
+        @children
+    }
+}
+
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
@@ -290,7 +325,7 @@ export component AppWindow inherits Window {
             }
         }
         
-        GroupBox {
+        Card {
             title: "Master Password";
             
             VerticalBox {
@@ -318,7 +353,7 @@ export component AppWindow inherits Window {
             }
         }
         
-        GroupBox {
+        Card {
             title: "Add New Password";
             
             VerticalBox {
@@ -405,7 +440,7 @@ export component AppWindow inherits Window {
             }
         }
         
-        GroupBox {
+        Card {
             title: "Password Generator";
             
             VerticalBox {
@@ -509,7 +544,7 @@ export component AppWindow inherits Window {
             }
         }
         
-        GroupBox {
+        Card {
             title: "Search and Filter Passwords";
             
             VerticalBox {
@@ -602,7 +637,7 @@ export component AppWindow inherits Window {
             }
         }
         
-        GroupBox {
+        Card {
             title: "Copy Password to Clipboard";
             
             VerticalBox {
@@ -651,7 +686,7 @@ export component AppWindow inherits Window {
             }
         }
         
-        GroupBox {
+        Card {
             title: "Stored Passwords";
             
             ScrollView {
