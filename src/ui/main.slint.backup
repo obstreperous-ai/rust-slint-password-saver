@@ -238,7 +238,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     Button {
                         text: "Save Password";
@@ -289,10 +289,10 @@ export component AppWindow inherits Window {
             title: "Password Generator";
             
             VerticalBox {
-                spacing: Spacing.md;
+                spacing: 10px;
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     Text {
                         text: "Length:";
@@ -312,7 +312,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     CheckBox {
                         text: "Uppercase (A-Z)";
@@ -325,7 +325,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     CheckBox {
                         text: "Digits (0-9)";
@@ -338,7 +338,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     CheckBox {
                         text: "Exclude ambiguous (0,O,I,i,l,o,1)";
@@ -347,7 +347,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.xs;
+                    spacing: 5px;
                     
                     generated-password-display := LineEdit {
                         placeholder-text: "Generated password will appear here";
@@ -393,10 +393,10 @@ export component AppWindow inherits Window {
             title: "Search and Filter Passwords";
             
             VerticalBox {
-                spacing: Spacing.md;
+                spacing: 10px;
                 
                 HorizontalBox {
-                    spacing: Spacing.xs;
+                    spacing: 5px;
                     
                     search-input := LineEdit {
                         placeholder-text: "Search by title or username...";
@@ -424,7 +424,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.xs;
+                    spacing: 5px;
                     
                     Text {
                         text: "Sort by:";
@@ -486,7 +486,7 @@ export component AppWindow inherits Window {
             title: "Copy Password to Clipboard";
             
             VerticalBox {
-                spacing: Spacing.md;
+                spacing: 10px;
                 
                 HorizontalBox {
                     Text {
@@ -501,7 +501,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     Button {
                         text: "📋 Copy to Clipboard";
@@ -578,8 +578,8 @@ export component AppWindow inherits Window {
             border-color: Colors.forest-green;
             
             VerticalBox {
-                padding: Spacing.xl;
-                spacing: Spacing.lg;
+                padding: 20px;
+                spacing: 15px;
                 
                 Text {
                     text: "Change Master Password";
@@ -630,8 +630,8 @@ export component AppWindow inherits Window {
                     border-radius: 4px;
                     
                     VerticalBox {
-                        padding: Spacing.md;
-                        spacing: Spacing.xs;
+                        padding: 10px;
+                        spacing: 5px;
                         
                         Text {
                             text: "Password Requirements:";
@@ -670,7 +670,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     Button {
                         text: "Change Password";
@@ -722,8 +722,8 @@ export component AppWindow inherits Window {
             border-color: #ff9800;
             
             VerticalBox {
-                padding: Spacing.xxxl;
-                spacing: Spacing.xl;
+                padding: 30px;
+                spacing: 20px;
                 
                 Text {
                     text: "🔒 Session Locked";
@@ -791,7 +791,7 @@ export component AppWindow inherits Window {
         border-color: #ff9800;
         
         HorizontalBox {
-            padding: Spacing.xs;
+            padding: 5px;
             
             Text {
                 text: "Auto-lock in: " + root.seconds-until-lock + "s";
@@ -818,8 +818,8 @@ export component AppWindow inherits Window {
             border-color: #ff9800;
             
             VerticalBox {
-                padding: Spacing.xxxl;
-                spacing: Spacing.lg;
+                padding: 30px;
+                spacing: 15px;
                 
                 Text {
                     text: "⚠️ Important: Save Your Recovery Codes";
@@ -842,8 +842,8 @@ export component AppWindow inherits Window {
                     border-color: #ddd;
                     
                     VerticalBox {
-                        padding: Spacing.xl;
-                        spacing: Spacing.md;
+                        padding: 20px;
+                        spacing: 10px;
                         
                         Text {
                             text: "Recovery Code 1: " + root.recovery-code-1;
@@ -867,7 +867,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     alignment: center;
                     
                     Button {
@@ -886,7 +886,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     
                     CheckBox {
                         text: "I have saved my recovery codes in a secure location";
@@ -926,8 +926,8 @@ export component AppWindow inherits Window {
             border-color: #ff9800;
             
             VerticalBox {
-                padding: Spacing.xxxl;
-                spacing: Spacing.xl;
+                padding: 30px;
+                spacing: 20px;
                 
                 Text {
                     text: "🔑 Emergency Recovery";
@@ -949,7 +949,7 @@ export component AppWindow inherits Window {
                 }
                 
                 HorizontalBox {
-                    spacing: Spacing.md;
+                    spacing: 10px;
                     alignment: center;
                     
                     Button {
