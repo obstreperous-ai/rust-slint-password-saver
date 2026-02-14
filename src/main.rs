@@ -167,6 +167,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     "Database integrity issues detected on startup: {}",
                     issues_str
                 );
+                ui.set_status_is_error(true);
                 ui.set_status_message(
                     format!("⚠️ Database integrity warning: {}", issues_str).into(),
                 );
@@ -222,18 +223,21 @@ fn main() -> Result<(), slint::PlatformError> {
 
             // Validate title
             if let Err(e) = validate_title(&title) {
+                ui.set_status_is_error(true);
                 ui.set_status_message(format!("Invalid title: {}", e).into());
                 return;
             }
 
             // Validate username
             if let Err(e) = validate_username(&username) {
+                ui.set_status_is_error(true);
                 ui.set_status_message(format!("Invalid username: {}", e).into());
                 return;
             }
 
             // Validate password
             if let Err(e) = validate_password(&password) {
+                ui.set_status_is_error(true);
                 ui.set_status_message(format!("Invalid password: {}", e).into());
                 return;
             }
@@ -253,6 +257,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                     Ok(strength) => {
                         // Password meets basic requirements but is not strong enough
+                        ui.set_status_is_error(true);
                         ui.set_status_message(
                             format!(
                                 "Master password is too weak (strength: {:?}). Please use a stronger password with at least 12 characters, including uppercase, lowercase, digits, and special characters.",
@@ -263,6 +268,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                     Err(e) => {
                         // Password fails basic requirements
+                        ui.set_status_is_error(true);
                         ui.set_status_message(
                             format!("Master password validation failed: {}", e).into()
                         );
@@ -319,10 +325,12 @@ fn main() -> Result<(), slint::PlatformError> {
                         ui.set_recovery_code_2(recovery_codes[1].clone().into());
                         ui.set_recovery_code_3(recovery_codes[2].clone().into());
                         ui.set_show_recovery_setup(true);
+                        ui.set_status_is_error(false);
                         ui.set_status_message(format!("Password saved for: {}. Please save your recovery codes!", title).into());
                     }
                     Err(e) => {
                         // Show generic message to user
+                        ui.set_status_is_error(true);
                         ui.set_status_message(e.user_message().into());
                         // Log detailed error for debugging
                         eprintln!("Save entries with recovery failed: {}", e.debug_message());
@@ -332,10 +340,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 // Not first use, save normally
                 match storage.save_entries(&entries, &master_password) {
                     Ok(()) => {
+                        ui.set_status_is_error(false);
                         ui.set_status_message(format!("Password saved for: {}", title).into());
                     }
                     Err(e) => {
                         // Show generic message to user
+                        ui.set_status_is_error(true);
                         ui.set_status_message(e.user_message().into());
                         // Log detailed error for debugging
                         eprintln!("Save entries failed: {}", e.debug_message());
@@ -357,12 +367,14 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(ui) = ui_weak.upgrade() {
             // Validate master password
             if let Err(e) = validate_master_password(&master_password) {
+                ui.set_status_is_error(true);
                 ui.set_status_message(format!("Invalid master password: {}", e).into());
                 return;
             }
 
             // Check rate limit before attempting decryption
             if let Err(e) = RATE_LIMITER.check_and_record_attempt() {
+                ui.set_status_is_error(true);
                 ui.set_status_message(e.into());
                 return;
             }
@@ -370,6 +382,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let storage = PasswordStorage::new(storage_path_clone.clone());
 
             if !storage.exists() {
+                ui.set_status_is_error(false);
                 ui.set_status_message("No passwords stored yet".into());
                 return;
             }
@@ -412,10 +425,12 @@ fn main() -> Result<(), slint::PlatformError> {
                             entries.len() - MAX_DISPLAY_ENTRIES
                         );
                     }
+                    ui.set_status_is_error(false);
                     ui.set_status_message(message.into());
                 }
                 Err(e) => {
                     // Show generic message to user
+                    ui.set_status_is_error(true);
                     ui.set_status_message(e.user_message().into());
                     // Log detailed error for debugging
                     eprintln!("Load passwords failed: {}", e.debug_message());
@@ -432,12 +447,14 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(ui) = ui_weak.upgrade() {
             // Validate master password
             if let Err(e) = validate_master_password(&password) {
+                ui.set_status_is_error(true);
                 ui.set_status_message(format!("Invalid password: {}", e).into());
                 return;
             }
 
             // Check rate limit before attempting unlock
             if let Err(e) = RATE_LIMITER.check_and_record_attempt() {
+                ui.set_status_is_error(true);
                 ui.set_status_message(e.into());
                 return;
             }
@@ -453,16 +470,19 @@ fn main() -> Result<(), slint::PlatformError> {
                         RATE_LIMITER.record_success();
                         SESSION_MANAGER.record_activity();
                         ui.set_is_locked(false);
+                        ui.set_status_is_error(false);
                         ui.set_status_message("Session unlocked successfully".into());
                     }
                     Err(e) => {
                         // Wrong password, remain locked
+                        ui.set_status_is_error(true);
                         ui.set_status_message(e.user_message().into());
                         eprintln!("Unlock failed: {}", e.debug_message());
                     }
                 }
             } else {
                 // No storage file exists yet, can't verify password
+                ui.set_status_is_error(false);
                 ui.set_status_message("No passwords stored yet. Cannot verify unlock.".into());
             }
         }
@@ -484,6 +504,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         *clipboard_guard = Some(clipboard);
                     }
                     Err(e) => {
+                        ui.set_status_is_error(true);
                         ui.set_status_message(
                             format!("Failed to initialize clipboard: {}", e).into(),
                         );
@@ -496,6 +517,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(clipboard) = clipboard_guard.as_mut() {
                 match clipboard.copy_with_autoclear(&password) {
                     Ok(()) => {
+                        ui.set_status_is_error(false);
                         ui.set_status_message(
                             format!(
                                 "Password copied to clipboard (will auto-clear in {}s)",
@@ -505,6 +527,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         );
                     }
                     Err(e) => {
+                        ui.set_status_is_error(true);
                         ui.set_status_message(format!("Failed to copy password: {}", e).into());
                     }
                 }
@@ -553,6 +576,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     );
                 }
                 Err(e) => {
+                    ui.set_status_is_error(true);
                     ui.set_status_message(format!("Password generation failed: {}", e).into());
                     ui.set_generated_password("".into());
                     ui.set_password_entropy_text("".into());
@@ -572,6 +596,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // Find the password input field in the "Add New Password" section
             // We need to set it through a property or find another way
             // For now, we'll just copy to clipboard and show a message
+            ui.set_status_is_error(false);
             ui.set_status_message(GENERATED_PASSWORD_COPIED_MESSAGE.into());
 
             // Copy to clipboard
@@ -582,6 +607,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         *clipboard_guard = Some(clipboard);
                     }
                     Err(e) => {
+                        ui.set_status_is_error(true);
                         ui.set_status_message(
                             format!("Failed to initialize clipboard: {}", e).into(),
                         );
@@ -593,9 +619,11 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(clipboard) = clipboard_guard.as_mut() {
                 match clipboard.copy_with_autoclear(&password) {
                     Ok(()) => {
+                        ui.set_status_is_error(false);
                         ui.set_status_message(GENERATED_PASSWORD_COPIED_MESSAGE.into());
                     }
                     Err(e) => {
+                        ui.set_status_is_error(true);
                         ui.set_status_message(format!("Failed to copy password: {}", e).into());
                     }
                 }
@@ -627,8 +655,10 @@ fn main() -> Result<(), slint::PlatformError> {
 
             // Display filtered entries in status message
             if query.is_empty() {
+                ui.set_status_is_error(false);
                 ui.set_status_message(format!("Showing all {} passwords", total_count).into());
             } else if matching_indices.is_empty() {
+                ui.set_status_is_error(false);
                 ui.set_status_message(format!("No passwords match '{}'", query).into());
             } else {
                 let mut message = format!(
@@ -655,6 +685,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     );
                 }
 
+                ui.set_status_is_error(false);
                 ui.set_status_message(message.into());
             }
         }
@@ -697,6 +728,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let _ = write!(message, "... and {} more", count - MAX_DISPLAY_ENTRIES);
             }
 
+            ui.set_status_is_error(false);
             ui.set_status_message(message.into());
         }
     });
@@ -706,6 +738,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_check_for_updates(move || {
         if let Some(ui) = ui_weak.upgrade() {
             ui.set_checking_for_updates(true);
+            ui.set_status_is_error(false);
             ui.set_status_message("Checking for updates...".into());
 
             // Spawn a thread for blocking update check
@@ -730,12 +763,14 @@ fn main() -> Result<(), slint::PlatformError> {
                             } else {
                                 format!("New version available: {}", update_info.latest_version)
                             };
+                            ui.set_status_is_error(false);
                             ui.set_status_message(message.into());
                         }
                     }
                     Ok(None) => {
                         if let Some(ui) = ui_weak_inner.upgrade() {
                             ui.set_checking_for_updates(false);
+                            ui.set_status_is_error(false);
                             ui.set_status_message("You are running the latest version".into());
                         }
                     }
@@ -743,6 +778,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         warn!("Failed to check for updates: {}", e);
                         if let Some(ui) = ui_weak_inner.upgrade() {
                             ui.set_checking_for_updates(false);
+                            ui.set_status_is_error(true);
                             ui.set_status_message(
                                 format!("Failed to check for updates: {}", e).into(),
                             );
@@ -760,6 +796,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let url = ui.get_download_url();
             if let Err(e) = webbrowser::open(url.as_ref()) {
                 warn!("Failed to open browser: {}", e);
+                ui.set_status_is_error(true);
                 ui.set_status_message(format!("Failed to open browser: {}", e).into());
             }
         }
@@ -784,6 +821,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         *clipboard_guard = Some(clipboard);
                     }
                     Err(e) => {
+                        ui.set_status_is_error(true);
                         ui.set_status_message(
                             format!("Failed to initialize clipboard: {}", e).into(),
                         );
@@ -796,9 +834,11 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(clipboard) = clipboard_guard.as_mut() {
                 match clipboard.copy_with_autoclear(&codes) {
                     Ok(()) => {
+                        ui.set_status_is_error(false);
                         ui.set_status_message("Recovery codes copied to clipboard!".into());
                     }
                     Err(e) => {
+                        ui.set_status_is_error(true);
                         ui.set_status_message(format!("Failed to copy codes: {}", e).into());
                     }
                 }
@@ -812,6 +852,7 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(ui) = ui_weak.upgrade() {
             // For now, just show a message that printing is not yet implemented
             // In a full implementation, this would open a print dialog
+            ui.set_status_is_error(false);
             ui.set_status_message(
                 "Print functionality: Please copy the codes and print them manually.".into(),
             );
@@ -825,6 +866,7 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(ui) = ui_weak.upgrade() {
             // Check rate limit for recovery attempts
             if let Err(e) = RATE_LIMITER.check_and_record_attempt() {
+                ui.set_status_is_error(true);
                 ui.set_status_message(e.into());
                 return;
             }
@@ -857,6 +899,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         // to allow full recovery without master password.
 
                         // Inform user of successful verification
+                        ui.set_status_is_error(false);
                         ui.set_status_message(
                             "✅ Recovery code verified! You are authenticated.\nEnter your master password to access passwords, or change it if forgotten.".into()
                         );
@@ -864,15 +907,18 @@ fn main() -> Result<(), slint::PlatformError> {
                         // Unlock the session UI
                         ui.set_is_locked(false);
                     } else {
+                        ui.set_status_is_error(true);
                         ui.set_status_message("❌ Invalid recovery code. Please try again.".into());
                     }
                 }
                 Ok(None) => {
+                    ui.set_status_is_error(false);
                     ui.set_status_message(
                         "No recovery data found. This database was created before recovery was added.".into()
                     );
                 }
                 Err(e) => {
+                    ui.set_status_is_error(true);
                     ui.set_status_message(e.user_message().into());
                     eprintln!("Recovery data load failed: {}", e.debug_message());
                 }

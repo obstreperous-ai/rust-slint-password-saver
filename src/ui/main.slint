@@ -224,6 +224,7 @@ export component AppWindow inherits Window {
     preferred-height: 600px;
     
     in-out property <string> status-message: "";
+    in-out property <bool> status-is-error: false;
     in-out property <string> master-password: "";
     in-out property <bool> show-change-password-dialog: false;
     in-out property <bool> is-locked: false;
@@ -703,16 +704,28 @@ export component AppWindow inherits Window {
             }
         }
         
-        if status-message != "" : HorizontalBox {
-            Rectangle {
-                background: Colors.success-bg;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: Colors.success-border;
+        if status-message != "" : Rectangle {
+            background: status-is-error ? Colors.error-bg : Colors.success-bg;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: status-is-error ? Colors.error-border : Colors.success-border;
+            
+            HorizontalBox {
+                padding: Spacing.md;
+                spacing: Spacing.md;
+                
+                Text {
+                    text: status-is-error ? "⚠" : "✓";
+                    font-size: 16px;
+                    color: status-is-error ? Colors.error-text : Colors.success-text;
+                    vertical-alignment: center;
+                }
                 
                 Text {
                     text: status-message;
-                    color: Colors.success-text;
+                    color: status-is-error ? Colors.error-text : Colors.success-text;
+                    font-size: Typography.body-size;
+                    vertical-alignment: center;
                 }
             }
         }
