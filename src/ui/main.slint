@@ -74,7 +74,15 @@ component PrimaryButton {
     
     focus-scope := FocusScope {
         key-pressed(event) => {
-            if (root.enabled && (event.text == Key.Return || event.text == Key.Space)) {
+            if (root.enabled && event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+        
+        key-released(event) => {
+            if (root.enabled && event.text == Key.Space) {
                 root.clicked();
                 return accept;
             }
@@ -97,7 +105,7 @@ component PrimaryButton {
         
         Text {
             text: root.text;
-            color: white;
+            color: root.enabled ? white : #666666;
             font-size: Typography.body-size;
             font-weight: 500;
             horizontal-alignment: center;
