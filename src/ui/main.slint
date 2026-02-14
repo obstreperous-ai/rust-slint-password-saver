@@ -21,6 +21,8 @@ global Colors {
     out property <color> error-bg: #ffeaea;
     out property <color> error-border: vermillion;
     out property <color> error-text: #8b1a0a;
+    
+    out property <color> disabled: #d3d3d3;
 }
 
 // Typography System
@@ -68,13 +70,27 @@ component PrimaryButton {
     in property <bool> enabled: true;
     callback clicked();
     
+    forward-focus: focus-scope;
+    
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            if (root.enabled && (event.text == Key.Return || event.text == Key.Space)) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    
     Rectangle {
-        background: root.enabled ? Colors.forest-green : #d3d3d3;
+        background: root.enabled ? Colors.forest-green : Colors.disabled;
         border-radius: 4px;
         min-width: 100px;
         height: 36px;
         
         TouchArea {
+            width: 100%;
+            height: 100%;
             enabled: root.enabled;
             clicked => { root.clicked(); }
         }
