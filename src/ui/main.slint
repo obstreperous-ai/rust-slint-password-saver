@@ -144,6 +144,46 @@ component SecondaryButton {
     }
 }
 
+// Task 2.3: Input Field Styling Limitation
+// ===========================================
+// LIMITATION: Slint v1.14's standard LineEdit widget does not support custom border properties
+// (border-color, border-width, border-radius) as documented in GitHub issue #3173.
+//
+// The following properties are NOT available on LineEdit:
+// - border-color
+// - border-width  
+// - border-radius
+//
+// CURRENT STATE: All LineEdit components in this application use Slint's default styling, which
+// includes built-in focus states and platform-native appearance.
+//
+// DESIRED STYLING (cannot be applied directly):
+// - border-color: #d3d3d3 (Colors.disabled)
+// - border-width: 1px
+// - border-radius: 4px
+//
+// WORKAROUND OPTIONS (not implemented due to complexity and usability trade-offs):
+// 1. Create custom input component wrapping Rectangle + TextInput (loses LineEdit features)
+// 2. Wait for Slint v1.15+ which may add these styling properties (see GitHub issues #3173, #5392)
+//
+// RECOMMENDATION: Continue using standard LineEdit with default styling until Slint adds
+// native support for custom border properties. The default styling provides good usability
+// and consistent platform-native appearance.
+//
+// All 12 LineEdit instances in this file:
+// - master-password-input (line ~266)
+// - title-input (line ~294)
+// - username-input (line ~305)
+// - password-input (line ~316)
+// - generated-password-display (line ~433)
+// - search-input (line ~482)
+// - copy-value-input (line ~578)
+// - current-password-input (line ~679)
+// - new-password-input (line ~691)
+// - confirm-password-input (line ~703)
+// - unlock-password (line ~824)
+// - recovery-code-input (line ~1028)
+
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
