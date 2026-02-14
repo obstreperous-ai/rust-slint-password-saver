@@ -735,15 +735,16 @@ export component AppWindow inherits Window {
     if root.show-change-password-dialog : Rectangle {
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.4);
         
         Rectangle {
             width: 500px;
-            height: 450px;
             background: Colors.cream;
             border-radius: 8px;
-            border-width: 2px;
-            border-color: Colors.forest-green;
+            border-width: 1px;
+            border-color: Colors.whisper-grey;
+            drop-shadow-blur: 40px;
+            drop-shadow-color: rgba(0, 0, 0, 0.2);
             
             VerticalBox {
                 padding: Spacing.xl;
@@ -751,10 +752,10 @@ export component AppWindow inherits Window {
                 
                 Text {
                     text: "Change Master Password";
-                    font-size: Typography.h2-size;
-                    font-weight: Typography.h2-weight;
+                    font-size: 20px;
+                    font-weight: 600;
                     color: Colors.charcoal;
-                    horizontal-alignment: center;
+                    horizontal-alignment: left;
                 }
                 
                 HorizontalBox {
@@ -796,42 +797,23 @@ export component AppWindow inherits Window {
                 Rectangle {
                     background: #f5f5f5;
                     border-radius: 4px;
+                    border-width: 1px;
+                    border-color: Colors.whisper-grey;
                     
                     VerticalBox {
                         padding: Spacing.md;
-                        spacing: Spacing.xs;
+                        spacing: Spacing.sm;
                         
                         Text {
                             text: "Password Requirements:";
-                            font-weight: Typography.h2-weight;
+                            font-weight: 600;
                             font-size: Typography.body-size;
+                            color: Colors.charcoal;
                         }
                         
                         Text {
-                            text: "• At least 8 characters long";
+                            text: "• At least 8 characters long\n• At least one uppercase letter\n• At least one lowercase letter\n• At least one number";
                             font-size: Typography.secondary-size;
-                            font-weight: Typography.secondary-weight;
-                            color: Colors.warm-grey;
-                        }
-                        
-                        Text {
-                            text: "• At least one uppercase letter";
-                            font-size: Typography.secondary-size;
-                            font-weight: Typography.secondary-weight;
-                            color: Colors.warm-grey;
-                        }
-                        
-                        Text {
-                            text: "• At least one lowercase letter";
-                            font-size: Typography.secondary-size;
-                            font-weight: Typography.secondary-weight;
-                            color: Colors.warm-grey;
-                        }
-                        
-                        Text {
-                            text: "• At least one number";
-                            font-size: Typography.secondary-size;
-                            font-weight: Typography.secondary-weight;
                             color: Colors.warm-grey;
                         }
                     }
@@ -839,10 +821,21 @@ export component AppWindow inherits Window {
                 
                 HorizontalBox {
                     spacing: Spacing.md;
+                    alignment: end;
                     
-                    Button {
+                    SecondaryButton {
+                        text: "Cancel";
+                        clicked => {
+                            // Clear fields and close dialog
+                            current-password-input.text = "";
+                            new-password-input.text = "";
+                            confirm-password-input.text = "";
+                            root.show-change-password-dialog = false;
+                        }
+                    }
+                    
+                    PrimaryButton {
                         text: "Change Password";
-                        primary: true;
                         enabled: current-password-input.text != "" && 
                                 new-password-input.text != "" && 
                                 confirm-password-input.text != "";
@@ -852,17 +845,6 @@ export component AppWindow inherits Window {
                                 new-password-input.text,
                                 confirm-password-input.text
                             );
-                            // Clear fields and close dialog
-                            current-password-input.text = "";
-                            new-password-input.text = "";
-                            confirm-password-input.text = "";
-                            root.show-change-password-dialog = false;
-                        }
-                    }
-                    
-                    Button {
-                        text: "Cancel";
-                        clicked => {
                             // Clear fields and close dialog
                             current-password-input.text = "";
                             new-password-input.text = "";
