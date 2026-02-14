@@ -867,7 +867,7 @@ When Slint v1.15+ adds native support for border styling properties on LineEdit,
    - Background: `Colors.cream` (#faf9f6)
    - Border: 1px solid `Colors.whisper-grey` (#e8e8e8)
    - Border radius: 6px
-   - Padding: `Spacing.lg` (16px)
+   - Padding: `Spacing.lg` (16px) - Note: Original spec mentioned `Spacing.xl`, but `Spacing.lg` = 16px matches the specified padding value exactly, while `Spacing.xl` = 20px
    - Title font: 16px, weight 600, `Colors.charcoal` (#2c2c2c)
 
 2. ✅ Replaced all 6 GroupBox instances with Card component:
