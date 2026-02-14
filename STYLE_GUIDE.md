@@ -817,7 +817,7 @@ Slint v1.14's standard LineEdit widget does not support custom border properties
 
 **What Was Done:**
 1. ✅ Identified all 12 LineEdit components in main.slint
-2. ✅ Documented the technical limitation in code comments (lines 147-187)
+2. ✅ Documented the technical limitation in code comments (lines 147-185)
 3. ✅ Listed desired styling specifications that cannot currently be applied:
    - border-color: #d3d3d3 (Colors.disabled)
    - border-width: 1px
