@@ -23,6 +23,34 @@ global Colors {
     out property <color> error-text: #8b1a0a;
 }
 
+// Typography System
+global Typography {
+    // Heading 1 - Screen Title
+    out property <length> h1-size: 28px;
+    out property <int> h1-weight: 600;
+    out property <length> h1-letter-spacing: -0.5px;
+    
+    // Heading 2 - Section Title
+    out property <length> h2-size: 18px;
+    out property <int> h2-weight: 600;
+    
+    // Body Text (Primary)
+    out property <length> body-size: 14px;
+    out property <int> body-weight: 400;
+    
+    // Secondary Text
+    out property <length> secondary-size: 13px;
+    out property <int> secondary-weight: 400;
+    
+    // Small Text (Tertiary)
+    out property <length> small-size: 11px;
+    out property <int> small-weight: 400;
+    
+    // Button Text
+    out property <length> button-size: 14px;
+    out property <int> button-weight: 500;
+}
+
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
@@ -88,9 +116,11 @@ export component AppWindow inherits Window {
         
         Text {
             text: "Password Saver";
-            font-size: 24px;
-            font-weight: 700;
-            horizontal-alignment: center;
+            font-size: Typography.h1-size;
+            font-weight: Typography.h1-weight;
+            letter-spacing: Typography.h1-letter-spacing;
+            color: Colors.charcoal;
+            horizontal-alignment: left;
         }
         
         // Update notification banner
@@ -107,7 +137,8 @@ export component AppWindow inherits Window {
                         "⚠️ Security Update Available: " + root.latest-version :
                         "ℹ️ New Version Available: " + root.latest-version;
                     color: white;
-                    font-weight: 600;
+                    font-size: Typography.body-size;
+                    font-weight: Typography.body-weight;
                     vertical-alignment: center;
                 }
                 
@@ -148,7 +179,8 @@ export component AppWindow inherits Window {
                 
                 Text {
                     text: "This password is used to encrypt/decrypt your stored passwords";
-                    font-size: 12px;
+                    font-size: Typography.secondary-size;
+                    font-weight: Typography.secondary-weight;
                     color: Colors.warm-grey;
                 }
             }
@@ -339,7 +371,8 @@ export component AppWindow inherits Window {
                 
                 if root.password-entropy-text != "" : Text {
                     text: root.password-entropy-text;
-                    font-size: 12px;
+                    font-size: Typography.secondary-size;
+                    font-weight: Typography.secondary-weight;
                     color: Colors.forest-green;
                 }
             }
@@ -431,7 +464,8 @@ export component AppWindow inherits Window {
                 
                 if root.total-count > 0 : Text {
                     text: "Showing " + root.filtered-count + " of " + root.total-count + " passwords";
-                    font-size: 12px;
+                    font-size: Typography.secondary-size;
+                    font-weight: Typography.secondary-weight;
                     color: Colors.warm-grey;
                 }
             }
@@ -479,7 +513,8 @@ export component AppWindow inherits Window {
                 
                 Text {
                     text: "Password will be automatically cleared from clipboard after 30 seconds";
-                    font-size: 12px;
+                    font-size: Typography.secondary-size;
+                    font-weight: Typography.secondary-weight;
                     color: Colors.warm-grey;
                 }
             }
@@ -495,7 +530,8 @@ export component AppWindow inherits Window {
                     Text {
                         text: "Password entries will appear here...";
                         color: Colors.warm-grey;
-                        font-size: 14px;
+                        font-size: Typography.body-size;
+                        font-weight: Typography.body-weight;
                     }
                 }
             }
@@ -536,8 +572,9 @@ export component AppWindow inherits Window {
                 
                 Text {
                     text: "Change Master Password";
-                    font-size: 20px;
-                    font-weight: 700;
+                    font-size: Typography.h2-size;
+                    font-weight: Typography.h2-weight;
+                    color: Colors.charcoal;
                     horizontal-alignment: center;
                 }
                 
@@ -587,31 +624,35 @@ export component AppWindow inherits Window {
                         
                         Text {
                             text: "Password Requirements:";
-                            font-weight: 600;
-                            font-size: 14px;
+                            font-weight: Typography.h2-weight;
+                            font-size: Typography.body-size;
                         }
                         
                         Text {
                             text: "• At least 8 characters long";
-                            font-size: 12px;
+                            font-size: Typography.secondary-size;
+                            font-weight: Typography.secondary-weight;
                             color: Colors.warm-grey;
                         }
                         
                         Text {
                             text: "• At least one uppercase letter";
-                            font-size: 12px;
+                            font-size: Typography.secondary-size;
+                            font-weight: Typography.secondary-weight;
                             color: Colors.warm-grey;
                         }
                         
                         Text {
                             text: "• At least one lowercase letter";
-                            font-size: 12px;
+                            font-size: Typography.secondary-size;
+                            font-weight: Typography.secondary-weight;
                             color: Colors.warm-grey;
                         }
                         
                         Text {
                             text: "• At least one number";
-                            font-size: 12px;
+                            font-size: Typography.secondary-size;
+                            font-weight: Typography.secondary-weight;
                             color: Colors.warm-grey;
                         }
                     }
@@ -675,8 +716,10 @@ export component AppWindow inherits Window {
                 
                 Text {
                     text: "🔒 Session Locked";
-                    font-size: 24px;
-                    font-weight: 700;
+                    font-size: Typography.h1-size;
+                    font-weight: Typography.h1-weight;
+                    letter-spacing: Typography.h1-letter-spacing;
+                    color: Colors.charcoal;
                     horizontal-alignment: center;
                 }
                 
@@ -711,7 +754,8 @@ export component AppWindow inherits Window {
                         Text {
                             text: "Forgot Password?";
                             color: Colors.indigo;
-                            font-size: 12px;
+                            font-size: Typography.secondary-size;
+                            font-weight: Typography.secondary-weight;
                             horizontal-alignment: center;
                         }
                         
@@ -741,7 +785,8 @@ export component AppWindow inherits Window {
             Text {
                 text: "Auto-lock in: " + root.seconds-until-lock + "s";
                 color: #e65100;
-                font-size: 12px;
+                font-size: Typography.secondary-size;
+                font-weight: Typography.secondary-weight;
                 vertical-alignment: center;
             }
         }
@@ -767,8 +812,9 @@ export component AppWindow inherits Window {
                 
                 Text {
                     text: "⚠️ Important: Save Your Recovery Codes";
-                    font-size: 20px;
-                    font-weight: 700;
+                    font-size: Typography.h2-size;
+                    font-weight: Typography.h2-weight;
+                    color: Colors.charcoal;
                     horizontal-alignment: center;
                 }
                 
@@ -791,17 +837,20 @@ export component AppWindow inherits Window {
                         Text {
                             text: "Recovery Code 1: " + root.recovery-code-1;
                             font-family: "monospace";
-                            font-size: 14px;
+                            font-size: Typography.body-size;
+                            font-weight: Typography.body-weight;
                         }
                         Text {
                             text: "Recovery Code 2: " + root.recovery-code-2;
                             font-family: "monospace";
-                            font-size: 14px;
+                            font-size: Typography.body-size;
+                            font-weight: Typography.body-weight;
                         }
                         Text {
                             text: "Recovery Code 3: " + root.recovery-code-3;
                             font-family: "monospace";
-                            font-size: 14px;
+                            font-size: Typography.body-size;
+                            font-weight: Typography.body-weight;
                         }
                     }
                 }
@@ -871,8 +920,10 @@ export component AppWindow inherits Window {
                 
                 Text {
                     text: "🔑 Emergency Recovery";
-                    font-size: 24px;
-                    font-weight: 700;
+                    font-size: Typography.h1-size;
+                    font-weight: Typography.h1-weight;
+                    letter-spacing: Typography.h1-letter-spacing;
+                    color: Colors.charcoal;
                     horizontal-alignment: center;
                 }
                 
@@ -912,7 +963,8 @@ export component AppWindow inherits Window {
                 Text {
                     text: "⚠️ Recovery codes were provided during initial setup.\nContact support if you've lost all recovery codes.";
                     horizontal-alignment: center;
-                    font-size: 11px;
+                    font-size: Typography.small-size;
+                    font-weight: Typography.small-weight;
                     color: Colors.warm-grey;
                 }
             }
