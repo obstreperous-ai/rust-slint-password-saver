@@ -684,6 +684,13 @@ Each task below is suitable for assignment to a GitHub Copilot AI agent. Tasks a
 - No arbitrary spacing values remain
 - Visual rhythm is consistent throughout
 
+**✅ Status: COMPLETED**
+- Spacing global defined with systematic 4px-based scale (xs: 4px, sm: 8px, md: 12px, lg: 16px, xl: 20px, xxl: 24px, xxxl: 32px)
+- All 35 spacing/padding values replaced with Spacing constants
+- 5px → Spacing.xs, 10px → Spacing.md, 15px → Spacing.lg, 20px → Spacing.xl, 30px → Spacing.xxxl
+- Build successful, all tests pass
+- No arbitrary spacing values remain in main.slint
+
 ---
 
 ### Priority 2: Components (Refinement)
