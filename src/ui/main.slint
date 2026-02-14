@@ -62,6 +62,34 @@ global Spacing {
     out property <length> xxxl: 32px;
 }
 
+// Primary Button Component
+component PrimaryButton {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    
+    Rectangle {
+        background: root.enabled ? Colors.forest-green : #d3d3d3;
+        border-radius: 4px;
+        min-width: 100px;
+        height: 36px;
+        
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { root.clicked(); }
+        }
+        
+        Text {
+            text: root.text;
+            color: white;
+            font-size: Typography.body-size;
+            font-weight: 500;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "Password Saver";
     preferred-width: 600px;
@@ -240,9 +268,8 @@ export component AppWindow inherits Window {
                 HorizontalBox {
                     spacing: Spacing.md;
                     
-                    Button {
+                    PrimaryButton {
                         text: "Save Password";
-                        primary: true;
                         enabled: root.master-password != "" && title-input.text != "" && password-input.text != "";
                         clicked => {
                             root.save-password(
