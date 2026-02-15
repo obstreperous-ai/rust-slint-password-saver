@@ -706,11 +706,28 @@ export component AppWindow inherits Window {
                 height: 200px;
                 
                 VerticalBox {
+                    alignment: center;
+                    spacing: Spacing.lg;
+                    
                     Text {
-                        text: "Password entries will appear here...";
+                        text: "🔐";
+                        font-size: 48px;
+                        horizontal-alignment: center;
+                    }
+                    
+                    Text {
+                        text: "No passwords saved yet";
+                        font-size: Typography.h2-size;
+                        font-weight: 600;
+                        color: Colors.charcoal;
+                        horizontal-alignment: center;
+                    }
+                    
+                    Text {
+                        text: "Add your first password above to get started.";
+                        font-size: Typography.secondary-size;
                         color: Colors.warm-grey;
-                        font-size: Typography.body-size;
-                        font-weight: Typography.body-weight;
+                        horizontal-alignment: center;
                     }
                 }
             }
