@@ -1118,13 +1118,20 @@ export component AppWindow inherits Window {
                     alignment: center;
                     
                     PrimaryButton {
-                        text: "Continue (Enter/Esc)";
+                        text: "Continue (Enter)";
                         enabled: root.recovery-codes-confirmed;
                         clicked => {
                             root.show-recovery-setup = false;
                             root.recovery-codes-confirmed = false;
                         }
                     }
+                }
+                
+                Text {
+                    text: "Press Esc to close";
+                    horizontal-alignment: center;
+                    font-size: Typography.small-size;
+                    color: Colors.warm-grey;
                 }
             }
         }
