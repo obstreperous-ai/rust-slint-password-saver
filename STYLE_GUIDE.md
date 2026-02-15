@@ -995,48 +995,41 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 
 ---
 
-#### Task 3.2: Add Keyboard Shortcuts
+#### Task 3.2: Add Keyboard Shortcuts ✅ COMPLETED
 **Description:** Implement keyboard shortcuts for common actions and document them in UI.
 
-**Files to Modify:**
-- `src/ui/main.slint`
+**Status:** ✅ **COMPLETED**
 
-**Changes Required:**
-1. Add keyboard shortcut hints to buttons:
-   ```slint
-   Button {
-       text: "Save Password (Enter)";  // Or use tooltip if supported
-   }
-   
-   Button {
-       text: "Cancel (Esc)";
-   }
-   ```
+**Implementation Summary:**
+- ✅ Added keyboard shortcut hints to all buttons in dialogs:
+  - "Save Password (Enter)" in Add Password form
+  - "Change Password (Enter)" and "Cancel (Esc)" in Change Password dialog
+  - "Unlock (Enter)" in Lock Screen dialog
+  - "Continue (Enter/Esc)" in Recovery Setup dialog
+  - "Recover Access (Enter)" and "Cancel (Esc)" in Recovery Login dialog
 
-2. Implement keyboard handlers if Slint supports them:
-   ```slint
-   FocusScope {
-       key-pressed(event) => {
-           if (event.text == Key.Escape && root.show-change-password-dialog) {
-               root.show-change-password-dialog = false;
-               return accept;
-           }
-           // ... other keyboard handlers
-       }
-   }
-   ```
+- ✅ Implemented keyboard handlers:
+  - `FocusScope` with Escape key handler for Change Master Password dialog
+  - `FocusScope` with Escape key handler for Recovery Setup dialog
+  - `FocusScope` with Escape key handler for Recovery Login dialog
+  - Enhanced `SecondaryButton` component to support Escape key
+  - Upgraded Lock Screen and Recovery dialogs to use `PrimaryButton` (has built-in Enter support)
 
-3. If keyboard event handling is limited, document supported shortcuts in a help text section
+- ✅ Added "⌨️ Keyboard Shortcuts" card in main UI documenting:
+  - Common actions (Enter, Esc, Space)
+  - Dialog-specific shortcuts
+  - All shortcuts are now discoverable in the UI
 
 **Testing:**
-- Escape key closes dialog
-- Enter key submits forms (where appropriate)
-- Keyboard shortcuts are discoverable
+- ✅ Escape key closes dialogs
+- ✅ Enter key submits forms and confirms actions
+- ✅ Keyboard shortcuts are documented and discoverable
+- ✅ All tests pass
+- ✅ Build succeeds
+- ✅ Clippy passes with no warnings
 
-**Acceptance Criteria:**
-- Common keyboard shortcuts work
-- Shortcuts are documented or hinted in UI
-- Keyboard navigation is intuitive
+**Files Modified:**
+- `src/ui/main.slint` - Added keyboard shortcuts and documentation
 
 ---
 

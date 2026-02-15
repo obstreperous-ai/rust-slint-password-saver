@@ -120,6 +120,18 @@ component SecondaryButton {
     in property <bool> enabled: true;
     callback clicked();
     
+    forward-focus: focus-scope;
+    
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            if (root.enabled && event.text == Key.Escape) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    
     Rectangle {
         background: transparent;
         border-width: 1px;
@@ -398,7 +410,7 @@ export component AppWindow inherits Window {
                     spacing: Spacing.md;
                     
                     PrimaryButton {
-                        text: "Save Password";
+                        text: "Save Password (Enter)";
                         enabled: root.master-password != "" && title-input.text != "" && password-input.text != "";
                         clicked => {
                             root.save-password(
@@ -704,6 +716,40 @@ export component AppWindow inherits Window {
             }
         }
         
+        Card {
+            title: "⌨️ Keyboard Shortcuts";
+            
+            VerticalBox {
+                spacing: Spacing.sm;
+                
+                Text {
+                    text: "Common Actions:";
+                    font-weight: 600;
+                    font-size: Typography.body-size;
+                    color: Colors.charcoal;
+                }
+                
+                Text {
+                    text: "• Enter - Submit form or confirm dialog\n• Esc - Close dialog or cancel action\n• Space - Activate focused button";
+                    font-size: Typography.secondary-size;
+                    color: Colors.warm-grey;
+                }
+                
+                Text {
+                    text: "\nDialog Actions:";
+                    font-weight: 600;
+                    font-size: Typography.body-size;
+                    color: Colors.charcoal;
+                }
+                
+                Text {
+                    text: "• Change Password dialog: Enter to submit, Esc to cancel\n• Lock Screen: Enter to unlock\n• Recovery dialogs: Enter to submit, Esc to cancel";
+                    font-size: Typography.secondary-size;
+                    color: Colors.warm-grey;
+                }
+            }
+        }
+        
         if status-message != "" : Rectangle {
             background: status-is-error ? Colors.error-bg : Colors.success-bg;
             border-radius: 4px;
@@ -736,6 +782,20 @@ export component AppWindow inherits Window {
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.4);
+        
+        FocusScope {
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    // Clear fields and close dialog
+                    current-password-input.text = "";
+                    new-password-input.text = "";
+                    confirm-password-input.text = "";
+                    root.show-change-password-dialog = false;
+                    return accept;
+                }
+                return reject;
+            }
+        }
         
         Rectangle {
             width: 500px;
@@ -824,7 +884,7 @@ export component AppWindow inherits Window {
                     alignment: end;
                     
                     SecondaryButton {
-                        text: "Cancel";
+                        text: "Cancel (Esc)";
                         clicked => {
                             // Clear fields and close dialog
                             current-password-input.text = "";
@@ -835,7 +895,7 @@ export component AppWindow inherits Window {
                     }
                     
                     PrimaryButton {
-                        text: "Change Password";
+                        text: "Change Password (Enter)";
                         enabled: current-password-input.text != "" && 
                                 new-password-input.text != "" && 
                                 confirm-password-input.text != "";
@@ -895,9 +955,8 @@ export component AppWindow inherits Window {
                     input-type: password;
                 }
                 
-                Button {
-                    text: "Unlock";
-                    primary: true;
+                PrimaryButton {
+                    text: "Unlock (Enter)";
                     enabled: unlock-password.text != "";
                     clicked => {
                         root.unlock(unlock-password.text);
@@ -958,6 +1017,17 @@ export component AppWindow inherits Window {
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.8);
+        
+        FocusScope {
+            key-pressed(event) => {
+                if (event.text == Key.Escape && root.recovery-codes-confirmed) {
+                    root.show-recovery-setup = false;
+                    root.recovery-codes-confirmed = false;
+                    return accept;
+                }
+                return reject;
+            }
+        }
         
         Rectangle {
             width: 550px;
@@ -1047,15 +1117,21 @@ export component AppWindow inherits Window {
                 HorizontalBox {
                     alignment: center;
                     
-                    Button {
-                        text: "Continue";
+                    PrimaryButton {
+                        text: "Continue (Enter)";
                         enabled: root.recovery-codes-confirmed;
-                        primary: true;
                         clicked => {
                             root.show-recovery-setup = false;
                             root.recovery-codes-confirmed = false;
                         }
                     }
+                }
+                
+                Text {
+                    text: "Press Esc to close";
+                    horizontal-alignment: center;
+                    font-size: Typography.small-size;
+                    color: Colors.warm-grey;
                 }
             }
         }
@@ -1066,6 +1142,17 @@ export component AppWindow inherits Window {
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.8);
+        
+        FocusScope {
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.show-recovery-login = false;
+                    recovery-code-input.text = "";
+                    return accept;
+                }
+                return reject;
+            }
+        }
         
         Rectangle {
             width: 450px;
@@ -1102,9 +1189,8 @@ export component AppWindow inherits Window {
                     spacing: Spacing.md;
                     alignment: center;
                     
-                    Button {
-                        text: "Recover Access";
-                        primary: true;
+                    PrimaryButton {
+                        text: "Recover Access (Enter)";
                         enabled: recovery-code-input.text != "";
                         clicked => {
                             root.recover-with-code(recovery-code-input.text);
@@ -1112,8 +1198,8 @@ export component AppWindow inherits Window {
                         }
                     }
                     
-                    Button {
-                        text: "Cancel";
+                    SecondaryButton {
+                        text: "Cancel (Esc)";
                         clicked => {
                             root.show-recovery-login = false;
                             recovery-code-input.text = "";
