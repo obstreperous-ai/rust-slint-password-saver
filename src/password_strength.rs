@@ -22,6 +22,7 @@
 //! ## Example
 //!
 //! ```
+//! // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 //! use rust_slint_password_saver::password_strength::{validate_password_strength, PasswordRequirements};
 //!
 //! let requirements = PasswordRequirements::default();
@@ -111,6 +112,7 @@ impl Default for PasswordRequirements {
 /// # Examples
 ///
 /// ```
+/// // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 /// use rust_slint_password_saver::password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 ///
 /// // Strong password passes validation
@@ -214,6 +216,65 @@ pub fn validate_password_strength(
     Ok(strength)
 }
 
+/// Assesses password strength without enforcing requirements
+///
+/// Unlike `validate_password_strength`, this function provides strength assessment
+/// without requiring the password to meet any specific requirements. This is useful
+/// for providing real-time feedback as the user types.
+///
+/// # Arguments
+///
+/// * `password` - The password to assess
+///
+/// # Returns
+///
+/// Returns a tuple of (`PasswordStrength`, `String`) where the String is a human-readable
+/// description of the strength level.
+///
+/// # Examples
+///
+/// ```
+/// // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+/// use rust_slint_password_saver::password_strength::assess_password_strength;
+///
+/// let (strength, description) = assess_password_strength("short");
+/// // strength will be VeryWeak or Weak
+/// // description will be "Weak" or similar
+/// ```
+#[must_use]
+pub fn assess_password_strength(password: &str) -> (PasswordStrength, String) {
+    // Empty password is very weak
+    if password.is_empty() {
+        return (PasswordStrength::VeryWeak, "Too Short".to_string());
+    }
+
+    // Use zxcvbn for entropy and pattern analysis
+    let entropy = zxcvbn(password, &[]);
+
+    // Map zxcvbn Score to our PasswordStrength enum
+    // Note: Score enum is non-exhaustive, so wildcard pattern is required
+    #[allow(clippy::match_same_arms)] // Zero and wildcard both intentionally map to VeryWeak
+    let strength = match entropy.score() {
+        Score::Zero => PasswordStrength::VeryWeak,
+        Score::One => PasswordStrength::Weak,
+        Score::Two => PasswordStrength::Medium,
+        Score::Three => PasswordStrength::Strong,
+        Score::Four => PasswordStrength::VeryStrong,
+        _ => PasswordStrength::VeryWeak, // Future-proof for new score variants
+    };
+
+    // Create descriptive text based on strength
+    let description = match strength {
+        PasswordStrength::VeryWeak => "Weak",
+        PasswordStrength::Weak => "Fair",
+        PasswordStrength::Medium => "Good",
+        PasswordStrength::Strong => "Strong",
+        PasswordStrength::VeryStrong => "Excellent",
+    };
+
+    (strength, description.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,6 +290,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_too_short() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("Short1!", &requirements);
@@ -237,6 +299,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_uppercase() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("longpassword123!", &requirements);
@@ -245,6 +308,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_lowercase() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("LONGPASSWORD123!", &requirements);
@@ -253,6 +317,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_digit() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("LongPassword!@#", &requirements);
@@ -261,6 +326,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_special() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("LongPassword123", &requirements);
@@ -269,6 +335,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_strong_password_accepted() {
         let requirements = PasswordRequirements::default();
         // This should be a strong password
@@ -279,6 +346,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_very_strong_password() {
         let requirements = PasswordRequirements::default();
         // Long, random-like password
@@ -290,6 +358,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_common_password_rejected() {
         let requirements = PasswordRequirements::default();
         // Even if it meets basic requirements, common patterns should be weak
@@ -321,6 +390,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_custom_requirements() {
         let requirements = PasswordRequirements {
             min_length: 8,
@@ -336,6 +406,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_unicode_characters() {
         let requirements = PasswordRequirements::default();
         // Unicode characters count as special characters
@@ -344,6 +415,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_very_long_password() {
         let requirements = PasswordRequirements::default();
         let long_password = "MyS3cur3P@ssw0rd!".repeat(5); // 85 characters
@@ -351,5 +423,43 @@ mod tests {
         assert!(result.is_ok());
         // Very long passwords should be very strong
         assert!(result.unwrap() >= PasswordStrength::Strong);
+    }
+
+    #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    fn test_assess_empty_password() {
+        let (strength, description) = assess_password_strength("");
+        assert_eq!(strength, PasswordStrength::VeryWeak);
+        assert_eq!(description, "Too Short");
+    }
+
+    #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    fn test_assess_weak_password() {
+        let (strength, _description) = assess_password_strength("password");
+        assert!(strength <= PasswordStrength::Weak);
+    }
+
+    #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    fn test_assess_strong_password() {
+        let (strength, _description) = assess_password_strength("MyS3cur3P@ssw0rd!");
+        assert!(strength >= PasswordStrength::Strong);
+    }
+
+    #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    fn test_assess_returns_description() {
+        let (_strength, description) = assess_password_strength("test");
+        assert!(!description.is_empty());
+        // Should be one of the expected descriptions
+        assert!(
+            description == "Weak"
+                || description == "Fair"
+                || description == "Good"
+                || description == "Strong"
+                || description == "Excellent"
+                || description == "Too Short"
+        );
     }
 }

@@ -50,7 +50,9 @@ use log::warn;
 use password_generator::{
     calculate_charset_size, calculate_entropy, generate_password, PasswordGeneratorConfig,
 };
-use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
+use password_strength::{
+    assess_password_strength, validate_password_strength, PasswordRequirements, PasswordStrength,
+};
 use rate_limit::RateLimiter;
 use recovery::EmergencyRecovery;
 use search::{search_entries, sort_entries, SearchConfig, SortCriteria};
@@ -82,6 +84,14 @@ const MAX_DISPLAY_ENTRIES: usize = 5;
 /// Status message for generated password copied to clipboard
 const GENERATED_PASSWORD_COPIED_MESSAGE: &str =
     "Generated password copied to clipboard. Paste it into the Password field.";
+
+// Password strength indicator colors (matching design guide)
+/// Color for very weak passwords (Vermillion - error color)
+const STRENGTH_COLOR_VERY_WEAK: (u8, u8, u8) = (193, 68, 14);
+/// Color for weak to medium passwords (Warning color)
+const STRENGTH_COLOR_WEAK_MEDIUM: (u8, u8, u8) = (184, 134, 11);
+/// Color for strong to excellent passwords (Forest Green - success color)
+const STRENGTH_COLOR_STRONG: (u8, u8, u8) = (45, 80, 22);
 
 /// Get cross-platform path for storing encrypted passwords.
 ///
@@ -352,6 +362,42 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             }
+        }
+    });
+
+    // Set up password strength check callback
+    // This is called when the user types in the password field
+    let ui_weak = ui.as_weak();
+    ui.on_check_password_strength(move |password| {
+        if let Some(ui) = ui_weak.upgrade() {
+            // Empty password - clear the indicator
+            if password.is_empty() {
+                ui.set_password_strength_text("".into());
+                ui.set_password_strength_color(slint::Color::from_argb_u8(0, 0, 0, 0));
+                return;
+            }
+
+            // Assess password strength using zxcvbn
+            let (strength, description) = assess_password_strength(&password);
+
+            // Map strength to colors based on design guide
+            let color = match strength {
+                PasswordStrength::VeryWeak => {
+                    let (r, g, b) = STRENGTH_COLOR_VERY_WEAK;
+                    slint::Color::from_rgb_u8(r, g, b)
+                }
+                PasswordStrength::Weak | PasswordStrength::Medium => {
+                    let (r, g, b) = STRENGTH_COLOR_WEAK_MEDIUM;
+                    slint::Color::from_rgb_u8(r, g, b)
+                }
+                PasswordStrength::Strong | PasswordStrength::VeryStrong => {
+                    let (r, g, b) = STRENGTH_COLOR_STRONG;
+                    slint::Color::from_rgb_u8(r, g, b)
+                }
+            };
+
+            ui.set_password_strength_text(description.into());
+            ui.set_password_strength_color(color);
         }
     });
 
