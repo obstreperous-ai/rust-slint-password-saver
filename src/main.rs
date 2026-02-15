@@ -50,7 +50,9 @@ use log::warn;
 use password_generator::{
     calculate_charset_size, calculate_entropy, generate_password, PasswordGeneratorConfig,
 };
-use password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
+use password_strength::{
+    assess_password_strength, validate_password_strength, PasswordRequirements, PasswordStrength,
+};
 use rate_limit::RateLimiter;
 use recovery::EmergencyRecovery;
 use search::{search_entries, sort_entries, SearchConfig, SortCriteria};
@@ -352,6 +354,39 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             }
+        }
+    });
+
+    // Set up password strength check callback
+    // This is called when the user types in the password field
+    let ui_weak = ui.as_weak();
+    ui.on_check_password_strength(move |password| {
+        if let Some(ui) = ui_weak.upgrade() {
+            // Empty password - clear the indicator
+            if password.is_empty() {
+                ui.set_password_strength_text("".into());
+                ui.set_password_strength_color(slint::Color::from_argb_u8(0, 0, 0, 0));
+                return;
+            }
+
+            // Assess password strength using zxcvbn
+            let (strength, description) = assess_password_strength(&password);
+
+            // Map strength to colors based on design guide
+            let color = match strength {
+                PasswordStrength::VeryWeak => {
+                    slint::Color::from_rgb_u8(193, 68, 14) // Vermillion (error color)
+                }
+                PasswordStrength::Weak | PasswordStrength::Medium => {
+                    slint::Color::from_rgb_u8(184, 134, 11) // Warning color
+                }
+                PasswordStrength::Strong | PasswordStrength::VeryStrong => {
+                    slint::Color::from_rgb_u8(45, 80, 22) // Forest Green (success)
+                }
+            };
+
+            ui.set_password_strength_text(description.into());
+            ui.set_password_strength_color(color);
         }
     });
 
