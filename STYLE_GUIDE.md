@@ -1472,6 +1472,32 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 - **Clear Callbacks:** Callback names should be action-oriented (e.g., `clicked`, `submitted`)
 - **Accessibility First:** Maintain keyboard navigation and sufficient contrast
 
+### Security Standards
+
+- **CodeQL Suppressions:** All test cases and documentation examples that include hardcoded passwords must be annotated with CodeQL suppression comments to prevent security alerts
+- **Test Annotation Pattern:** Use the following comment above any test function that contains hardcoded credentials:
+  ```rust
+  #[test]
+  // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+  fn test_password_validation() {
+      let result = validate_password_strength("TestPassword123!", &requirements);
+      // test assertions...
+  }
+  ```
+- **Doc Comment Pattern:** For documentation examples with hardcoded passwords, add the suppression within the code block:
+  ```rust
+  /// # Examples
+  ///
+  /// ```
+  /// // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+  /// use crate::password_strength::validate_password_strength;
+  ///
+  /// let result = validate_password_strength("ExampleP@ssw0rd", &requirements);
+  /// ```
+  ```
+- **Apply Consistently:** All tests in password-related modules (password_strength.rs, validation_test.rs, storage_test.rs, etc.) must have these annotations
+- **Never Commit Real Credentials:** Test passwords should be clearly fake examples, never real credentials
+
 ### Testing Checklist
 
 Before completing any task:
@@ -1485,6 +1511,8 @@ Before completing any task:
 - [ ] Colors meet WCAG AA contrast requirements
 - [ ] Spacing is consistent and from defined scale
 - [ ] Components are reusable and well-structured
+- [ ] All tests with hardcoded passwords have CodeQL suppression comments
+- [ ] CodeQL security checks pass (no hardcoded credential alerts)
 
 ### Slint-Specific Tips
 

@@ -22,6 +22,7 @@
 //! ## Example
 //!
 //! ```
+//! // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 //! use rust_slint_password_saver::password_strength::{validate_password_strength, PasswordRequirements};
 //!
 //! let requirements = PasswordRequirements::default();
@@ -111,6 +112,7 @@ impl Default for PasswordRequirements {
 /// # Examples
 ///
 /// ```
+/// // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 /// use rust_slint_password_saver::password_strength::{validate_password_strength, PasswordRequirements, PasswordStrength};
 ///
 /// // Strong password passes validation
@@ -232,6 +234,7 @@ pub fn validate_password_strength(
 /// # Examples
 ///
 /// ```
+/// // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 /// use rust_slint_password_saver::password_strength::assess_password_strength;
 ///
 /// let (strength, description) = assess_password_strength("short");
@@ -287,6 +290,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_too_short() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("Short1!", &requirements);
@@ -295,6 +299,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_uppercase() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("longpassword123!", &requirements);
@@ -303,6 +308,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_lowercase() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("LONGPASSWORD123!", &requirements);
@@ -311,6 +317,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_digit() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("LongPassword!@#", &requirements);
@@ -319,6 +326,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_password_missing_special() {
         let requirements = PasswordRequirements::default();
         let result = validate_password_strength("LongPassword123", &requirements);
@@ -327,6 +335,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_strong_password_accepted() {
         let requirements = PasswordRequirements::default();
         // This should be a strong password
@@ -337,6 +346,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_very_strong_password() {
         let requirements = PasswordRequirements::default();
         // Long, random-like password
@@ -348,6 +358,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_common_password_rejected() {
         let requirements = PasswordRequirements::default();
         // Even if it meets basic requirements, common patterns should be weak
@@ -379,6 +390,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_custom_requirements() {
         let requirements = PasswordRequirements {
             min_length: 8,
@@ -394,6 +406,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_unicode_characters() {
         let requirements = PasswordRequirements::default();
         // Unicode characters count as special characters
@@ -402,6 +415,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_very_long_password() {
         let requirements = PasswordRequirements::default();
         let long_password = "MyS3cur3P@ssw0rd!".repeat(5); // 85 characters
@@ -412,6 +426,7 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_assess_empty_password() {
         let (strength, description) = assess_password_strength("");
         assert_eq!(strength, PasswordStrength::VeryWeak);
@@ -419,18 +434,21 @@ mod tests {
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_assess_weak_password() {
         let (strength, _description) = assess_password_strength("password");
         assert!(strength <= PasswordStrength::Weak);
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_assess_strong_password() {
         let (strength, _description) = assess_password_strength("MyS3cur3P@ssw0rd!");
         assert!(strength >= PasswordStrength::Strong);
     }
 
     #[test]
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     fn test_assess_returns_description() {
         let (_strength, description) = assess_password_strength("test");
         assert!(!description.is_empty());
