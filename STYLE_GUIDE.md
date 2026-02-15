@@ -1193,7 +1193,7 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 
 ### Priority 5: Advanced Features
 
-#### Task 5.1: Add Password Strength Indicator
+#### Task 5.1: Add Password Strength Indicator ✅ COMPLETED
 **Description:** Provide visual feedback on password strength during entry.
 
 **Files to Modify:**
@@ -1245,6 +1245,15 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 - Uses zxcvbn library for accurate assessment
 - Doesn't leak password composition info
 - Updates in real-time (or on blur)
+
+**Implementation Notes (Completed):**
+- Added `password-strength-text` and `password-strength-color` properties to AppWindow
+- Created visual indicator with colored bar and text that appears below password input field
+- Implemented `assess_password_strength()` function that uses zxcvbn for strength calculation
+- Added `check-password-strength` callback that updates UI in real-time as user types
+- Color mapping: Vermillion (red) for weak, Warning (yellow) for fair/medium, Forest Green for strong/excellent
+- Strength levels: "Weak", "Fair", "Good", "Strong", "Excellent" (general terms, no specific requirements exposed)
+- All tests pass (76 tests), clippy clean, formatted
 
 ---
 
