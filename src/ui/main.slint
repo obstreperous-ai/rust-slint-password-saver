@@ -1,6 +1,6 @@
 import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox, CheckBox, Slider } from "std-widgets.slint";
 
-// Color Palette
+// Light Mode Color Palette
 global Colors {
     // Primary Colors
     out property <color> forest-green: #2d5016;
@@ -23,6 +23,58 @@ global Colors {
     out property <color> error-text: #8b1a0a;
     
     out property <color> disabled: #d3d3d3;
+}
+
+// Dark Mode Color Palette
+global DarkColors {
+    // Primary Colors - Adjusted for dark background
+    out property <color> forest-green: #4d7030;  // Lighter for dark bg
+    out property <color> charcoal: #e8e8e8;  // Light text on dark
+    out property <color> warm-grey: #b0b0b0;
+    out property <color> whisper-grey: #3a3a3a;
+
+    // Accent Colors
+    out property <color> vermillion: #ff6b3d;  // Brighter for visibility
+    out property <color> indigo: #4a7ba7;  // Lighter blue
+    out property <color> cream: #1a1a1a;  // Dark background
+
+    // State Colors
+    out property <color> success-bg: #1d3010;  // Dark green background
+    out property <color> success-border: #4d7030;  // forest-green
+    out property <color> success-text: #a8d88c;  // Light green text
+
+    out property <color> error-bg: #3d1410;  // Dark red background
+    out property <color> error-border: #ff6b3d;  // vermillion
+    out property <color> error-text: #ffb3a0;  // Light red text
+    
+    out property <color> disabled: #4a4a4a;
+}
+
+// Theme Manager - Provides unified color interface
+global Theme {
+    in-out property <bool> dark-mode: false;
+    
+    // Primary Colors
+    out property <color> forest-green: dark-mode ? DarkColors.forest-green : Colors.forest-green;
+    out property <color> charcoal: dark-mode ? DarkColors.charcoal : Colors.charcoal;
+    out property <color> warm-grey: dark-mode ? DarkColors.warm-grey : Colors.warm-grey;
+    out property <color> whisper-grey: dark-mode ? DarkColors.whisper-grey : Colors.whisper-grey;
+    
+    // Accent Colors
+    out property <color> vermillion: dark-mode ? DarkColors.vermillion : Colors.vermillion;
+    out property <color> indigo: dark-mode ? DarkColors.indigo : Colors.indigo;
+    out property <color> cream: dark-mode ? DarkColors.cream : Colors.cream;
+    
+    // State Colors
+    out property <color> success-bg: dark-mode ? DarkColors.success-bg : Colors.success-bg;
+    out property <color> success-border: dark-mode ? DarkColors.success-border : Colors.success-border;
+    out property <color> success-text: dark-mode ? DarkColors.success-text : Colors.success-text;
+    
+    out property <color> error-bg: dark-mode ? DarkColors.error-bg : Colors.error-bg;
+    out property <color> error-border: dark-mode ? DarkColors.error-border : Colors.error-border;
+    out property <color> error-text: dark-mode ? DarkColors.error-text : Colors.error-text;
+    
+    out property <color> disabled: dark-mode ? DarkColors.disabled : Colors.disabled;
 }
 
 // Typography System
@@ -91,7 +143,7 @@ component PrimaryButton {
     }
     
     Rectangle {
-        background: root.enabled ? Colors.forest-green : Colors.disabled;
+        background: root.enabled ? Theme.forest-green : Theme.disabled;
         border-radius: 4px;
         min-width: 100px;
         height: 36px;
@@ -135,7 +187,7 @@ component SecondaryButton {
     Rectangle {
         background: transparent;
         border-width: 1px;
-        border-color: root.enabled ? Colors.forest-green : #d3d3d3;
+        border-color: root.enabled ? Theme.forest-green : #d3d3d3;
         border-radius: 4px;
         min-width: 100px;
         height: 36px;
@@ -147,7 +199,7 @@ component SecondaryButton {
         
         Text {
             text: root.text;
-            color: root.enabled ? Colors.forest-green : #999999;
+            color: root.enabled ? Theme.forest-green : #999999;
             font-size: Typography.body-size;
             font-weight: 500;
             horizontal-alignment: center;
@@ -170,7 +222,7 @@ component SecondaryButton {
 // includes built-in focus states and platform-native appearance.
 //
 // DESIRED STYLING (cannot be applied directly):
-// - border-color: #d3d3d3 (Colors.disabled)
+// - border-color: #d3d3d3 (Theme.disabled)
 // - border-width: 1px
 // - border-radius: 4px
 //
@@ -202,17 +254,17 @@ component SecondaryButton {
 // Replaces standard GroupBox which doesn't support custom styling in Slint v1.14.
 //
 // Styling specifications:
-// - Background: Colors.cream (#faf9f6)
-// - Border: 1px solid Colors.whisper-grey (#e8e8e8)
+// - Background: Theme.cream (#faf9f6)
+// - Border: 1px solid Theme.whisper-grey (#e8e8e8)
 // - Border radius: 6px
 // - Padding: Spacing.lg (16px)
 // - Title font: 16px, weight 600, color charcoal (#2c2c2c)
 component Card inherits Rectangle {
     in property <string> title;
     
-    background: Colors.cream;
+    background: Theme.cream;
     border-width: 1px;
-    border-color: Colors.whisper-grey;
+    border-color: Theme.whisper-grey;
     border-radius: 6px;
     
     VerticalBox {
@@ -223,7 +275,7 @@ component Card inherits Rectangle {
             text: title;
             font-size: 16px;
             font-weight: 600;
-            color: Colors.charcoal;
+            color: Theme.charcoal;
         }
         
         @children
@@ -301,13 +353,59 @@ export component AppWindow inherits Window {
         padding: Spacing.xl;
         spacing: Spacing.lg;
         
-        Text {
-            text: "Password Saver";
-            font-size: Typography.h1-size;
-            font-weight: Typography.h1-weight;
-            letter-spacing: Typography.h1-letter-spacing;
-            color: Colors.charcoal;
-            horizontal-alignment: left;
+        // Header with title and theme toggle
+        HorizontalBox {
+            spacing: Spacing.md;
+            
+            Text {
+                text: "Password Saver";
+                font-size: Typography.h1-size;
+                font-weight: Typography.h1-weight;
+                letter-spacing: Typography.h1-letter-spacing;
+                color: Theme.charcoal;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+            }
+            
+            Rectangle {
+                // Spacer to push toggle to the right
+                horizontal-stretch: 1;
+            }
+            
+            // Theme toggle button
+            Rectangle {
+                width: 80px;
+                height: 32px;
+                background: Theme.whisper-grey;
+                border-radius: 16px;
+                
+                TouchArea {
+                    clicked => {
+                        Theme.dark-mode = !Theme.dark-mode;
+                    }
+                }
+                
+                // Toggle indicator
+                Rectangle {
+                    x: Theme.dark-mode ? parent.width - self.width - 4px : 4px;
+                    y: 4px;
+                    width: 24px;
+                    height: 24px;
+                    background: Theme.dark-mode ? #ffd700 : #f0f0f0;
+                    border-radius: 12px;
+                    
+                    // Smooth animation
+                    animate x { duration: 200ms; easing: ease-in-out; }
+                }
+                
+                // Moon/Sun icon representation
+                Text {
+                    text: Theme.dark-mode ? "🌙" : "☀️";
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
         
         // Update notification banner
@@ -368,7 +466,7 @@ export component AppWindow inherits Window {
                     text: "This password is used to encrypt/decrypt your stored passwords";
                     font-size: Typography.secondary-size;
                     font-weight: Typography.secondary-weight;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
             }
         }
@@ -585,7 +683,7 @@ export component AppWindow inherits Window {
                     text: root.password-entropy-text;
                     font-size: Typography.secondary-size;
                     font-weight: Typography.secondary-weight;
-                    color: Colors.forest-green;
+                    color: Theme.forest-green;
                 }
             }
         }
@@ -678,7 +776,7 @@ export component AppWindow inherits Window {
                     text: "Showing " + root.filtered-count + " of " + root.total-count + " passwords";
                     font-size: Typography.secondary-size;
                     font-weight: Typography.secondary-weight;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
             }
         }
@@ -727,7 +825,7 @@ export component AppWindow inherits Window {
                     text: "Password will be automatically cleared from clipboard after 30 seconds";
                     font-size: Typography.secondary-size;
                     font-weight: Typography.secondary-weight;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
             }
         }
@@ -752,14 +850,14 @@ export component AppWindow inherits Window {
                         text: "No passwords saved yet";
                         font-size: Typography.h2-size;
                         font-weight: 600;
-                        color: Colors.charcoal;
+                        color: Theme.charcoal;
                         horizontal-alignment: center;
                     }
                     
                     Text {
                         text: "Add your first password above to get started.";
                         font-size: Typography.secondary-size;
-                        color: Colors.warm-grey;
+                        color: Theme.warm-grey;
                         horizontal-alignment: center;
                     }
                 }
@@ -776,35 +874,35 @@ export component AppWindow inherits Window {
                     text: "Common Actions:";
                     font-weight: 600;
                     font-size: Typography.body-size;
-                    color: Colors.charcoal;
+                    color: Theme.charcoal;
                 }
                 
                 Text {
                     text: "• Enter - Submit form or confirm dialog\n• Esc - Close dialog or cancel action\n• Space - Activate focused button";
                     font-size: Typography.secondary-size;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
                 
                 Text {
                     text: "\nDialog Actions:";
                     font-weight: 600;
                     font-size: Typography.body-size;
-                    color: Colors.charcoal;
+                    color: Theme.charcoal;
                 }
                 
                 Text {
                     text: "• Change Password dialog: Enter to submit, Esc to cancel\n• Lock Screen: Enter to unlock\n• Recovery dialogs: Enter to submit, Esc to cancel";
                     font-size: Typography.secondary-size;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
             }
         }
         
         if status-message != "" : Rectangle {
-            background: status-is-error ? Colors.error-bg : Colors.success-bg;
+            background: status-is-error ? Theme.error-bg : Theme.success-bg;
             border-radius: 4px;
             border-width: 1px;
-            border-color: status-is-error ? Colors.error-border : Colors.success-border;
+            border-color: status-is-error ? Theme.error-border : Theme.success-border;
             
             animate opacity {
                 duration: 200ms;
@@ -818,13 +916,13 @@ export component AppWindow inherits Window {
                 Text {
                     text: status-is-error ? "⚠" : "✓";
                     font-size: 16px;
-                    color: status-is-error ? Colors.error-text : Colors.success-text;
+                    color: status-is-error ? Theme.error-text : Theme.success-text;
                     vertical-alignment: center;
                 }
                 
                 Text {
                     text: status-message;
-                    color: status-is-error ? Colors.error-text : Colors.success-text;
+                    color: status-is-error ? Theme.error-text : Theme.success-text;
                     font-size: Typography.body-size;
                     vertical-alignment: center;
                 }
@@ -859,10 +957,10 @@ export component AppWindow inherits Window {
         
         Rectangle {
             width: 500px;
-            background: Colors.cream;
+            background: Theme.cream;
             border-radius: 8px;
             border-width: 1px;
-            border-color: Colors.whisper-grey;
+            border-color: Theme.whisper-grey;
             drop-shadow-blur: 40px;
             drop-shadow-color: rgba(0, 0, 0, 0.2);
             
@@ -879,7 +977,7 @@ export component AppWindow inherits Window {
                     text: "Change Master Password";
                     font-size: 20px;
                     font-weight: 600;
-                    color: Colors.charcoal;
+                    color: Theme.charcoal;
                     horizontal-alignment: left;
                 }
                 
@@ -923,7 +1021,7 @@ export component AppWindow inherits Window {
                     background: #f5f5f5;
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: Colors.whisper-grey;
+                    border-color: Theme.whisper-grey;
                     
                     VerticalBox {
                         padding: Spacing.md;
@@ -933,13 +1031,13 @@ export component AppWindow inherits Window {
                             text: "Password Requirements:";
                             font-weight: 600;
                             font-size: Typography.body-size;
-                            color: Colors.charcoal;
+                            color: Theme.charcoal;
                         }
                         
                         Text {
                             text: "• At least 8 characters long\n• At least one uppercase letter\n• At least one lowercase letter\n• At least one number";
                             font-size: Typography.secondary-size;
-                            color: Colors.warm-grey;
+                            color: Theme.warm-grey;
                         }
                     }
                 }
@@ -991,7 +1089,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 400px;
             height: 300px;
-            background: Colors.cream;
+            background: Theme.cream;
             border-radius: 8px;
             border-width: 2px;
             border-color: #ff9800;
@@ -1005,14 +1103,14 @@ export component AppWindow inherits Window {
                     font-size: Typography.h1-size;
                     font-weight: Typography.h1-weight;
                     letter-spacing: Typography.h1-letter-spacing;
-                    color: Colors.charcoal;
+                    color: Theme.charcoal;
                     horizontal-alignment: center;
                 }
                 
                 Text {
                     text: "Enter master password to unlock";
                     horizontal-alignment: center;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
                 
                 unlock-password := LineEdit {
@@ -1038,7 +1136,7 @@ export component AppWindow inherits Window {
                         
                         Text {
                             text: "Forgot Password?";
-                            color: Colors.indigo;
+                            color: Theme.indigo;
                             font-size: Typography.secondary-size;
                             font-weight: Typography.secondary-weight;
                             horizontal-alignment: center;
@@ -1097,7 +1195,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 550px;
             height: 500px;
-            background: Colors.cream;
+            background: Theme.cream;
             border-radius: 8px;
             border-width: 2px;
             border-color: #ff9800;
@@ -1110,18 +1208,18 @@ export component AppWindow inherits Window {
                     text: "⚠️ Important: Save Your Recovery Codes";
                     font-size: Typography.h2-size;
                     font-weight: Typography.h2-weight;
-                    color: Colors.charcoal;
+                    color: Theme.charcoal;
                     horizontal-alignment: center;
                 }
                 
                 Text {
                     text: "Write down these recovery codes and store them securely.\nYou will need them if you forget your master password.";
                     horizontal-alignment: center;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
                 
                 Rectangle {
-                    background: Colors.whisper-grey;
+                    background: Theme.whisper-grey;
                     border-radius: 4px;
                     border-width: 1px;
                     border-color: #ddd;
@@ -1196,7 +1294,7 @@ export component AppWindow inherits Window {
                     text: "Press Esc to close";
                     horizontal-alignment: center;
                     font-size: Typography.small-size;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
             }
         }
@@ -1222,7 +1320,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 450px;
             height: 350px;
-            background: Colors.cream;
+            background: Theme.cream;
             border-radius: 8px;
             border-width: 2px;
             border-color: #ff9800;
@@ -1236,14 +1334,14 @@ export component AppWindow inherits Window {
                     font-size: Typography.h1-size;
                     font-weight: Typography.h1-weight;
                     letter-spacing: Typography.h1-letter-spacing;
-                    color: Colors.charcoal;
+                    color: Theme.charcoal;
                     horizontal-alignment: center;
                 }
                 
                 Text {
                     text: "Enter one of your recovery codes to regain access:";
                     horizontal-alignment: center;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
                 
                 recovery-code-input := LineEdit {
@@ -1277,7 +1375,7 @@ export component AppWindow inherits Window {
                     horizontal-alignment: center;
                     font-size: Typography.small-size;
                     font-weight: Typography.small-weight;
-                    color: Colors.warm-grey;
+                    color: Theme.warm-grey;
                 }
             }
         }
