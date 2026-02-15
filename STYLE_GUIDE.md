@@ -1291,6 +1291,17 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 - Automatically follows system preference
 - Manual toggle option (optional)
 
+**Implementation Notes (Completed):**
+- Created `DarkColors` global with complete dark mode color palette matching all Colors properties
+- Created `Theme` global that manages dark-mode state and provides unified color interface
+- All UI components updated to use `Theme.*` colors instead of direct `Colors.*` references
+- Added interactive theme toggle button in header with sun/moon icons and smooth animation
+- Dark mode colors optimized for contrast: lighter greens (#4d7030), light text (#e8e8e8), dark backgrounds (#1a1a1a)
+- State colors adapted: dark green/red backgrounds with light borders and text for success/error states
+- Theme toggle uses animated switch with 200ms ease-in-out transition
+- Manual toggle implemented (system preference detection not available in Slint 1.14)
+- All 76 tests pass, build successful, no clippy warnings
+
 ---
 
 #### Task 5.3: Add Copy to Clipboard Feature
