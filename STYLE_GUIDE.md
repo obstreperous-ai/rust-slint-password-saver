@@ -1098,8 +1098,14 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 
 ---
 
-#### Task 4.2: Optimize Window Size & Title
+#### Task 4.2: Optimize Window Size & Title ✅ COMPLETED
 **Description:** Refine window dimensions and title for better desktop experience.
+
+**Status:** ✅ **COMPLETED**
+- Window title updated to "Password Saver — Secure Password Manager"
+- Window dimensions optimized: preferred-width 600px, preferred-height 700px
+- Minimum sizes set: min-width 500px, min-height 600px
+- Note: Slint supports window icons via `icon` property, but no icon file exists in repository (future enhancement)
 
 **Files to Modify:**
 - `src/ui/main.slint`
