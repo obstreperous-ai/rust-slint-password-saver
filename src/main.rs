@@ -455,15 +455,13 @@ fn main() -> Result<(), slint::PlatformError> {
                     // Populate password entries for display in UI list
                     let ui_entries: Vec<_> = entries
                         .iter()
-                        .map(|entry| {
-                            PasswordEntryData {
-                                title: entry.title.clone().into(),
-                                username: entry.username.clone().into(),
-                                password: entry.password.clone().into(),
-                            }
+                        .map(|entry| PasswordEntryData {
+                            title: entry.title.clone().into(),
+                            username: entry.username.clone().into(),
+                            password: entry.password.clone().into(),
                         })
                         .collect();
-                    
+
                     let model = std::rc::Rc::new(slint::VecModel::from(ui_entries));
                     ui.set_password_entries(model.into());
 
@@ -789,7 +787,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     password: entry.password.clone().into(),
                 })
                 .collect();
-            
+
             let model = std::rc::Rc::new(slint::VecModel::from(filtered_entries));
             ui.set_password_entries(model.into());
 
@@ -861,7 +859,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     password: entry.password.clone().into(),
                 })
                 .collect();
-            
+
             let model = std::rc::Rc::new(slint::VecModel::from(sorted_entries));
             ui.set_password_entries(model.into());
 
