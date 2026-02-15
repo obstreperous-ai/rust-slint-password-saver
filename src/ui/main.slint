@@ -775,6 +775,11 @@ export component AppWindow inherits Window {
             border-width: 1px;
             border-color: status-is-error ? Colors.error-border : Colors.success-border;
             
+            animate opacity {
+                duration: 200ms;
+                easing: ease-out;
+            }
+            
             HorizontalBox {
                 padding: Spacing.md;
                 spacing: Spacing.md;
@@ -802,6 +807,11 @@ export component AppWindow inherits Window {
         height: 100%;
         background: rgba(0, 0, 0, 0.4);
         
+        animate opacity {
+            duration: 300ms;
+            easing: ease-in-out;
+        }
+        
         FocusScope {
             key-pressed(event) => {
                 if (event.text == Key.Escape) {
@@ -824,6 +834,11 @@ export component AppWindow inherits Window {
             border-color: Colors.whisper-grey;
             drop-shadow-blur: 40px;
             drop-shadow-color: rgba(0, 0, 0, 0.2);
+            
+            animate y {
+                duration: 300ms;
+                easing: ease-out;
+            }
             
             VerticalBox {
                 padding: Spacing.xl;
