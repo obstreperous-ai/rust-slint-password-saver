@@ -1,5 +1,12 @@
 import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox, CheckBox, Slider } from "std-widgets.slint";
 
+// Password entry structure for UI display
+export struct PasswordEntryData {
+    title: string,
+    username: string,
+    password: string,
+}
+
 // Light Mode Color Palette
 global Colors {
     // Primary Colors
@@ -348,6 +355,9 @@ export component AppWindow inherits Window {
     in-out property <string> password-strength-text: "";
     in-out property <color> password-strength-color: transparent;
     
+    // Password entries list for display
+    in-out property <[PasswordEntryData]> password-entries: [];
+    
     // Update notification properties
     in-out property <bool> update-available: false;
     in-out property <bool> is-security-update: false;
@@ -361,6 +371,7 @@ export component AppWindow inherits Window {
     callback unlock(string);
     callback lock-session();
     callback copy-password(string);
+    callback copy-entry-password(int);  // Copy password at specific index
     callback generate-password();
     callback use-generated-password(string);
     callback search-passwords(string);
@@ -872,9 +883,9 @@ export component AppWindow inherits Window {
             title: "Stored Passwords";
             
             ScrollView {
-                height: 200px;
+                height: 300px;
                 
-                VerticalBox {
+                if root.password-entries.length == 0 : VerticalBox {
                     alignment: center;
                     spacing: Spacing.lg;
                     
@@ -897,6 +908,50 @@ export component AppWindow inherits Window {
                         font-size: Typography.secondary-size;
                         color: Theme.warm-grey;
                         horizontal-alignment: center;
+                    }
+                }
+                
+                if root.password-entries.length > 0 : VerticalBox {
+                    spacing: Spacing.sm;
+                    
+                    for entry[index] in root.password-entries : Rectangle {
+                        background: Theme.cream;
+                        border-width: 1px;
+                        border-color: Theme.border-light;
+                        border-radius: 4px;
+                        
+                        HorizontalBox {
+                            padding: Spacing.md;
+                            spacing: Spacing.md;
+                            
+                            VerticalBox {
+                                spacing: Spacing.xs;
+                                horizontal-stretch: 1;
+                                
+                                Text {
+                                    text: entry.title;
+                                    font-size: Typography.body-size;
+                                    font-weight: 600;
+                                    color: Theme.charcoal;
+                                    overflow: elide;
+                                }
+                                
+                                Text {
+                                    text: "👤 " + entry.username;
+                                    font-size: Typography.secondary-size;
+                                    color: Theme.warm-grey;
+                                    overflow: elide;
+                                }
+                            }
+                            
+                            Button {
+                                text: "📋 Copy";
+                                min-width: 80px;
+                                clicked => {
+                                    root.copy-entry-password(index);
+                                }
+                            }
+                        }
                     }
                 }
             }

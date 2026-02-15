@@ -452,6 +452,21 @@ fn main() -> Result<(), slint::PlatformError> {
                     ui.set_total_count(count.try_into().unwrap_or(max_display));
                     ui.set_filtered_count(count.try_into().unwrap_or(max_display));
 
+                    // Populate password entries for display in UI list
+                    let ui_entries: Vec<_> = entries
+                        .iter()
+                        .map(|entry| {
+                            PasswordEntryData {
+                                title: entry.title.clone().into(),
+                                username: entry.username.clone().into(),
+                                password: entry.password.clone().into(),
+                            }
+                        })
+                        .collect();
+                    
+                    let model = std::rc::Rc::new(slint::VecModel::from(ui_entries));
+                    ui.set_password_entries(model.into());
+
                     let mut message = format!("Loaded {} password(s):\n", count);
 
                     // Display first few entries to avoid overwhelming the status area
@@ -581,6 +596,71 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
+    // Set up copy entry password callback (by index)
+    // This is called when user clicks copy button next to a password entry
+    let ui_weak = ui.as_weak();
+    let loaded_entries_clone = loaded_entries.clone();
+    ui.on_copy_entry_password(move |index| {
+        // Record user activity
+        SESSION_MANAGER.record_activity();
+
+        if let Some(ui) = ui_weak.upgrade() {
+            // Get password from loaded entries at the specified index
+            let password = {
+                let entries = loaded_entries_clone.lock().unwrap();
+                #[allow(clippy::cast_sign_loss)]
+                let idx = index as usize;
+                if idx < entries.len() {
+                    Some(entries[idx].password.clone())
+                } else {
+                    None
+                }
+            };
+
+            if let Some(password) = password {
+                // Initialize clipboard if not already done
+                let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+                if clipboard_guard.is_none() {
+                    match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
+                        Ok(clipboard) => {
+                            *clipboard_guard = Some(clipboard);
+                        }
+                        Err(e) => {
+                            ui.set_status_is_error(true);
+                            ui.set_status_message(
+                                format!("Failed to initialize clipboard: {}", e).into(),
+                            );
+                            return;
+                        }
+                    }
+                }
+
+                // Copy password to clipboard with auto-clear
+                if let Some(clipboard) = clipboard_guard.as_mut() {
+                    match clipboard.copy_with_autoclear(&password) {
+                        Ok(()) => {
+                            ui.set_status_is_error(false);
+                            ui.set_status_message(
+                                format!(
+                                    "Password copied to clipboard (will auto-clear in {}s)",
+                                    CLIPBOARD_CONFIG.clear_timeout_seconds
+                                )
+                                .into(),
+                            );
+                        }
+                        Err(e) => {
+                            ui.set_status_is_error(true);
+                            ui.set_status_message(format!("Failed to copy password: {}", e).into());
+                        }
+                    }
+                }
+            } else {
+                ui.set_status_is_error(true);
+                ui.set_status_message("Invalid password entry index".into());
+            }
+        }
+    });
+
     // Set up generate password callback
     let ui_weak = ui.as_weak();
     ui.on_generate_password(move || {
@@ -699,6 +779,20 @@ fn main() -> Result<(), slint::PlatformError> {
             ui.set_filtered_count(filtered_count);
             ui.set_total_count(total_count);
 
+            // Update password entries list with filtered results
+            let filtered_entries: Vec<_> = matching_indices
+                .iter()
+                .filter_map(|&idx| entries.get(idx))
+                .map(|entry| PasswordEntryData {
+                    title: entry.title.clone().into(),
+                    username: entry.username.clone().into(),
+                    password: entry.password.clone().into(),
+                })
+                .collect();
+            
+            let model = std::rc::Rc::new(slint::VecModel::from(filtered_entries));
+            ui.set_password_entries(model.into());
+
             // Display filtered entries in status message
             if query.is_empty() {
                 ui.set_status_is_error(false);
@@ -757,6 +851,19 @@ fn main() -> Result<(), slint::PlatformError> {
             };
 
             sort_entries(&mut entries, criteria);
+
+            // Update password entries list with sorted results
+            let sorted_entries: Vec<_> = entries
+                .iter()
+                .map(|entry| PasswordEntryData {
+                    title: entry.title.clone().into(),
+                    username: entry.username.clone().into(),
+                    password: entry.password.clone().into(),
+                })
+                .collect();
+            
+            let model = std::rc::Rc::new(slint::VecModel::from(sorted_entries));
+            ui.set_password_entries(model.into());
 
             let count = entries.len();
             let mut message = format!("Sorted {} password(s):\n", count);

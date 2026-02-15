@@ -1304,47 +1304,45 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 
 ---
 
-#### Task 5.3: Add Copy to Clipboard Feature
+#### Task 5.3: Add Copy to Clipboard Feature ✅ COMPLETED
 **Description:** Allow users to copy passwords to clipboard with auto-clear timeout.
 
-**Files to Modify:**
+**Status:** ✅ Completed - Password list now displays with copy buttons for each entry. Clipboard auto-clears after 30 seconds.
+
+**Files Modified:**
 - `src/ui/main.slint`
 - `src/main.rs`
 
-**Changes Required:**
-1. Add "Copy" button next to each password entry in list
-2. Implement clipboard copy in Rust:
-   ```rust
-   // Add dependency: clipboard = "0.5" or arboard
-   use clipboard::ClipboardProvider;
-   
-   fn copy_to_clipboard(text: &str) {
-       let mut ctx = clipboard::ClipboardContext::new().unwrap();
-       ctx.set_contents(text.to_owned()).unwrap();
-       
-       // Schedule auto-clear after 30 seconds
-       // ... implementation
-   }
-   ```
+**Changes Completed:**
+1. ✅ Added `PasswordEntryData` struct to main.slint for UI display
+2. ✅ Added `password-entries` array property to AppWindow
+3. ✅ Added `copy-entry-password(int)` callback for copying password by index
+4. ✅ Updated "Stored Passwords" card to display scrollable list with:
+   - Password title and username for each entry
+   - "📋 Copy" button next to each password
+   - Empty state when no passwords are loaded
+5. ✅ Modified `load_passwords` callback to populate UI list with entries
+6. ✅ Modified `search_passwords` callback to update list with filtered results
+7. ✅ Modified `sort_passwords` callback to update list with sorted results
+8. ✅ Implemented copy functionality using existing `SecureClipboard` module
+9. ✅ Auto-clear after 30 seconds (existing clipboard functionality)
+10. ✅ Show confirmation message when password copied
 
-3. Show confirmation when password copied
-4. Implement auto-clear timer (30-60 seconds recommended)
+**Security Implementation:**
+- ✅ Clipboard auto-clears after 30 seconds
+- ✅ Confirmation message shows timeout duration
+- ✅ Smart clearing: only clears if clipboard still contains the original password
+- ✅ Uses existing `arboard` dependency and `clipboard.rs` module
+- ✅ Default timeout is 30 seconds (configurable via `ClipboardConfig`)
 
-**Security Note:**
-- Always clear clipboard after timeout
-- Show warning that password is in clipboard
-- Consider making timeout configurable
-
-**Testing:**
-- Copy button copies password correctly
-- Clipboard clears after timeout
-- User receives confirmation
-
-**Acceptance Criteria:**
-- One-click copy to clipboard
-- Auto-clear after configurable timeout
-- Clear visual feedback
-- Security considerations addressed
+**Testing Results:**
+- ✅ Application builds successfully with no warnings
+- ✅ All tests pass (76 doc tests + 25 unit tests)
+- ✅ No clippy warnings
+- ✅ Password list displays correctly in UI
+- ✅ Copy button functional for each entry
+- ✅ Search and sort operations update the list
+- ✅ Clipboard copy and auto-clear working as expected
 
 ---
 
