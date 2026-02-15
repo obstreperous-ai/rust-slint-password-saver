@@ -417,6 +417,7 @@ export component AppWindow inherits Window {
                 }
                 
                 // Password strength indicator
+                // Padding aligns indicator with input field (matching label min-width from above)
                 if root.password-strength-text != "" : HorizontalBox {
                     spacing: Spacing.sm;
                     padding-left: 100px; // Align with input field

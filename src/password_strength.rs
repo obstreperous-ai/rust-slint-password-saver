@@ -249,12 +249,15 @@ pub fn assess_password_strength(password: &str) -> (PasswordStrength, String) {
     let entropy = zxcvbn(password, &[]);
 
     // Map zxcvbn Score to our PasswordStrength enum
+    // Note: Score enum is non-exhaustive, so wildcard pattern is required
+    #[allow(clippy::match_same_arms)] // Zero and wildcard both intentionally map to VeryWeak
     let strength = match entropy.score() {
+        Score::Zero => PasswordStrength::VeryWeak,
         Score::One => PasswordStrength::Weak,
         Score::Two => PasswordStrength::Medium,
         Score::Three => PasswordStrength::Strong,
         Score::Four => PasswordStrength::VeryStrong,
-        _ => PasswordStrength::VeryWeak, // Zero and any other score
+        _ => PasswordStrength::VeryWeak, // Future-proof for new score variants
     };
 
     // Create descriptive text based on strength

@@ -85,6 +85,14 @@ const MAX_DISPLAY_ENTRIES: usize = 5;
 const GENERATED_PASSWORD_COPIED_MESSAGE: &str =
     "Generated password copied to clipboard. Paste it into the Password field.";
 
+// Password strength indicator colors (matching design guide)
+/// Color for very weak passwords (Vermillion - error color)
+const STRENGTH_COLOR_VERY_WEAK: (u8, u8, u8) = (193, 68, 14);
+/// Color for weak to medium passwords (Warning color)
+const STRENGTH_COLOR_WEAK_MEDIUM: (u8, u8, u8) = (184, 134, 11);
+/// Color for strong to excellent passwords (Forest Green - success color)
+const STRENGTH_COLOR_STRONG: (u8, u8, u8) = (45, 80, 22);
+
 /// Get cross-platform path for storing encrypted passwords.
 ///
 /// This function determines the appropriate location for password storage
@@ -375,13 +383,16 @@ fn main() -> Result<(), slint::PlatformError> {
             // Map strength to colors based on design guide
             let color = match strength {
                 PasswordStrength::VeryWeak => {
-                    slint::Color::from_rgb_u8(193, 68, 14) // Vermillion (error color)
+                    let (r, g, b) = STRENGTH_COLOR_VERY_WEAK;
+                    slint::Color::from_rgb_u8(r, g, b)
                 }
                 PasswordStrength::Weak | PasswordStrength::Medium => {
-                    slint::Color::from_rgb_u8(184, 134, 11) // Warning color
+                    let (r, g, b) = STRENGTH_COLOR_WEAK_MEDIUM;
+                    slint::Color::from_rgb_u8(r, g, b)
                 }
                 PasswordStrength::Strong | PasswordStrength::VeryStrong => {
-                    slint::Color::from_rgb_u8(45, 80, 22) // Forest Green (success)
+                    let (r, g, b) = STRENGTH_COLOR_STRONG;
+                    slint::Color::from_rgb_u8(r, g, b)
                 }
             };
 
