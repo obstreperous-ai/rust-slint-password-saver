@@ -1035,7 +1035,7 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
 
 ### Priority 4: Polish & Details
 
-#### Task 4.1: Improve Empty States
+#### Task 4.1: Improve Empty States ✅ COMPLETED
 **Description:** Enhance empty password list with helpful guidance and visual interest.
 
 **Files to Modify:**
@@ -1071,15 +1071,30 @@ The standard GroupBox widget from `std-widgets.slint` does not expose styling pr
    }
    ```
 
+**Implementation Notes:**
+- Replaced plain text "Password entries will appear here..." with richer empty state component (lines 708-732)
+- Added lock emoji (🔐) at 48px for visual interest
+- Added "No passwords saved yet" heading using Typography.h2-size with 600 font-weight
+- Added helpful guidance text "Add your first password above to get started." using Typography.secondary-size
+- Centered all elements horizontally with proper spacing using Spacing.lg
+- Applied color scheme: Colors.charcoal for heading, Colors.warm-grey for guidance text
+- All changes maintain consistency with the design system
+
 **Testing:**
-- Empty state appears when no passwords are saved
-- Message is helpful and encouraging
-- Icon adds visual interest
+- ✅ Empty state appears when no passwords are saved
+- ✅ Message is helpful and encouraging
+- ✅ Icon adds visual interest
+- ✅ All tests pass (134 unit tests + 75 doc tests)
+- ✅ Build succeeds
+- ✅ Clippy passes with no warnings
 
 **Acceptance Criteria:**
-- Empty state is more engaging than plain text
-- Guides user on next action
-- Matches overall aesthetic
+- ✅ Empty state is more engaging than plain text
+- ✅ Guides user on next action
+- ✅ Matches overall aesthetic
+
+**Files Modified:**
+- `src/ui/main.slint` - Enhanced empty state in "Stored Passwords" card
 
 ---
 
