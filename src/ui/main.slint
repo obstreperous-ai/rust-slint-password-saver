@@ -231,9 +231,11 @@ component Card inherits Rectangle {
 }
 
 export component AppWindow inherits Window {
-    title: "Password Saver";
+    title: "Password Saver — Secure Password Manager";
     preferred-width: 600px;
-    preferred-height: 600px;
+    preferred-height: 700px;  // Increased for more vertical space
+    min-width: 500px;
+    min-height: 600px;
     
     in-out property <string> status-message: "";
     in-out property <bool> status-is-error: false;
