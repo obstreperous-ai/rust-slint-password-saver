@@ -12,6 +12,8 @@ global Colors {
     out property <color> vermillion: #c1440e;
     out property <color> indigo: #1a365d;
     out property <color> cream: #faf9f6;
+    out property <color> info-blue: #2196f3;  // Informational messages
+    out property <color> warning-orange: #ff9800;  // Warning/security updates
 
     // State Colors
     out property <color> success-bg: #e6f4e7;
@@ -23,6 +25,12 @@ global Colors {
     out property <color> error-text: #8b1a0a;
     
     out property <color> disabled: #d3d3d3;
+    out property <color> disabled-text: #999999;
+    
+    // UI Element Colors
+    out property <color> border-light: #ddd;
+    out property <color> toggle-on: #ffd700;  // Gold for active state
+    out property <color> toggle-off: #f0f0f0;  // Light gray for inactive state
 }
 
 // Dark Mode Color Palette
@@ -37,6 +45,8 @@ global DarkColors {
     out property <color> vermillion: #ff6b3d;  // Brighter for visibility
     out property <color> indigo: #4a7ba7;  // Lighter blue
     out property <color> cream: #1a1a1a;  // Dark background
+    out property <color> info-blue: #42a5f5;  // Brighter for dark mode
+    out property <color> warning-orange: #ffb74d;  // Softer orange for dark mode
 
     // State Colors
     out property <color> success-bg: #1d3010;  // Dark green background
@@ -48,6 +58,12 @@ global DarkColors {
     out property <color> error-text: #ffb3a0;  // Light red text
     
     out property <color> disabled: #4a4a4a;
+    out property <color> disabled-text: #777777;
+    
+    // UI Element Colors
+    out property <color> border-light: #444444;
+    out property <color> toggle-on: #ffd700;  // Gold for active state (same)
+    out property <color> toggle-off: #3a3a3a;  // Dark gray for inactive state
 }
 
 // Theme Manager - Provides unified color interface
@@ -64,6 +80,8 @@ global Theme {
     out property <color> vermillion: dark-mode ? DarkColors.vermillion : Colors.vermillion;
     out property <color> indigo: dark-mode ? DarkColors.indigo : Colors.indigo;
     out property <color> cream: dark-mode ? DarkColors.cream : Colors.cream;
+    out property <color> info-blue: dark-mode ? DarkColors.info-blue : Colors.info-blue;
+    out property <color> warning-orange: dark-mode ? DarkColors.warning-orange : Colors.warning-orange;
     
     // State Colors
     out property <color> success-bg: dark-mode ? DarkColors.success-bg : Colors.success-bg;
@@ -75,6 +93,12 @@ global Theme {
     out property <color> error-text: dark-mode ? DarkColors.error-text : Colors.error-text;
     
     out property <color> disabled: dark-mode ? DarkColors.disabled : Colors.disabled;
+    out property <color> disabled-text: dark-mode ? DarkColors.disabled-text : Colors.disabled-text;
+    
+    // UI Element Colors
+    out property <color> border-light: dark-mode ? DarkColors.border-light : Colors.border-light;
+    out property <color> toggle-on: dark-mode ? DarkColors.toggle-on : Colors.toggle-on;
+    out property <color> toggle-off: dark-mode ? DarkColors.toggle-off : Colors.toggle-off;
 }
 
 // Typography System
@@ -187,7 +211,7 @@ component SecondaryButton {
     Rectangle {
         background: transparent;
         border-width: 1px;
-        border-color: root.enabled ? Theme.forest-green : #d3d3d3;
+        border-color: root.enabled ? Theme.forest-green : Theme.disabled;
         border-radius: 4px;
         min-width: 100px;
         height: 36px;
@@ -199,7 +223,7 @@ component SecondaryButton {
         
         Text {
             text: root.text;
-            color: root.enabled ? Theme.forest-green : #999999;
+            color: root.enabled ? Theme.forest-green : Theme.disabled-text;
             font-size: Typography.body-size;
             font-weight: 500;
             horizontal-alignment: center;
@@ -391,7 +415,7 @@ export component AppWindow inherits Window {
                     y: 4px;
                     width: 24px;
                     height: 24px;
-                    background: Theme.dark-mode ? #ffd700 : #f0f0f0;
+                    background: Theme.dark-mode ? Theme.toggle-on : Theme.toggle-off;
                     border-radius: 12px;
                     
                     // Smooth animation
@@ -410,7 +434,7 @@ export component AppWindow inherits Window {
         
         // Update notification banner
         if root.update-available : Rectangle {
-            background: root.is-security-update ? #ff9800 : #2196f3;
+            background: root.is-security-update ? Theme.warning-orange : Theme.info-blue;
             border-radius: 4px;
             
             HorizontalBox {
@@ -1092,7 +1116,7 @@ export component AppWindow inherits Window {
             background: Theme.cream;
             border-radius: 8px;
             border-width: 2px;
-            border-color: #ff9800;
+            border-color: Theme.warning-orange;
             
             VerticalBox {
                 padding: Spacing.xxxl;
@@ -1160,7 +1184,7 @@ export component AppWindow inherits Window {
         background: #fff3e0;
         border-radius: 4px;
         border-width: 1px;
-        border-color: #ff9800;
+        border-color: Theme.warning-orange;
         
         HorizontalBox {
             padding: Spacing.xs;
@@ -1198,7 +1222,7 @@ export component AppWindow inherits Window {
             background: Theme.cream;
             border-radius: 8px;
             border-width: 2px;
-            border-color: #ff9800;
+            border-color: Theme.warning-orange;
             
             VerticalBox {
                 padding: Spacing.xxxl;
@@ -1222,7 +1246,7 @@ export component AppWindow inherits Window {
                     background: Theme.whisper-grey;
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: #ddd;
+                    border-color: Theme.border-light;
                     
                     VerticalBox {
                         padding: Spacing.xl;
@@ -1323,7 +1347,7 @@ export component AppWindow inherits Window {
             background: Theme.cream;
             border-radius: 8px;
             border-width: 2px;
-            border-color: #ff9800;
+            border-color: Theme.warning-orange;
             
             VerticalBox {
                 padding: Spacing.xxxl;
