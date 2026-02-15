@@ -402,6 +402,20 @@ export component AppWindow inherits Window {
                 height: 32px;
                 background: Theme.whisper-grey;
                 border-radius: 16px;
+                accessible-role: button;
+                accessible-label: Theme.dark-mode ? "Switch to light mode" : "Switch to dark mode";
+                
+                forward-focus: theme-focus-scope;
+                
+                theme-focus-scope := FocusScope {
+                    key-pressed(event) => {
+                        if (event.text == Key.Return || event.text == Key.Space) {
+                            Theme.dark-mode = !Theme.dark-mode;
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
                 
                 TouchArea {
                     clicked => {
