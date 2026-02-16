@@ -297,7 +297,7 @@ component PasswordCard {
     in property <string> title;
     in property <string> username;
     in property <string> password;
-    in property <int> created-at;
+    in property <int> created-at: 0;  // Optional, defaults to 0 if not provided
     
     callback copy-password();
     callback edit-entry();
@@ -986,7 +986,7 @@ export component AppWindow inherits Window {
                         title: entry.title;
                         username: entry.username;
                         password: entry.password;
-                        created-at: 0;  // Not currently used, but part of component interface
+                        // created-at defaults to 0 (not currently used)
                         
                         copy-password => {
                             root.copy-entry-password(index);
