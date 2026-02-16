@@ -290,6 +290,74 @@ component SecondaryButton {
 // - Border radius: 6px
 // - Padding: Spacing.lg (16px)
 // - Title font: 16px, weight 600, color charcoal (#2c2c2c)
+
+// Password Entry Card Component
+// Task 5.5: Structured list view for password entries
+component PasswordCard {
+    in property <string> title;
+    in property <string> username;
+    in property <string> password;
+    in property <int> created-at: 0;  // Optional, defaults to 0 if not provided
+    
+    callback copy-password();
+    callback edit-entry();
+    callback delete-entry();
+    
+    Rectangle {
+        background: Theme.cream;
+        border-width: 1px;
+        border-color: Theme.border-light;
+        border-radius: 4px;
+        
+        HorizontalBox {
+            padding: Spacing.lg;
+            spacing: Spacing.lg;
+            
+            VerticalBox {
+                spacing: Spacing.sm;
+                horizontal-stretch: 1;
+                
+                Text {
+                    text: root.title;
+                    font-size: Typography.body-size;
+                    font-weight: 600;
+                    color: Theme.charcoal;
+                    overflow: elide;
+                }
+                
+                if root.username != "" : Text {
+                    text: "👤 " + root.username;
+                    font-size: Typography.secondary-size;
+                    color: Theme.warm-grey;
+                    overflow: elide;
+                }
+            }
+            
+            Rectangle { } // Spacer
+            
+            HorizontalBox {
+                spacing: Spacing.sm;
+                
+                SecondaryButton {
+                    text: "📋 Copy";
+                    clicked => { root.copy-password(); }
+                }
+                
+                // Placeholder for future edit/delete buttons
+                // SecondaryButton {
+                //     text: "✏️ Edit";
+                //     clicked => { root.edit-entry(); }
+                // }
+                // 
+                // SecondaryButton {
+                //     text: "🗑️ Delete";
+                //     clicked => { root.delete-entry(); }
+                // }
+            }
+        }
+    }
+}
+
 component Card inherits Rectangle {
     in property <string> title;
     
@@ -914,44 +982,24 @@ export component AppWindow inherits Window {
                 if root.password-entries.length > 0 : VerticalBox {
                     spacing: Spacing.sm;
                     
-                    for entry[index] in root.password-entries : Rectangle {
-                        background: Theme.cream;
-                        border-width: 1px;
-                        border-color: Theme.border-light;
-                        border-radius: 4px;
+                    for entry[index] in root.password-entries : PasswordCard {
+                        title: entry.title;
+                        username: entry.username;
+                        password: entry.password;
+                        // created-at defaults to 0 (not currently used)
                         
-                        HorizontalBox {
-                            padding: Spacing.md;
-                            spacing: Spacing.md;
-                            
-                            VerticalBox {
-                                spacing: Spacing.xs;
-                                horizontal-stretch: 1;
-                                
-                                Text {
-                                    text: entry.title;
-                                    font-size: Typography.body-size;
-                                    font-weight: 600;
-                                    color: Theme.charcoal;
-                                    overflow: elide;
-                                }
-                                
-                                Text {
-                                    text: "👤 " + entry.username;
-                                    font-size: Typography.secondary-size;
-                                    color: Theme.warm-grey;
-                                    overflow: elide;
-                                }
-                            }
-                            
-                            Button {
-                                text: "📋 Copy";
-                                min-width: 80px;
-                                clicked => {
-                                    root.copy-entry-password(index);
-                                }
-                            }
+                        copy-password => {
+                            root.copy-entry-password(index);
                         }
+                        
+                        // Future: edit-entry and delete-entry callbacks
+                        // edit-entry => {
+                        //     root.edit-entry-at-index(index);
+                        // }
+                        // 
+                        // delete-entry => {
+                        //     root.delete-entry-at-index(index);
+                        // }
                     }
                 }
             }
