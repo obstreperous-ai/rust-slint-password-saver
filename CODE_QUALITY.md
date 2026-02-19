@@ -154,3 +154,2229 @@ If cargo audit reports warnings about unmaintained crates in dependencies:
 - Check if the dependency is indirect (coming from another crate)
 - Consider opening an issue with the direct dependency maintainer
 - Monitor for updates that address the issue
+
+---
+
+## Comprehensive Code Quality Review (2026-02-18)
+
+This section contains a comprehensive code quality assessment of the rust-slint-password-saver codebase, analyzing architecture, implementation, testing, documentation, performance, security, and maintainability.
+
+### Executive Summary
+
+**Overall Assessment: 🟢 Good Foundation with Opportunities for Improvement**
+
+The codebase demonstrates strong security awareness and extensive test coverage (138+ tests). The project successfully implements military-grade encryption with Argon2 and AES-256-GCM, includes comprehensive security features (audit logging, rate limiting, session management), and follows Rust conventions.
+
+**Key Strengths:**
+- ✅ Comprehensive security features (encryption, audit logging, rate limiting, recovery codes)
+- ✅ Extensive test coverage (138 tests passing)
+- ✅ Well-documented public APIs and module purposes
+- ✅ Use of modern Rust security patterns (zeroize, constant-time comparisons)
+- ✅ Active CI/CD with quality checks and security audits
+
+**Areas for Improvement:**
+- ⚠️ Excessive use of `.unwrap()` creating potential panic points (100+ instances)
+- ⚠️ Tight coupling via global state (4 lazy_static globals)
+- ⚠️ Monolithic `main()` function with 500+ lines and 8+ callbacks
+- ⚠️ Missing edge case testing and integration test scenarios
+- ⚠️ Performance inefficiencies (unnecessary allocations, string operations)
+
+### Detailed Analysis by Category
+
+#### 1. Code Quality Issues 🟡 Medium Priority
+
+**A. Excessive Error Handling with `unwrap()`**
+
+*Issue:* Widespread use of `.unwrap()` throughout the codebase creates potential panic points that could crash the application.
+
+**Locations:**
+- `src/storage.rs` lines 305-315: Crypto operations using `.unwrap()`
+- `src/backup.rs` lines 95-145: File operations in tests using `.unwrap()`
+- `src/audit_log.rs` lines 175-195: String conversions using `.unwrap()`
+- `src/session.rs` lines 77-91: All mutex locks (9+ instances) use `.lock().unwrap()`
+- `src/main.rs` lines 224-300+: UI callbacks with 10+ `.lock().unwrap()` calls
+
+*Impact:* Poisoned mutexes or unexpected failures will cause application crashes instead of graceful error handling.
+
+*Recommendation:*
+- Replace `.unwrap()` with proper error propagation using `?` operator
+- Use `.expect("descriptive message")` for cases where panic is acceptable
+- Implement mutex poison recovery strategies
+- Create helper methods like `with_activity()` to encapsulate lock-and-handle patterns
+
+**B. Duplicated Validation Logic**
+
+*Issue:* Similar validation patterns repeated across multiple functions in `src/validation.rs`.
+
+**Functions with duplication:**
+- `validate_master_password()` - checks length, charset requirements
+- `validate_password()` - similar length checks
+- `validate_title()` - length and character validation
+- `validate_username()` - length validation
+
+*Impact:* Code duplication makes maintenance harder and increases risk of inconsistent validation.
+
+*Recommendation:*
+- Extract common validation helper: `validate_string(input, min, max, charset_fn, name)`
+- Parameterize validation rules for reusability
+- Consider builder pattern for complex validation chains
+
+**C. Dead Code Annotations**
+
+*Issue:* Multiple `#[allow(dead_code)]` annotations suggest unused functionality.
+
+**Locations:**
+- `src/storage.rs` line 80: `PasswordEntry` marked as dead code
+- `src/errors.rs` line 33: `SecurityError` enum variants unused
+
+*Impact:* Dead code increases cognitive load and maintenance burden.
+
+*Recommendation:*
+- Audit marked code to determine if it's actually used
+- Remove genuinely unused code
+- If code is kept for future features, document the intention
+- Enable `#[warn(dead_code)]` to catch new instances
+
+#### 2. Architecture Issues 🔴 High Priority
+
+**A. Tight Coupling via Global State**
+
+*Issue:* Four `lazy_static!` globals in `src/main.rs` lines 74-79 create tight coupling and make testing difficult.
+
+**Global Instances:**
+```rust
+static ref RATE_LIMITER: RateLimiter = RateLimiter::new();
+static ref SESSION_MANAGER: Arc<SessionManager> = Arc::new(SessionManager::new(5));
+static ref CLIPBOARD: Arc<Mutex<Option<SecureClipboard>>> = Arc::new(Mutex::new(None));
+static ref CLIPBOARD_CONFIG: ClipboardConfig = ClipboardConfig::default();
+```
+
+*Impact:*
+- Cannot test components in isolation
+- Difficult to inject mock dependencies
+- Shared mutable state across entire application
+- No control over initialization order
+
+*Recommendation:*
+- Introduce dependency injection pattern with an `AppContext` struct
+- Pass context through function parameters
+- Use `std::sync::OnceLock` (available since Rust 1.70) instead of `lazy_static!`
+- Create factory functions for test fixtures
+
+**B. Monolithic `main()` Function**
+
+*Issue:* The `main()` function contains 500+ lines with 8+ inline callback registrations.
+
+**Callback Complexity:**
+- `save_password_callback` - ~50 lines
+- `load_entries_callback` - ~40 lines
+- `generate_password_callback` - ~30 lines
+- `copy_to_clipboard_callback` - ~25 lines
+- `search_callback` - ~45 lines
+- `delete_entry_callback` - ~35 lines
+- Additional callbacks for import, export, recovery
+
+*Impact:*
+- Difficult to test individual handlers
+- Poor code organization and readability
+- Violates Single Responsibility Principle
+- Hard to maintain and extend
+
+*Recommendation:*
+- Extract callbacks into separate module: `src/ui_handlers.rs`
+- Create struct-based handlers: `PasswordHandlers`, `SearchHandlers`, etc.
+- Implement trait for testable UI callbacks
+- Use builder pattern for callback registration
+
+**C. Mixed Concerns in Modules**
+
+*Issue:* Some modules blend multiple responsibilities.
+
+**Examples:**
+- `src/session.rs` - mixes timeout logic with UI state management
+- `src/audit_log.rs` - couples encryption with file rotation logic
+- `src/main.rs` - handles UI, business logic, and infrastructure
+
+*Impact:* Reduced modularity, harder testing, unclear module boundaries.
+
+*Recommendation:*
+- Separate timeout management from session state
+- Extract file rotation into utility module
+- Create clear layers: UI → Application → Domain → Infrastructure
+
+#### 3. Testing Gaps 🟡 Medium Priority
+
+**Current State:** Strong unit test coverage (138 tests), but missing integration and edge case tests.
+
+**A. Missing Edge Cases**
+
+**Recovery System:**
+- No entropy verification for generated recovery codes
+- Missing collision probability tests
+- No tests for concurrent recovery attempts
+
+**Password Strength:**
+- 15+ tests but missing boundary conditions at exact length limits (11, 12, 13 chars)
+- No tests for passwords at exact MAX_LENGTH boundaries
+- Missing tests for pathological inputs (all same character, etc.)
+
+**Backup System:**
+- No tests for concurrent backup/load operations
+- Missing corrupted backup file handling
+- No tests for partial backup reads
+
+**Rate Limiting:**
+- Missing tests for timing precision (does lockout expire exactly at duration?)
+- No tests for time rollback scenarios (system clock changes)
+- Missing concurrent attempt tests
+
+**B. Missing Integration Tests**
+
+*Needed Scenarios:*
+1. Full lifecycle: save → load → edit → delete → recover
+2. Backup workflow: save → backup → corrupt primary → restore from backup
+3. Session timeout during clipboard auto-clear
+4. Rate limiting across save and load operations
+5. Audit log verification after sequence of operations
+6. Recovery code usage after multiple failed login attempts
+
+*Recommendation:*
+- Create `tests/integration/full_lifecycle_test.rs`
+- Add `tests/integration/backup_recovery_test.rs`
+- Implement `tests/integration/security_scenarios_test.rs`
+- Use test fixtures for common setup patterns
+
+#### 4. Documentation Issues 🟢 Low Priority
+
+**Overall:** Good module-level and function documentation, but some gaps remain.
+
+**A. Missing Documentation**
+
+**Locations:**
+- `src/main.rs` lines 200-220: Timeout thread spawning logic undocumented
+- `src/storage.rs` lines 197-210: `add_timing_jitter()` - why 1-2ms range chosen?
+- `src/clipboard.rs`: Auto-clear timeout parameter rationale (why 30s default?)
+- `src/password_generator.rs`: Entropy calculation methodology undocumented
+
+*Recommendation:*
+- Add inline comments for complex logic sections
+- Document security-critical timing parameters with references
+- Add examples to module-level docs showing common workflows
+- Create architecture decision records (ADR) for key design choices
+
+**B. Outdated Comments**
+
+**Location:** `src/main.rs` line 25
+```rust
+// Will migrate to std::sync::LazyLock when minimum version is 1.80+
+```
+
+*Issue:* Project targets Rust 1.70+, but `OnceLock` is available since 1.70, not 1.80.
+
+*Recommendation:*
+- Update comment to correct version: `OnceLock` (1.70+) vs `LazyLock` (1.80+)
+- Add migration ticket if planned
+- Consider immediate migration to `OnceLock` for better ergonomics
+
+#### 5. Performance Issues 🟢 Low Priority
+
+**A. Unnecessary Allocations**
+
+**Arc Cloning in Callbacks:**
+`src/main.rs` line 168 and throughout callbacks:
+```rust
+let entries = Arc::new(Mutex::new(Vec::<PasswordEntry>::new()));
+// Then cloned 8+ times for each callback
+let entries_clone = entries.clone(); // Repeated pattern
+```
+
+*Impact:* Unnecessary atomic reference counting overhead, though minimal in practice.
+
+*Recommendation:*
+- Refactor to pass single owned `Arc` to handler struct
+- Consider `Rc` for single-threaded UI callbacks
+- Profile to confirm actual overhead before optimizing
+
+**String Formatting:**
+`src/audit_log.rs` line 85:
+```rust
+format!("Event: {}", event); // Even if logging fails
+```
+
+*Impact:* Allocates string even when logging is disabled or fails.
+
+*Recommendation:*
+- Wrap in closure: `|| format!("Event: {}", event)`
+- Check logging level before formatting
+- Use `tracing` crate's zero-cost logging macros
+
+**Memory Buffering:**
+`src/backup.rs` line 140:
+```rust
+// Loads entire backup file into memory
+let contents = fs::read_to_string(&backup_path)?;
+let entries: Vec<PasswordEntry> = serde_json::from_str(&contents)?;
+```
+
+*Impact:* Large backup files consume significant memory unnecessarily.
+
+*Recommendation:*
+- Use streaming JSON parser: `serde_json::from_reader()`
+- Process entries incrementally
+- Add file size checks before loading
+
+**B. Inefficient String Operations**
+
+**Character Access:**
+`src/recovery.rs` line 81:
+```rust
+code.push(charset.chars().nth(idx).unwrap()); // O(n) operation
+```
+
+*Impact:* Each `.chars().nth()` iterates from start, making code generation O(n²).
+
+*Recommendation:*
+```rust
+let charset_bytes = charset.as_bytes();
+code.push(charset_bytes[idx] as char); // O(1) access
+```
+
+**String Comparison:**
+`src/search.rs`: No string interning for repeated title/username comparisons.
+
+*Impact:* Minor, but could optimize hot search paths.
+
+*Recommendation:*
+- Profile search performance with large datasets (1000+ entries)
+- Consider `AhoCorasick` for multi-pattern matching if needed
+- Add benchmark suite to measure actual impact
+
+#### 6. Security Issues 🔴 High Priority
+
+**A. Panic-Unsafe Concurrency**
+
+*Issue:* Mutex poisoning will cause application crashes throughout UI handlers.
+
+**Critical Locations:**
+- `src/main.rs` lines 224-300+: 10+ `.lock().unwrap()` in callbacks
+- `src/session.rs` lines 77-91: All session state access uses `.lock().unwrap()`
+
+*Impact:*
+- If any callback panics while holding lock, all future operations fail
+- No recovery mechanism for poisoned mutexes
+- Denial of service vulnerability via forced panics
+
+*Recommendation:*
+```rust
+// Instead of:
+let mut session = SESSION_MANAGER.lock().unwrap();
+
+// Use:
+let mut session = SESSION_MANAGER.lock()
+    .unwrap_or_else(|poisoned| {
+        warn!("Session mutex poisoned, recovering");
+        poisoned.into_inner()
+    });
+```
+
+**B. Rate Limiting Gaps**
+
+*Issue:* Recovery code verification in `src/recovery.rs` does NOT use the `RATE_LIMITER`.
+
+**Impact:** Attackers can brute-force recovery codes without rate limiting protection.
+
+**Verification:**
+- Regular password operations ARE rate-limited (see `src/main.rs`)
+- Recovery code verification bypasses this protection
+
+*Recommendation:*
+```rust
+// In src/recovery.rs recovery verification:
+if !RATE_LIMITER.attempt_allowed(user_id) {
+    return Err(SecurityError::RateLimitExceeded);
+}
+```
+
+**C. Timing Jitter Insufficient**
+
+*Issue:* `src/storage.rs` line 210 adds 1-2ms jitter for timing attack protection.
+
+**Current Implementation:**
+```rust
+fn add_timing_jitter() {
+    let jitter_ms = rand::thread_rng().gen_range(1..=2);
+    thread::sleep(Duration::from_millis(jitter_ms));
+}
+```
+
+*Analysis:*
+- Modern high-precision timers can measure sub-millisecond intervals
+- 1-2ms is easily distinguishable with statistical analysis
+- However, cryptographic comparison already uses `subtle::ConstantTimeEq` ✅
+
+*Recommendation:*
+- Increase jitter range to 50-150ms for recovery operations
+- Document that constant-time comparison is the primary defense
+- Jitter is defense-in-depth, not primary mitigation
+- Consider user experience impact of longer delays
+
+**D. File Permission Verification**
+
+*Issue:* `src/main.rs` line 134 sets directory permissions but doesn't verify success.
+
+```rust
+#[cfg(unix)]
+fs::set_permissions(&storage_path, fs::Permissions::from_mode(0o700))?;
+// No verification that 0700 was actually applied
+```
+
+*Impact:* On some filesystems (NFS, network shares), permission changes may silently fail.
+
+*Recommendation:*
+```rust
+#[cfg(unix)]
+{
+    fs::set_permissions(&storage_path, fs::Permissions::from_mode(0o700))?;
+    let metadata = fs::metadata(&storage_path)?;
+    let actual_mode = metadata.permissions().mode() & 0o777;
+    if actual_mode != 0o700 {
+        warn!("Failed to set secure permissions, got {:o}", actual_mode);
+        return Err(SecurityError::InvalidInput("Cannot secure storage directory".into()));
+    }
+}
+```
+
+#### 7. Rust Best Practices 🟡 Medium Priority
+
+**A. Non-Idiomatic Patterns**
+
+**1. Lazy Static Usage**
+
+*Current:* `src/main.rs` line 48
+```rust
+use lazy_static::lazy_static;
+lazy_static! {
+    static ref RATE_LIMITER: RateLimiter = RateLimiter::new();
+}
+```
+
+*Issue:* `lazy_static!` crate is maintenance mode; stdlib alternatives exist since Rust 1.70.
+
+*Recommendation:*
+```rust
+use std::sync::OnceLock;
+static RATE_LIMITER: OnceLock<RateLimiter> = OnceLock::new();
+
+fn get_rate_limiter() -> &'static RateLimiter {
+    RATE_LIMITER.get_or_init(|| RateLimiter::new())
+}
+```
+
+**2. Arc<Mutex<Option<T>>> Anti-pattern**
+
+*Current:* `src/main.rs` line 77
+```rust
+static ref CLIPBOARD: Arc<Mutex<Option<SecureClipboard>>> = ...;
+```
+
+*Issue:* Triple-wrapping is complex and error-prone. `Option` inside `Mutex` is usually a code smell.
+
+*Recommendation:*
+```rust
+static CLIPBOARD: OnceLock<Arc<SecureClipboard>> = OnceLock::new();
+
+fn get_clipboard() -> &Arc<SecureClipboard> {
+    CLIPBOARD.get_or_init(|| {
+        Arc::new(SecureClipboard::new().unwrap())
+    })
+}
+```
+
+**3. Repeated Lock-Unwrap Pattern**
+
+*Current:* `src/session.rs` line 77 (and 5 more times)
+```rust
+pub fn record_activity(&self) {
+    let mut state = self.state.lock().unwrap();
+    state.last_activity = SystemTime::now();
+}
+```
+
+*Recommendation:* Extract helper method:
+```rust
+fn with_state_mut<F, R>(&self, f: F) -> R
+where
+    F: FnOnce(&mut SessionState) -> R,
+{
+    let mut state = self.state.lock().expect("Session state mutex poisoned");
+    f(&mut state)
+}
+
+pub fn record_activity(&self) {
+    self.with_state_mut(|state| {
+        state.last_activity = SystemTime::now();
+    });
+}
+```
+
+**B. Deprecated/Suboptimal Patterns**
+
+**1. Allow Directives for Struct Bools**
+
+*Location:* `src/password_generator.rs` line 43
+```rust
+#[allow(clippy::struct_excessive_bools)]
+pub struct PasswordGeneratorConfig {
+    include_lowercase: bool,
+    include_uppercase: bool,
+    include_digits: bool,
+    include_special: bool,
+    // ...
+}
+```
+
+*Issue:* Multiple related booleans better expressed as a flags enum or bitflags.
+
+*Recommendation:*
+```rust
+use bitflags::bitflags;
+
+bitflags! {
+    pub struct CharsetFlags: u8 {
+        const LOWERCASE = 0b0001;
+        const UPPERCASE = 0b0010;
+        const DIGITS    = 0b0100;
+        const SPECIAL   = 0b1000;
+    }
+}
+
+pub struct PasswordGeneratorConfig {
+    charset: CharsetFlags,
+    length: usize,
+}
+```
+
+**C. Missing Trait Implementations**
+
+*Issue:* `PasswordEntry` lacks common traits that would improve usability.
+
+**Current:** `src/storage.rs` line 81
+```rust
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
+pub struct PasswordEntry { ... }
+```
+
+**Missing traits:**
+- `Eq` - needed for deduplication in `src/backup.rs` line 150
+- `Hash` - would enable using `HashSet<PasswordEntry>` for efficient duplicates checking
+- `PartialOrd` / `Ord` - would enable sorting without custom comparator
+
+*Recommendation:*
+```rust
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Zeroize, ZeroizeOnDrop)]
+pub struct PasswordEntry {
+    #[zeroize(skip)]
+    pub title: String,
+    #[zeroize(skip)]
+    pub username: String,
+    #[zeroize(skip)]  // ⚠️ Add this - don't hash password!
+    pub password: String,
+    #[zeroize(skip)]
+    pub created_at: u64,
+}
+
+impl PartialEq for PasswordEntry {
+    fn eq(&self, other: &Self) -> bool {
+        // Don't compare passwords for equality
+        self.title == other.title &&
+        self.username == other.username &&
+        self.created_at == other.created_at
+    }
+}
+```
+
+#### 8. Maintainability Issues 🟡 Medium Priority
+
+**A. Magic Numbers Scattered Throughout**
+
+**Locations:**
+
+1. **Color Codes** (`src/main.rs` lines 90-94):
+```rust
+const STRENGTH_COLOR_VERY_WEAK: (u8, u8, u8) = (193, 68, 14);
+const STRENGTH_COLOR_WEAK_MEDIUM: (u8, u8, u8) = (184, 134, 11);
+const STRENGTH_COLOR_STRONG: (u8, u8, u8) = (45, 80, 22);
+```
+✅ Good - Already named constants!
+
+2. **Rate Limiting** (`src/rate_limit.rs` lines 97-98):
+```rust
+const MAX_ATTEMPTS: usize = 5;  // Unnamed
+const WINDOW_SECS: u64 = 300;   // Unnamed - what's 300 seconds?
+const LOCKOUT_SECS: u64 = 60;   // Unnamed
+```
+
+*Recommendation:*
+```rust
+const MAX_ATTEMPTS_PER_WINDOW: usize = 5;
+const RATE_LIMIT_WINDOW_SECONDS: u64 = 5 * 60;  // 5 minutes
+const LOCKOUT_DURATION_SECONDS: u64 = 1 * 60;   // 1 minute
+```
+
+3. **Session Timeout** (`src/session.rs` line 58):
+```rust
+timeout_minutes * 60  // Magic conversion
+```
+
+*Recommendation:*
+```rust
+const SECONDS_PER_MINUTE: u64 = 60;
+timeout_minutes * SECONDS_PER_MINUTE
+```
+
+4. **String Length Limits** (scattered throughout `src/validation.rs`):
+```rust
+const MASTER_PASSWORD_MIN_LENGTH: usize = 12;
+const MASTER_PASSWORD_MAX_LENGTH: usize = 128;
+const TITLE_MAX_LENGTH: usize = 100;
+const USERNAME_MAX_LENGTH: usize = 255;
+const PASSWORD_MAX_LENGTH: usize = 1024;
+```
+✅ Good - Already using named constants!
+
+**B. Complex Conditional Logic**
+
+**1. Password Strength Validation** (`src/main.rs` lines 262-288):
+
+*Current:* 5-level if/else ladder
+```rust
+if strength_result.strength < PasswordStrength::Medium {
+    // ...
+} else if strength_result.strength < PasswordStrength::Strong {
+    // ...
+} else if strength_result.strength < PasswordStrength::VeryStrong {
+    // ...
+} else {
+    // ...
+}
+```
+
+*Issue:* Error-prone, hard to extend, poor readability.
+
+*Recommendation:*
+```rust
+match strength_result.strength {
+    PasswordStrength::VeryWeak | PasswordStrength::Weak => {
+        // Reject
+    }
+    PasswordStrength::Medium => {
+        // Warn
+    }
+    PasswordStrength::Strong | PasswordStrength::VeryStrong => {
+        // Accept
+    }
+}
+```
+
+**2. Log Rotation Logic** (`src/audit_log.rs` lines 140-170):
+
+*Current:* 3 nested matches with complex error handling
+```rust
+match fs::metadata(&log_file_path) {
+    Ok(metadata) => {
+        match metadata.len() {
+            size if size > self.max_log_size => {
+                match rotate_log(&log_file_path) {
+                    // ...
+                }
+            }
+            _ => {}
+        }
+    }
+    Err(_) => {}
+}
+```
+
+*Issue:* Deep nesting, hard to follow control flow.
+
+*Recommendation:*
+```rust
+let should_rotate = fs::metadata(&log_file_path)
+    .ok()
+    .map(|m| m.len() > self.max_log_size)
+    .unwrap_or(false);
+
+if should_rotate {
+    if let Err(e) = rotate_log(&log_file_path) {
+        warn!("Failed to rotate log: {}", e);
+    }
+}
+```
+
+**C. Error Context Loss**
+
+*Issue:* Errors lose context when propagated, making debugging difficult.
+
+**Examples:**
+
+1. **Backup Operations** (`src/backup.rs` lines 95-145):
+```rust
+pub fn restore_backup(&self, backup_name: &str) -> Result<Vec<PasswordEntry>> {
+    let backup_path = self.get_backup_path(backup_name)?;  // Which backup?
+    let contents = fs::read_to_string(&backup_path)?;      // Which file failed?
+    let entries = serde_json::from_str(&contents)?;        // What was invalid?
+    Ok(entries)
+}
+```
+
+*Recommendation:* Use `anyhow` or custom error context:
+```rust
+pub fn restore_backup(&self, backup_name: &str) -> Result<Vec<PasswordEntry>> {
+    let backup_path = self.get_backup_path(backup_name)
+        .context(format!("Failed to resolve backup '{}'", backup_name))?;
+    
+    let contents = fs::read_to_string(&backup_path)
+        .context(format!("Failed to read backup file: {:?}", backup_path))?;
+    
+    let entries = serde_json::from_str(&contents)
+        .context("Backup file contains invalid JSON")?;
+    
+    Ok(entries)
+}
+```
+
+2. **Storage Operations** (`src/storage.rs`):
+
+Similar issue - cryptographic errors don't indicate which step failed (key derivation, encryption, or decryption).
+
+*Recommendation:* Wrap errors with operation context using custom error types or `anyhow`.
+
+---
+
+### Priority Fixes for AI Agents
+
+Below is a prioritized list of actionable improvements, each suitable for implementation by autonomous AI agents.
+
+#### 🔴 Critical Priority (Security & Stability)
+
+1. **Add Rate Limiting to Recovery Code Verification**
+   - **Files:** `src/recovery.rs`
+   - **Effort:** Small (1-2 hours)
+   - **Impact:** High - closes security vulnerability
+   - **Description:** Integrate `RATE_LIMITER` into recovery code verification to prevent brute force attacks on recovery codes.
+
+2. **Replace Panic-Prone `.lock().unwrap()` with Poison Recovery**
+   - **Files:** `src/main.rs`, `src/session.rs`, all UI handlers
+   - **Effort:** Medium (4-6 hours)
+   - **Impact:** High - prevents application crashes
+   - **Description:** Replace all `.lock().unwrap()` with proper error handling that recovers from poisoned mutexes.
+
+3. **Verify File Permissions After Setting**
+   - **Files:** `src/main.rs` (storage path setup)
+   - **Effort:** Small (1 hour)
+   - **Impact:** Medium-High - ensures data protection
+   - **Description:** Add verification that directory permissions are actually 0700 after `set_permissions()` call.
+
+#### 🟡 High Priority (Architecture & Code Quality)
+
+4. **Extract UI Callbacks into Separate Handler Module**
+   - **Files:** `src/main.rs` → create `src/ui_handlers.rs`
+   - **Effort:** Large (8-12 hours)
+   - **Impact:** High - improves maintainability and testability
+   - **Description:** Refactor monolithic `main()` function by extracting 8+ callbacks into struct-based handlers.
+
+5. **Replace `lazy_static!` with `std::sync::OnceLock`**
+   - **Files:** `src/main.rs`
+   - **Effort:** Small (2-3 hours)
+   - **Impact:** Medium - uses modern stdlib, removes dependency
+   - **Description:** Migrate all 4 `lazy_static!` globals to `OnceLock` pattern.
+
+6. **Consolidate Duplicate Validation Logic**
+   - **Files:** `src/validation.rs`
+   - **Effort:** Medium (3-4 hours)
+   - **Impact:** Medium - reduces code duplication
+   - **Description:** Extract common validation pattern into parameterized helper function.
+
+7. **Introduce Dependency Injection Pattern**
+   - **Files:** `src/main.rs`, create `src/app_context.rs`
+   - **Effort:** Large (12-16 hours)
+   - **Impact:** High - enables testing and reduces coupling
+   - **Description:** Replace global state with `AppContext` struct passed through the application.
+
+#### 🟢 Medium Priority (Testing & Documentation)
+
+8. **Add Integration Tests for Full Lifecycle Scenarios**
+   - **Files:** Create `tests/integration/full_lifecycle_test.rs`
+   - **Effort:** Medium (4-6 hours)
+   - **Impact:** Medium - improves test coverage
+   - **Description:** Test complete workflows: save → load → edit → delete → recover.
+
+9. **Add Edge Case Tests for Password Strength Validation**
+   - **Files:** `tests/password_strength_test.rs`
+   - **Effort:** Small (2-3 hours)
+   - **Impact:** Low-Medium - catches boundary bugs
+   - **Description:** Add tests for exact boundary conditions (11, 12, 13 chars, MAX_LENGTH).
+
+10. **Document Security-Critical Timing Parameters**
+    - **Files:** `src/storage.rs`, `src/clipboard.rs`, `src/rate_limit.rs`
+    - **Effort:** Small (1-2 hours)
+    - **Impact:** Low-Medium - improves maintainability
+    - **Description:** Add inline comments explaining rationale for timing constants (1-2ms jitter, 30s clipboard, etc.).
+
+11. **Add Missing Module and Function Documentation**
+    - **Files:** `src/main.rs` (timeout thread), `src/password_generator.rs` (entropy)
+    - **Effort:** Small (2-3 hours)
+    - **Impact:** Low - improves code understanding
+    - **Description:** Document complex logic sections and key algorithms.
+
+#### 🔵 Low Priority (Performance & Polish)
+
+12. **Optimize String Operations in Recovery Code Generation**
+    - **Files:** `src/recovery.rs` line 81
+    - **Effort:** Trivial (30 min)
+    - **Impact:** Low - minor performance gain
+    - **Description:** Replace `.chars().nth()` O(n) with byte indexing O(1).
+
+13. **Implement Streaming JSON for Backup Operations**
+    - **Files:** `src/backup.rs`
+    - **Effort:** Medium (3-4 hours)
+    - **Impact:** Low - only matters for large backups
+    - **Description:** Use `serde_json::from_reader()` instead of loading entire file into memory.
+
+14. **Refactor Boolean Flags to Bitflags**
+    - **Files:** `src/password_generator.rs`
+    - **Effort:** Small (2-3 hours)
+    - **Impact:** Low - cleaner API
+    - **Description:** Replace multiple boolean fields with `bitflags` crate for charset configuration.
+
+15. **Add Missing Trait Implementations to `PasswordEntry`**
+    - **Files:** `src/storage.rs`
+    - **Effort:** Small (1-2 hours)
+    - **Impact:** Low-Medium - enables better deduplication
+    - **Description:** Implement `Eq`, `Hash`, `PartialOrd` for `PasswordEntry` (excluding password field).
+
+16. **Extract Magic Numbers to Named Constants**
+    - **Files:** `src/rate_limit.rs`, `src/session.rs`
+    - **Effort:** Trivial (1 hour)
+    - **Impact:** Low - improves readability
+    - **Description:** Name all numeric literals with semantic constants.
+
+17. **Simplify Nested Conditional Logic**
+    - **Files:** `src/main.rs` (password strength), `src/audit_log.rs` (log rotation)
+    - **Effort:** Small (2-3 hours)
+    - **Impact:** Low-Medium - improves readability
+    - **Description:** Refactor if/else ladders to use `match` expressions and early returns.
+
+18. **Add Error Context to All Error Propagation**
+    - **Files:** `src/backup.rs`, `src/storage.rs`, all modules with `?` operator
+    - **Effort:** Medium (4-6 hours)
+    - **Impact:** Medium - improves debugging
+    - **Description:** Wrap errors with contextual information using `.context()` pattern or custom error types.
+
+---
+
+## AI Agent Guidance for Code Quality
+
+This section provides specific guidance for AI coding agents working on this codebase to maintain and improve code quality.
+
+### Core Principles for AI Agents
+
+1. **Security First:** This is a password manager. Security considerations override all other concerns.
+   - Never compromise encryption or authentication logic
+   - Preserve timing-attack protections
+   - Maintain audit logging for security events
+   - Add security-relevant tests for any changes
+
+2. **Test Before Modify:** Always run existing tests before making changes.
+   ```bash
+   cargo test  # Must pass before starting work
+   ```
+
+3. **Test After Modify:** Add tests for your changes, then verify all tests pass.
+   ```bash
+   cargo test  # Must pass before committing
+   ```
+
+4. **Maintain Compatibility:** Do not break existing APIs or change serialization formats.
+   - `PasswordEntry` structure is persisted - changes break existing databases
+   - Storage format (`salt`, `nonce`, `encrypted_data`) must remain compatible
+
+5. **Follow Existing Patterns:** Match the code style and patterns already in use.
+   - Use `SecurityError` for security-related errors
+   - Follow the `Result<T, SecurityError>` pattern
+   - Implement `Zeroize` for sensitive data structures
+   - Use constant-time comparisons for secrets
+
+### Workflow for AI Agents
+
+#### Before Making Changes
+
+1. **Read the module documentation** at the top of each file
+2. **Examine existing tests** in the corresponding `tests/` file
+3. **Run the test suite:** `cargo test`
+4. **Check linting:** `cargo clippy --all-targets`
+5. **Verify formatting:** `cargo fmt -- --check`
+
+#### Making Changes
+
+1. **Make minimal changes** - only modify what's necessary
+2. **Preserve all security features:**
+   - Don't remove zeroization
+   - Don't remove audit logging
+   - Don't remove rate limiting
+   - Don't remove constant-time comparisons
+3. **Add tests** for new functionality or bug fixes
+4. **Update documentation** if adding public APIs or changing behavior
+5. **Handle errors properly** - avoid `.unwrap()`, use `?` or `.expect()` with messages
+
+#### After Making Changes
+
+1. **Run tests:** `cargo test --all-targets`
+2. **Run clippy:** `cargo clippy --all-targets -- -D warnings`
+3. **Format code:** `cargo fmt`
+4. **Build release:** `cargo build --release` (ensure it compiles)
+5. **Run security audit:** `cargo audit` (ensure no new vulnerabilities)
+6. **Review changes:** Use `git diff` to verify no unintended modifications
+
+### Common Tasks for AI Agents
+
+#### Task: Refactoring Code
+
+**DO:**
+- Extract repeated patterns into helper functions
+- Simplify complex conditional logic
+- Add documentation to clarify intent
+- Preserve all test coverage
+
+**DON'T:**
+- Change public API signatures
+- Remove error handling
+- Skip updating tests
+- Modify serialization structures without migration plan
+
+#### Task: Adding New Features
+
+**DO:**
+- Follow TDD: write tests first
+- Add module documentation
+- Use existing error types (`SecurityError`)
+- Add audit logging if security-relevant
+- Update README.md if user-facing
+
+**DON'T:**
+- Add dependencies without checking for vulnerabilities (`cargo audit`)
+- Skip integration tests
+- Bypass rate limiting or session management
+- Store sensitive data without zeroization
+
+#### Task: Fixing Bugs
+
+**DO:**
+- Add a test that reproduces the bug
+- Fix the bug with minimal changes
+- Verify the test now passes
+- Check for similar bugs in related code
+
+**DON'T:**
+- Make unrelated changes in the same commit
+- Remove tests that "get in the way"
+- Introduce new bugs by over-refactoring
+
+#### Task: Improving Performance
+
+**DO:**
+- Add benchmarks to measure improvement
+- Profile before optimizing
+- Document why the change improves performance
+- Verify security properties are preserved
+
+**DON'T:**
+- Sacrifice code clarity for minor gains
+- Remove timing jitter or constant-time operations
+- Skip comparative benchmarks
+- Cache security-critical random values
+
+### Security Checklist for AI Agents
+
+Before committing any change, verify:
+
+- [ ] All sensitive data types implement `Zeroize` / `ZeroizeOnDrop`
+- [ ] Secret comparisons use `subtle::ConstantTimeEq`
+- [ ] All cryptographic operations are from trusted crates (`aes-gcm`, `argon2`)
+- [ ] Audit logging is present for security events
+- [ ] Rate limiting is applied to authentication operations
+- [ ] File permissions are set to restrictive values (0600/0700)
+- [ ] No secrets are logged or exposed in error messages
+- [ ] Timing attacks are mitigated (constant-time comparison + jitter)
+- [ ] All tests pass including security-focused tests
+- [ ] `cargo audit` reports no vulnerabilities
+
+### Error Handling Patterns
+
+**❌ AVOID:**
+```rust
+let value = some_operation().unwrap();  // Can panic!
+```
+
+**✅ PREFER:**
+```rust
+// For recoverable errors
+let value = some_operation()?;
+
+// For unrecoverable but documented failures
+let value = some_operation()
+    .expect("Description of why this should never fail");
+
+// For poisoned mutexes
+let value = mutex.lock().unwrap_or_else(|poisoned| {
+    warn!("Mutex poisoned, recovering");
+    poisoned.into_inner()
+});
+```
+
+### Testing Patterns
+
+**Unit Test Structure:**
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_success_case() {
+        // Arrange
+        let input = setup_test_data();
+        
+        // Act
+        let result = function_under_test(input);
+        
+        // Assert
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected_value);
+    }
+
+    #[test]
+    fn test_error_case() {
+        // Test should verify proper error handling
+        let result = function_under_test(invalid_input);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SecurityError::InvalidInput(_)));
+    }
+}
+```
+
+**Integration Test Structure:**
+```rust
+// tests/integration_test.rs
+use rust_slint_password_saver::storage::*;
+use tempfile::TempDir;
+
+#[test]
+fn test_full_lifecycle() {
+    // Use temporary directory for test isolation
+    let temp_dir = TempDir::new().unwrap();
+    let storage_path = temp_dir.path().join("test.enc");
+    
+    // Test complete workflow
+    let storage = PasswordStorage::new(&storage_path);
+    // ... test save, load, delete
+    
+    // Cleanup automatic via TempDir drop
+}
+```
+
+### Dependency Management
+
+**Before adding any dependency:**
+
+1. Check it's necessary: "Can I implement this in 50 lines or less?"
+2. Check security: `cargo audit` should pass
+3. Check maintenance: Last commit should be within 1 year
+4. Check size: Compile time and binary size impact
+5. Check license: Must be MIT/Apache-2.0 compatible
+
+**Preferred crates for common tasks:**
+- Serialization: `serde`, `serde_json` (already used)
+- Cryptography: `aes-gcm`, `argon2`, `rand` (already used)
+- Error handling: Consider `anyhow` or `thiserror`
+- Timing: `std::time` (stdlib, prefer over external crates)
+
+### Module Organization Guidelines
+
+**When creating new modules:**
+
+1. Add module declaration in `src/lib.rs` or `src/main.rs`
+2. Create corresponding test file in `tests/` if integration tests needed
+3. Follow existing naming: `snake_case` for files and modules
+4. Add module-level documentation:
+   ```rust
+   //! Brief description of module purpose.
+   //!
+   //! # Overview
+   //!
+   //! Detailed description...
+   //!
+   //! # Example
+   //!
+   //! ```
+   //! use crate::module_name::Type;
+   //! // Example usage
+   //! ```
+   ```
+
+**Module organization:**
+```
+src/
+├── main.rs           # Application entry, UI setup, minimal logic
+├── lib.rs            # Library crate root, module exports
+├── storage.rs        # Core domain logic (encryption, storage)
+├── errors.rs         # Error types
+├── [feature].rs      # Feature modules (audit_log, backup, etc.)
+└── ui/               # UI definitions (Slint files)
+    └── main.slint
+```
+
+### Code Review Self-Checklist for AI Agents
+
+Before submitting changes, review your own code:
+
+**Functionality:**
+- [ ] Does the code solve the stated problem?
+- [ ] Are all edge cases handled?
+- [ ] Are error cases properly handled?
+
+**Tests:**
+- [ ] Do tests cover the happy path?
+- [ ] Do tests cover error cases?
+- [ ] Do tests cover edge cases (empty input, max values, etc.)?
+- [ ] Do all tests pass?
+
+**Security:**
+- [ ] No new security vulnerabilities introduced?
+- [ ] Secrets properly zeroized?
+- [ ] Audit logging added for security events?
+- [ ] Rate limiting applied where needed?
+
+**Code Quality:**
+- [ ] No `.unwrap()` calls without justification?
+- [ ] Error messages are descriptive?
+- [ ] No code duplication?
+- [ ] Functions are reasonably sized (<100 lines)?
+- [ ] Variables have clear names?
+
+**Documentation:**
+- [ ] Public APIs documented?
+- [ ] Complex logic explained in comments?
+- [ ] Examples provided for non-obvious usage?
+- [ ] README updated if user-facing changes?
+
+**Style:**
+- [ ] `cargo fmt` passes?
+- [ ] `cargo clippy` passes with no warnings?
+- [ ] Follows existing code patterns?
+- [ ] No commented-out code?
+
+### Resources for AI Agents
+
+**Key Files to Understand:**
+1. `README.md` - Project overview, security details, architecture
+2. `SECURITY.md` - Security policies and vulnerability reporting
+3. `CODE_QUALITY.md` - This file - code quality standards
+4. `STYLE_GUIDE.md` - UI/UX design principles
+5. `src/storage.rs` - Core encryption and storage logic
+6. `src/errors.rs` - Error types and handling patterns
+
+**Important Commands:**
+```bash
+# Development workflow
+cargo build                              # Build project
+cargo test                               # Run all tests
+cargo test -- --nocapture                # Run tests with output
+cargo test --test integration_test       # Run specific test file
+cargo clippy --all-targets               # Lint code
+cargo fmt                                # Format code
+cargo audit                              # Check for vulnerabilities
+
+# Running the application
+cargo run --release                      # Run in release mode
+cargo run                                # Run in debug mode
+
+# Building for release
+cargo build --release                    # Optimized build
+ls target/release/rust-slint-password-saver  # Binary location
+```
+
+**External Documentation:**
+- [Rust Book](https://doc.rust-lang.org/book/) - Rust language fundamentals
+- [Slint Documentation](https://slint.dev/docs) - UI framework
+- [Argon2 Crate Docs](https://docs.rs/argon2/) - Password hashing
+- [AES-GCM Crate Docs](https://docs.rs/aes-gcm/) - Encryption
+- [RustSec Database](https://rustsec.org/) - Security advisories
+
+---
+
+## Actionable Improvement Issues for GitHub
+
+The following issues are ready to be created as GitHub issues. Each is:
+- ✅ Well-defined with clear scope
+- ✅ Suitable for autonomous AI agent implementation
+- ✅ Includes file references and technical approach
+- ✅ Prioritized by impact and effort
+- ✅ Includes testing requirements
+
+### Issue Template Format
+
+Each issue below follows this structure:
+- **Title:** Clear, actionable issue title
+- **Priority:** Critical/High/Medium/Low
+- **Effort:** Small/Medium/Large (estimated hours)
+- **Impact:** Security/Stability/Maintainability/Performance
+- **Description:** What and why
+- **Files to Modify:** Specific file paths
+- **Technical Approach:** How to implement
+- **Testing Requirements:** Required tests
+- **AI Agent Suitability:** Why suitable for autonomous implementation
+
+---
+
+### 🔴 Issue 1: Add Rate Limiting to Recovery Code Verification
+
+**Priority:** Critical  
+**Effort:** Small (1-2 hours)  
+**Impact:** Security
+
+**Description:**
+Recovery code verification in `src/recovery.rs` does not use the rate limiter, allowing unlimited brute-force attempts on recovery codes. This is a security vulnerability that should be fixed immediately.
+
+**Files to Modify:**
+- `src/recovery.rs` - Add rate limiting check
+- `tests/recovery_test.rs` - Add test for rate limiting
+
+**Technical Approach:**
+1. Import `RATE_LIMITER` from `src/main.rs` or pass as parameter
+2. In `EmergencyRecovery::recover_access()`, add rate limit check before verification
+3. Return `SecurityError::RateLimitExceeded` if limit exceeded
+4. Call `RATE_LIMITER.record_success()` on successful recovery
+
+**Implementation:**
+```rust
+// In src/recovery.rs
+use crate::rate_limit::RateLimiter;
+
+pub fn recover_access(
+    &self,
+    recovery_code: &str,
+    rate_limiter: &RateLimiter,
+) -> Result<Vec<u8>, SecurityError> {
+    // Add rate limiting
+    if !rate_limiter.attempt_allowed("recovery") {
+        return Err(SecurityError::RateLimitExceeded);
+    }
+    
+    // Existing verification logic...
+    
+    // On success
+    rate_limiter.record_success("recovery");
+    Ok(key)
+}
+```
+
+**Testing Requirements:**
+- Test that rate limit is enforced after MAX_ATTEMPTS failures
+- Test that lockout expires after timeout
+- Test that successful recovery clears attempts
+- Test that different operations have separate rate limits
+
+**AI Agent Suitability:** ✅ **High**
+- Clear, localized change
+- Well-defined security requirement
+- Existing rate limiter can be reused
+- Test patterns established in other modules
+- No architecture changes required
+
+---
+
+### 🔴 Issue 2: Replace `.lock().unwrap()` with Poison Recovery
+
+**Priority:** Critical  
+**Effort:** Medium (4-6 hours)  
+**Impact:** Stability
+
+**Description:**
+Throughout the codebase, particularly in `src/main.rs` and `src/session.rs`, mutex locks use `.lock().unwrap()` which will panic if the mutex is poisoned. This creates a denial-of-service vulnerability where one panic causes all subsequent operations to fail.
+
+**Files to Modify:**
+- `src/main.rs` - All callback handlers (10+ instances)
+- `src/session.rs` - All session state access (6+ instances)
+- Other modules using mutex locks
+
+**Technical Approach:**
+1. Replace `.lock().unwrap()` with poison recovery pattern
+2. Create helper method `with_state_mut()` in `SessionManager`
+3. Log warnings when mutex poisoning is detected
+4. Extract poisoned data using `.into_inner()` to recover
+
+**Implementation:**
+```rust
+// Pattern 1: Inline recovery
+let mut session = SESSION_MANAGER.lock().unwrap_or_else(|poisoned| {
+    warn!("Session mutex poisoned, recovering");
+    poisoned.into_inner()
+});
+
+// Pattern 2: Helper method (preferred)
+impl SessionManager {
+    fn with_state_mut<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut SessionState) -> R,
+    {
+        let mut state = self.state.lock().unwrap_or_else(|poisoned| {
+            warn!("Session state mutex poisoned, recovering");
+            poisoned.into_inner()
+        });
+        f(&mut state)
+    }
+}
+
+// Usage
+SESSION_MANAGER.with_state_mut(|state| {
+    state.last_activity = SystemTime::now();
+});
+```
+
+**Testing Requirements:**
+- Test that poisoned mutex is recovered successfully
+- Test that warning is logged on poison recovery
+- Test that operations continue normally after recovery
+- Manual testing: verify application doesn't crash on mutex poisoning
+
+**AI Agent Suitability:** ✅ **High**
+- Pattern-based refactoring
+- Clear search-and-replace with safety improvements
+- Well-documented Rust pattern
+- Can be done incrementally (module by module)
+- Straightforward testing
+
+---
+
+### 🔴 Issue 3: Verify File Permissions After Setting
+
+**Priority:** Critical  
+**Effort:** Small (1 hour)  
+**Impact:** Security
+
+**Description:**
+In `src/main.rs`, directory permissions are set to 0700 but not verified. On some filesystems (NFS, network shares), permission changes may silently fail, leaving the password database world-readable.
+
+**Files to Modify:**
+- `src/main.rs` - Storage path setup function
+- `tests/integration_test.rs` - Add permission verification test
+
+**Technical Approach:**
+1. After `fs::set_permissions()`, call `fs::metadata()` to read back permissions
+2. Extract permission bits using `.mode() & 0o777`
+3. Compare against expected 0700
+4. Return error if mismatch, log warning with actual permissions
+
+**Implementation:**
+```rust
+// In src/main.rs - get_storage_path() or similar function
+#[cfg(unix)]
+{
+    use std::os::unix::fs::PermissionsExt;
+    
+    fs::set_permissions(&storage_path, fs::Permissions::from_mode(0o700))?;
+    
+    // Verify permissions were actually set
+    let metadata = fs::metadata(&storage_path)?;
+    let actual_mode = metadata.permissions().mode() & 0o777;
+    if actual_mode != 0o700 {
+        log::error!(
+            "Failed to set secure directory permissions. Expected 0700, got {:o}",
+            actual_mode
+        );
+        return Err(SecurityError::InvalidInput(
+            "Cannot secure storage directory with required permissions".to_string()
+        ));
+    }
+}
+```
+
+**Testing Requirements:**
+- Test that correct permissions are verified (happy path)
+- Test error when permissions cannot be set (requires mock or chmod)
+- Integration test on actual filesystem
+- Document behavior on Windows (no-op or equivalent)
+
+**AI Agent Suitability:** ✅ **High**
+- Small, focused change
+- Clear security requirement
+- Well-defined success criteria
+- Unix-specific code is isolated with `#[cfg(unix)]`
+- Easy to test
+
+---
+
+### 🟡 Issue 4: Extract UI Callbacks into Handler Module
+
+**Priority:** High  
+**Effort:** Large (8-12 hours)  
+**Impact:** Maintainability
+
+**Description:**
+The `main()` function in `src/main.rs` contains 500+ lines with 8+ inline callback registrations. This violates Single Responsibility Principle, makes testing difficult, and reduces code maintainability.
+
+**Files to Modify:**
+- Create `src/ui_handlers.rs` - New module for handlers
+- `src/main.rs` - Reduce to minimal setup and delegation
+- `src/lib.rs` - Export handlers module
+- Create `tests/ui_handlers_test.rs` - Unit tests for handlers
+
+**Technical Approach:**
+1. Create struct `UIHandlers` to hold shared state (`Arc<PasswordStorage>`, etc.)
+2. Extract each callback into a method: `handle_save_password()`, `handle_load_entries()`, etc.
+3. Implement each handler as a testable function
+4. In `main()`, instantiate `UIHandlers` and register methods as callbacks
+5. Pass `AppWindow` reference to handlers for UI updates
+
+**Implementation Structure:**
+```rust
+// src/ui_handlers.rs
+pub struct UIHandlers {
+    storage: Arc<Mutex<PasswordStorage>>,
+    session: Arc<SessionManager>,
+    rate_limiter: Arc<RateLimiter>,
+}
+
+impl UIHandlers {
+    pub fn new(storage_path: PathBuf) -> Self {
+        // Initialize handlers
+    }
+    
+    pub fn handle_save_password(
+        &self,
+        window: &AppWindow,
+        title: String,
+        username: String,
+        password: String,
+        master_password: String,
+    ) -> Result<(), String> {
+        // Extracted callback logic
+    }
+    
+    // ... other handlers
+}
+
+// src/main.rs
+fn main() {
+    let handlers = UIHandlers::new(get_storage_path());
+    let window = AppWindow::new().unwrap();
+    
+    // Shorter, clearer registration
+    let handlers_clone = handlers.clone();
+    window.on_save_password(move |title, username, password, master_password| {
+        handlers_clone.handle_save_password(&window, title, username, password, master_password)
+            .unwrap_or_else(|e| window.set_status_message(e.into()))
+    });
+    
+    window.run().unwrap();
+}
+```
+
+**Testing Requirements:**
+- Unit test each handler method in isolation
+- Mock `PasswordStorage` for testing
+- Test error conditions (invalid input, rate limiting, etc.)
+- Integration test full workflow still works
+- Verify no regression in existing functionality
+
+**AI Agent Suitability:** ✅ **Medium-High**
+- Well-defined refactoring task
+- Clear existing code to extract
+- Pattern-based transformation
+- Incremental approach possible (one handler at a time)
+- Testing validates correctness
+- **Challenge:** Requires understanding Slint callback model
+
+---
+
+### 🟡 Issue 5: Migrate `lazy_static!` to `std::sync::OnceLock`
+
+**Priority:** High  
+**Effort:** Small (2-3 hours)  
+**Impact:** Modernization, Dependency Reduction
+
+**Description:**
+The codebase uses `lazy_static!` macro from external crate, but Rust 1.70+ (minimum supported version) provides `std::sync::OnceLock` in the standard library. Migrating removes an external dependency and uses more idiomatic modern Rust.
+
+**Files to Modify:**
+- `src/main.rs` - Replace all `lazy_static!` blocks
+- `Cargo.toml` - Remove `lazy_static` dependency
+- Update comments referencing `LazyLock` (1.80+)
+
+**Technical Approach:**
+1. Replace `lazy_static! { static ref X: T = expr; }` with `static X: OnceLock<T> = OnceLock::new();`
+2. Create accessor function `fn get_x() -> &'static T { X.get_or_init(|| expr) }`
+3. Update all usages to call accessor function
+4. Remove `lazy_static` from `Cargo.toml`
+
+**Implementation:**
+```rust
+// Before (lazy_static)
+lazy_static! {
+    static ref RATE_LIMITER: RateLimiter = RateLimiter::new();
+    static ref SESSION_MANAGER: Arc<SessionManager> = Arc::new(SessionManager::new(5));
+}
+
+// After (OnceLock)
+use std::sync::OnceLock;
+
+static RATE_LIMITER: OnceLock<RateLimiter> = OnceLock::new();
+static SESSION_MANAGER: OnceLock<Arc<SessionManager>> = OnceLock::new();
+
+fn get_rate_limiter() -> &'static RateLimiter {
+    RATE_LIMITER.get_or_init(|| RateLimiter::new())
+}
+
+fn get_session_manager() -> &'static Arc<SessionManager> {
+    SESSION_MANAGER.get_or_init(|| Arc::new(SessionManager::new(5)))
+}
+
+// Usage changes
+// Before: RATE_LIMITER.attempt_allowed()
+// After:  get_rate_limiter().attempt_allowed()
+```
+
+**Testing Requirements:**
+- All existing tests must pass without modification
+- No behavioral changes expected
+- Verify build without `lazy_static` dependency
+- Test that initialization still happens lazily
+- Verify thread safety (OnceLock is thread-safe)
+
+**AI Agent Suitability:** ✅ **High**
+- Mechanical refactoring
+- Well-documented migration path
+- No behavior changes
+- Easily verifiable (all tests should pass)
+- Clear search-and-replace pattern
+
+---
+
+### 🟡 Issue 6: Consolidate Duplicate Validation Logic
+
+**Priority:** Medium  
+**Effort:** Medium (3-4 hours)  
+**Impact:** Code Quality, Maintainability
+
+**Description:**
+The validation functions in `src/validation.rs` share significant code duplication. Functions like `validate_master_password()`, `validate_password()`, `validate_title()`, and `validate_username()` all follow similar patterns of length checking and character validation.
+
+**Files to Modify:**
+- `src/validation.rs` - Extract common validation logic
+- `tests/validation_test.rs` - Update tests if needed
+
+**Technical Approach:**
+1. Create generic validation helper: `validate_string_field()`
+2. Accept validation rules as parameters (min/max length, character set validation)
+3. Refactor existing functions to use the helper
+4. Preserve existing function signatures for API compatibility
+5. Add unit tests for the new helper function
+
+**Implementation:**
+```rust
+// src/validation.rs
+
+/// Generic string field validation helper
+fn validate_string_field(
+    input: &str,
+    field_name: &str,
+    min_length: usize,
+    max_length: usize,
+    char_validator: Option<fn(char) -> bool>,
+) -> Result<(), SecurityError> {
+    if input.is_empty() {
+        return Err(SecurityError::InvalidInput(
+            format!("{} cannot be empty", field_name)
+        ));
+    }
+    
+    if input.len() < min_length {
+        return Err(SecurityError::InvalidInput(
+            format!("{} must be at least {} characters", field_name, min_length)
+        ));
+    }
+    
+    if input.len() > max_length {
+        return Err(SecurityError::InvalidInput(
+            format!("{} must not exceed {} characters", field_name, max_length)
+        ));
+    }
+    
+    if let Some(validator) = char_validator {
+        if input.chars().any(|c| !validator(c)) {
+            return Err(SecurityError::InvalidInput(
+                format!("{} contains invalid characters", field_name)
+            ));
+        }
+    }
+    
+    Ok(())
+}
+
+// Refactored functions
+pub fn validate_title(title: &str) -> Result<(), SecurityError> {
+    validate_string_field(
+        title,
+        "Title",
+        1,
+        TITLE_MAX_LENGTH,
+        Some(|c| c.is_alphanumeric() || c.is_whitespace() || "!@#$%^&*()".contains(c)),
+    )
+}
+
+pub fn validate_username(username: &str) -> Result<(), SecurityError> {
+    validate_string_field(
+        username,
+        "Username",
+        1,
+        USERNAME_MAX_LENGTH,
+        Some(|c| !c.is_control()),
+    )
+}
+```
+
+**Testing Requirements:**
+- All existing validation tests must still pass
+- Add tests for the new helper function
+- Test with various parameter combinations
+- Verify error messages are still descriptive
+- No regression in validation behavior
+
+**AI Agent Suitability:** ✅ **High**
+- Clear refactoring with preservation of behavior
+- Existing tests validate correctness
+- Well-understood pattern extraction
+- Low risk of breaking changes
+- Improves maintainability without API changes
+
+---
+
+### 🟢 Issue 7: Add Integration Tests for Full Lifecycle
+
+**Priority:** Medium  
+**Effort:** Medium (4-6 hours)  
+**Impact:** Test Coverage
+
+**Description:**
+The codebase has strong unit test coverage (138 tests) but lacks integration tests for complete user workflows. Integration tests would catch issues that only appear when multiple components interact.
+
+**Files to Create:**
+- `tests/integration/full_lifecycle_test.rs` - Complete workflows
+- `tests/integration/backup_recovery_test.rs` - Backup scenarios
+- `tests/integration/security_scenarios_test.rs` - Security feature interactions
+
+**Test Scenarios:**
+
+**Full Lifecycle Test:**
+1. Create new password database with master password
+2. Save multiple password entries
+3. Load entries and verify
+4. Update an entry (delete + re-save)
+5. Generate recovery codes
+6. Delete an entry
+7. Verify audit log contains all operations
+
+**Backup/Recovery Test:**
+1. Create database with entries
+2. Create backup
+3. Corrupt primary database file
+4. Restore from backup
+5. Verify all entries restored correctly
+
+**Security Scenarios Test:**
+1. Test rate limiting across multiple operations
+2. Test session timeout during operations
+3. Test recovery code usage after failed logins
+4. Test audit log integrity after security events
+
+**Implementation:**
+```rust
+// tests/integration/full_lifecycle_test.rs
+use rust_slint_password_saver::storage::*;
+use tempfile::TempDir;
+
+#[test]
+fn test_complete_password_lifecycle() {
+    // Setup
+    let temp_dir = TempDir::new().unwrap();
+    let storage_path = temp_dir.path().join("passwords.enc");
+    let mut storage = PasswordStorage::new(&storage_path);
+    let master_password = "TestPassword123!";
+    
+    // 1. Save initial entries
+    let entry1 = PasswordEntry {
+        title: "Gmail".to_string(),
+        username: "user@gmail.com".to_string(),
+        password: "secret1".to_string(),
+        created_at: 1000,
+    };
+    
+    let entries = vec![entry1.clone()];
+    storage.save_passwords(&entries, master_password).unwrap();
+    
+    // 2. Load and verify
+    let loaded = storage.load_passwords(master_password).unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].title, "Gmail");
+    
+    // 3. Add another entry
+    let entry2 = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user@github.com".to_string(),
+        password: "secret2".to_string(),
+        created_at: 2000,
+    };
+    
+    let entries = vec![entry1.clone(), entry2.clone()];
+    storage.save_passwords(&entries, master_password).unwrap();
+    
+    // 4. Load and verify both entries
+    let loaded = storage.load_passwords(master_password).unwrap();
+    assert_eq!(loaded.len(), 2);
+    
+    // 5. Delete one entry (save without it)
+    let entries = vec![entry2.clone()];
+    storage.save_passwords(&entries, master_password).unwrap();
+    
+    // 6. Verify deletion
+    let loaded = storage.load_passwords(master_password).unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].title, "GitHub");
+}
+```
+
+**Testing Requirements:**
+- Tests must use `tempfile` for isolation
+- Tests should clean up automatically (TempDir drop)
+- Tests should be deterministic and reproducible
+- Tests should verify both success and error cases
+- Tests should check audit logs where applicable
+
+**AI Agent Suitability:** ✅ **High**
+- Clear requirements and expected outcomes
+- Existing unit tests provide patterns
+- Well-defined test scenarios
+- Can use existing test utilities (`tempfile`, etc.)
+- Independent of UI layer (tests business logic)
+
+---
+
+### 🟢 Issue 8: Document Security-Critical Timing Parameters
+
+**Priority:** Low  
+**Effort:** Small (1-2 hours)  
+**Impact:** Documentation
+
+**Description:**
+Several timing-related constants throughout the codebase lack documentation explaining their security rationale. This makes it difficult for future maintainers to understand why specific values were chosen.
+
+**Files to Modify:**
+- `src/storage.rs` - Document timing jitter (1-2ms)
+- `src/clipboard.rs` - Document auto-clear timeout (30s)
+- `src/rate_limit.rs` - Document rate limit windows
+- `src/session.rs` - Document session timeout
+
+**Required Documentation:**
+
+**1. Timing Jitter (`src/storage.rs` line 210):**
+```rust
+/// Adds random timing jitter to mitigate timing attacks.
+///
+/// # Security Rationale
+///
+/// While cryptographic operations use constant-time comparison via
+/// `subtle::ConstantTimeEq`, this jitter provides defense-in-depth
+/// against timing analysis. The 1-2ms range is chosen to:
+/// - Add observable noise to timing measurements
+/// - Remain imperceptible to users (< 5ms threshold)
+/// - Complement constant-time comparison (primary defense)
+///
+/// Note: This is NOT the primary timing attack mitigation. All
+/// secret comparisons must use constant-time operations first.
+///
+/// # Parameters
+///
+/// - Jitter range: 1-2 milliseconds
+/// - Distribution: Uniform random
+fn add_timing_jitter() {
+    let jitter_ms = rand::thread_rng().gen_range(1..=2);
+    thread::sleep(Duration::from_millis(jitter_ms));
+}
+```
+
+**2. Clipboard Timeout (`src/clipboard.rs`):**
+```rust
+/// Auto-clear timeout for clipboard contents.
+///
+/// # Security Rationale
+///
+/// Passwords are automatically cleared from the clipboard after
+/// 30 seconds to prevent:
+/// - Accidental pasting into wrong applications
+/// - Clipboard scraping by malware
+/// - Shoulder-surfing attacks
+///
+/// The 30-second duration balances:
+/// - User convenience (enough time to paste)
+/// - Security (limited exposure window)
+/// - Industry standard (matches KeePass, 1Password behavior)
+const AUTO_CLEAR_TIMEOUT_SECONDS: u64 = 30;
+```
+
+**3. Rate Limit Parameters (`src/rate_limit.rs`):**
+```rust
+/// Maximum failed authentication attempts before lockout.
+///
+/// # Security Rationale
+///
+/// Set to 5 attempts to balance:
+/// - Security: Prevents brute force (5 attempts = ~15 bits max)
+/// - Usability: Allows for typos without immediate lockout
+/// - Industry standard: NIST SP 800-63B recommends 3-10 attempts
+const MAX_ATTEMPTS_PER_WINDOW: usize = 5;
+
+/// Time window for counting failed attempts.
+///
+/// Set to 5 minutes (300 seconds) to:
+/// - Group related login attempts
+/// - Expire old attempts naturally
+/// - Prevent accumulation of attempts over long periods
+const RATE_LIMIT_WINDOW_SECONDS: u64 = 5 * 60;
+
+/// Lockout duration after exceeding max attempts.
+///
+/// Set to 1 minute to:
+/// - Slow down automated attacks (1 min per 5 attempts = 12 attempts/hour)
+/// - Minimize user frustration (brief lockout)
+/// - Comply with OWASP recommendations (30s-5min range)
+const LOCKOUT_DURATION_SECONDS: u64 = 1 * 60;
+```
+
+**Testing Requirements:**
+- No functional changes, so existing tests suffice
+- Documentation should compile (`cargo doc`)
+- Verify examples in doc comments are valid (`cargo test --doc`)
+
+**AI Agent Suitability:** ✅ **Very High**
+- Documentation-only change
+- No code modifications
+- Clear requirements
+- Low risk
+- Good first issue for AI agents
+
+---
+
+### 🟢 Issue 9: Add Edge Case Tests for Password Validation
+
+**Priority:** Medium  
+**Effort:** Small (2-3 hours)  
+**Impact:** Test Coverage
+
+**Description:**
+Password strength validation has good coverage but lacks tests for exact boundary conditions. Edge cases like passwords at exactly min/max length, or one character away from requirements, are not tested.
+
+**Files to Modify:**
+- `tests/password_strength_test.rs` - Add boundary tests
+- `src/password_strength.rs` - May find bugs to fix
+
+**Test Cases to Add:**
+
+**Length Boundaries:**
+- 11 characters (one below minimum)
+- 12 characters (exact minimum) - already tested ✓
+- 13 characters (one above minimum)
+- 127 characters (one below maximum)
+- 128 characters (exact maximum)
+- 129 characters (one above maximum)
+
+**Character Set Boundaries:**
+- Exactly 1 uppercase, 1 lowercase, 1 digit, 1 special
+- All uppercase except 1 lowercase, 1 digit, 1 special
+- Missing exactly 1 required character type
+- Only required characters, no extras
+
+**Entropy Boundaries:**
+- Password exactly at "Strong" threshold (score 3)
+- Password exactly at "Medium" threshold (score 2)
+- Password with maximum entropy (all character types, max length)
+
+**Pathological Cases:**
+- All same character repeated to max length
+- Alternating two characters (ababab...)
+- Single character type at max length
+
+**Implementation:**
+```rust
+// tests/password_strength_test.rs
+
+#[test]
+fn test_password_length_exact_minimum() {
+    // Exactly 12 characters (minimum length)
+    let password = "Abcdefg123!@";
+    assert_eq!(password.len(), 12);
+    let result = validate_password_strength(password, &PasswordRequirements::default());
+    assert!(result.is_ok(), "12-char password should be valid");
+}
+
+#[test]
+fn test_password_length_one_below_minimum() {
+    // 11 characters (one below minimum)
+    let password = "Abcdefg123!";
+    assert_eq!(password.len(), 11);
+    let result = validate_password_strength(password, &PasswordRequirements::default());
+    assert!(result.is_err(), "11-char password should be invalid");
+    assert!(matches!(
+        result.unwrap_err(),
+        SecurityError::InvalidInput(msg) if msg.contains("12 characters")
+    ));
+}
+
+#[test]
+fn test_password_at_max_length() {
+    // Exactly 128 characters (maximum length)
+    let password = format!(
+        "{}",
+        "Abcdefgh123!".repeat(10) + &"Abcdefgh123".to_string()
+    );
+    assert_eq!(password.len(), 128);
+    let result = validate_password_strength(password, &PasswordRequirements::default());
+    assert!(result.is_ok(), "128-char password should be valid");
+}
+
+#[test]
+fn test_password_all_same_character() {
+    // Pathological case: all same character
+    let password = "A".repeat(12);
+    let assessment = assess_password_strength(&password);
+    // Should be very weak despite length
+    assert!(assessment.strength <= PasswordStrength::Weak);
+}
+
+#[test]
+fn test_password_exactly_one_of_each_requirement() {
+    // Minimal password meeting all requirements
+    let password = "Aa1!xxxxxxxx"; // 12 chars, 1 upper, 1 lower, 1 digit, 1 special
+    let result = validate_password_strength(password, &PasswordRequirements::default());
+    assert!(result.is_ok());
+}
+```
+
+**Testing Requirements:**
+- All new tests must pass
+- Tests should be deterministic
+- Tests should document expected behavior
+- If bugs found, fix them in separate commit
+- Consider property-based testing with `proptest` (optional)
+
+**AI Agent Suitability:** ✅ **High**
+- Clear test requirements
+- Existing test patterns to follow
+- Low risk (only adding tests)
+- May discover actual bugs
+- Good practice for understanding validation logic
+
+---
+
+### 🔵 Issue 10: Optimize String Operations in Recovery Code Generation
+
+**Priority:** Low  
+**Effort:** Trivial (30 minutes)  
+**Impact:** Performance (Minor)
+
+**Description:**
+Recovery code generation in `src/recovery.rs` line 81 uses `.chars().nth(idx)` which is O(n) for each character access, making code generation O(n²). This can be optimized to O(1) character access.
+
+**Files to Modify:**
+- `src/recovery.rs` - Optimize character access
+- `tests/recovery_test.rs` - Verify no regression
+
+**Technical Approach:**
+```rust
+// Before (O(n²))
+fn generate_recovery_code(length: usize) -> String {
+    const CHARSET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut code = String::with_capacity(length);
+    for _ in 0..length {
+        let idx = rand::thread_rng().gen_range(0..CHARSET.len());
+        code.push(CHARSET.chars().nth(idx).unwrap());  // O(n) each iteration
+    }
+    code
+}
+
+// After (O(n))
+fn generate_recovery_code(length: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut code = String::with_capacity(length);
+    for _ in 0..length {
+        let idx = rand::thread_rng().gen_range(0..CHARSET.len());
+        code.push(CHARSET[idx] as char);  // O(1) access
+    }
+    code
+}
+```
+
+**Testing Requirements:**
+- All existing recovery code tests must pass
+- Verify generated codes still use correct charset
+- Verify code length is still correct
+- No change in distribution of characters
+- Optional: Add benchmark to measure improvement
+
+**AI Agent Suitability:** ✅ **Very High**
+- Trivial optimization
+- Well-understood pattern
+- Low risk of breaking changes
+- Easy to verify correctness
+- Good introductory issue
+
+---
+
+### 🔵 Issue 11: Replace Struct Bools with Bitflags
+
+**Priority:** Low  
+**Effort:** Small (2-3 hours)  
+**Impact:** API Quality
+
+**Description:**
+`PasswordGeneratorConfig` in `src/password_generator.rs` uses multiple boolean fields which Clippy flags as `struct_excessive_bools`. These would be better expressed as a bitflags enum for clearer semantics and more compact representation.
+
+**Files to Modify:**
+- `src/password_generator.rs` - Refactor config struct
+- `Cargo.toml` - Add `bitflags` dependency
+- `tests/password_generator_test.rs` - Update tests
+
+**Technical Approach:**
+```rust
+// Add to Cargo.toml
+[dependencies]
+bitflags = "2.4"
+
+// In src/password_generator.rs
+use bitflags::bitflags;
+
+bitflags! {
+    /// Character set flags for password generation.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct CharsetFlags: u8 {
+        /// Include lowercase letters (a-z)
+        const LOWERCASE = 0b0001;
+        /// Include uppercase letters (A-Z)
+        const UPPERCASE = 0b0010;
+        /// Include digits (0-9)
+        const DIGITS    = 0b0100;
+        /// Include special characters (!@#$%...)
+        const SPECIAL   = 0b1000;
+    }
+}
+
+// Default: all character types
+impl Default for CharsetFlags {
+    fn default() -> Self {
+        Self::all()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PasswordGeneratorConfig {
+    pub length: usize,
+    pub charset: CharsetFlags,
+}
+
+impl Default for PasswordGeneratorConfig {
+    fn default() -> Self {
+        Self {
+            length: 16,
+            charset: CharsetFlags::all(),
+        }
+    }
+}
+
+// Usage
+let config = PasswordGeneratorConfig {
+    length: 20,
+    charset: CharsetFlags::UPPERCASE | CharsetFlags::DIGITS,
+};
+
+// Check if flag is set
+if config.charset.contains(CharsetFlags::LOWERCASE) {
+    // ...
+}
+```
+
+**Migration Strategy:**
+1. Add bitflags dependency
+2. Define `CharsetFlags` type
+3. Update `PasswordGeneratorConfig` struct
+4. Update `generate_password()` function to use bitflags
+5. Update all tests to use new API
+6. Update UI code in `main.rs` if it constructs config
+7. Remove `#[allow(clippy::struct_excessive_bools)]`
+
+**Testing Requirements:**
+- All existing tests must pass with new API
+- Test each flag individually
+- Test flag combinations (uppercase + digits, etc.)
+- Test `CharsetFlags::all()` and `CharsetFlags::empty()`
+- Verify backward compatibility of behavior
+
+**AI Agent Suitability:** ✅ **Medium-High**
+- Well-defined refactoring
+- Adds new dependency (requires audit check)
+- Clear migration path
+- Standard Rust pattern
+- **Challenge:** May require updating UI code
+
+---
+
+### 🔵 Issue 12: Add Missing Trait Implementations to PasswordEntry
+
+**Priority:** Low  
+**Effort:** Small (1-2 hours)  
+**Impact:** API Quality
+
+**Description:**
+`PasswordEntry` struct lacks common trait implementations that would enable better deduplication, sorting, and collection usage. Adding `Eq`, `Hash`, and `Ord` traits would improve usability, particularly in backup merge operations.
+
+**Files to Modify:**
+- `src/storage.rs` - Add trait implementations
+- `tests/storage_test.rs` - Add tests for new traits
+- `src/backup.rs` - Potentially simplify deduplication logic
+
+**Technical Approach:**
+```rust
+// In src/storage.rs
+
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
+pub struct PasswordEntry {
+    #[zeroize(skip)]
+    pub title: String,
+    #[zeroize(skip)]
+    pub username: String,
+    pub password: String,  // Not included in equality/hash
+    #[zeroize(skip)]
+    pub created_at: u64,
+}
+
+// Implement PartialEq - entries equal if title/username/timestamp match
+impl PartialEq for PasswordEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title &&
+        self.username == other.username &&
+        self.created_at == other.created_at
+        // Note: Password intentionally NOT compared
+    }
+}
+
+// Implement Eq (marker trait, requires PartialEq)
+impl Eq for PasswordEntry {}
+
+// Implement Hash - hash title/username/timestamp only
+impl Hash for PasswordEntry {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.title.hash(state);
+        self.username.hash(state);
+        self.created_at.hash(state);
+        // Note: Password intentionally NOT hashed
+    }
+}
+
+// Implement PartialOrd - sort by timestamp, then title
+impl PartialOrd for PasswordEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// Implement Ord (requires PartialOrd and Eq)
+impl Ord for PasswordEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.created_at.cmp(&other.created_at)
+            .then_with(|| self.title.cmp(&other.title))
+            .then_with(|| self.username.cmp(&other.username))
+    }
+}
+```
+
+**Benefits:**
+```rust
+// Now possible: deduplication with HashSet
+use std::collections::HashSet;
+let unique_entries: HashSet<PasswordEntry> = entries.into_iter().collect();
+
+// Now possible: direct sorting
+let mut entries = vec![entry1, entry2, entry3];
+entries.sort();  // Sorted by timestamp, then title
+
+// Now possible: binary search
+let entries = vec![...];  // sorted
+let index = entries.binary_search(&target_entry);
+```
+
+**Testing Requirements:**
+- Test `PartialEq`: equal entries compare equal, different entries don't
+- Test `PartialEq`: entries with different passwords but same other fields are equal
+- Test `Hash`: equal entries have same hash
+- Test `Ord`: entries sort correctly by timestamp, then title
+- Test collections: `HashSet` deduplication works
+- Test that password changes don't affect equality
+
+**AI Agent Suitability:** ✅ **High**
+- Clear trait implementations
+- Well-documented Rust pattern
+- Existing tests validate no regression
+- Low risk addition (traits are opt-in)
+- Improves API without breaking changes
+
+---
+
+### Summary of Actionable Issues
+
+| # | Issue | Priority | Effort | Impact | AI Suitability |
+|---|-------|----------|--------|--------|----------------|
+| 1 | Rate limit recovery codes | 🔴 Critical | Small | Security | ✅ High |
+| 2 | Fix `.lock().unwrap()` panics | 🔴 Critical | Medium | Stability | ✅ High |
+| 3 | Verify file permissions | 🔴 Critical | Small | Security | ✅ High |
+| 4 | Extract UI handlers | 🟡 High | Large | Maintainability | ✅ Med-High |
+| 5 | Migrate to `OnceLock` | 🟡 High | Small | Modernization | ✅ High |
+| 6 | Consolidate validation | 🟡 Medium | Medium | Code Quality | ✅ High |
+| 7 | Add integration tests | 🟢 Medium | Medium | Test Coverage | ✅ High |
+| 8 | Document timing params | 🟢 Low | Small | Documentation | ✅ Very High |
+| 9 | Add edge case tests | 🟢 Medium | Small | Test Coverage | ✅ High |
+| 10 | Optimize string ops | 🔵 Low | Trivial | Performance | ✅ Very High |
+| 11 | Use bitflags | 🔵 Low | Small | API Quality | ✅ Med-High |
+| 12 | Add trait impls | 🔵 Low | Small | API Quality | ✅ High |
+
+**Recommended Implementation Order:**
+1. Issues 1, 2, 3 (Critical security/stability fixes)
+2. Issue 5 (Quick modernization win)
+3. Issue 6 (Reduces duplication before expanding)
+4. Issues 7, 9 (Improve test coverage)
+5. Issue 4 (Major refactoring, do last)
+6. Issues 8, 10, 11, 12 (Polish and documentation)
+
+---
+
+## Conclusion
+
+This Rust/Slint password manager demonstrates strong security awareness and comprehensive testing. The codebase is well-structured and follows many Rust best practices. The identified improvements focus on:
+
+1. **Robustness:** Eliminating panic points and improving error handling
+2. **Maintainability:** Reducing complexity and improving architecture
+3. **Security:** Closing rate limiting gaps and verifying security properties
+4. **Modernization:** Using stdlib features and removing unnecessary dependencies
+5. **Testing:** Expanding coverage to edge cases and integration scenarios
+
+All suggested improvements are actionable, well-scoped, and suitable for implementation by AI agents working autonomously. Each issue includes clear technical specifications, testing requirements, and rationale for the change.
+
+The project is production-ready for personal use but would benefit from the critical security fixes (Issues 1-3) before broader deployment.
