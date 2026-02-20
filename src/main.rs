@@ -443,7 +443,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     // Store entries in memory for search/filter operations
                     // We need a full clone to maintain a searchable cache
                     {
-                        let mut loaded = loaded_entries_clone.lock().unwrap();
+                        let mut loaded = loaded_entries_clone.lock().unwrap_or_else(|poisoned| {
+                            warn!("Loaded entries mutex poisoned, recovering");
+                            poisoned.into_inner()
+                        });
                         loaded.clone_from(&entries);
                     }
 
@@ -556,7 +559,10 @@ fn main() -> Result<(), slint::PlatformError> {
 
         if let Some(ui) = ui_weak.upgrade() {
             // Initialize clipboard if not already done
-            let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+            let mut clipboard_guard = CLIPBOARD.lock().unwrap_or_else(|poisoned| {
+                warn!("Clipboard mutex poisoned, recovering");
+                poisoned.into_inner()
+            });
             if clipboard_guard.is_none() {
                 match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
                     Ok(clipboard) => {
@@ -605,7 +611,10 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(ui) = ui_weak.upgrade() {
             // Get password from loaded entries at the specified index
             let password = {
-                let entries = loaded_entries_clone.lock().unwrap();
+                let entries = loaded_entries_clone.lock().unwrap_or_else(|poisoned| {
+                    warn!("Loaded entries mutex poisoned, recovering");
+                    poisoned.into_inner()
+                });
                 #[allow(clippy::cast_sign_loss)]
                 let idx = index as usize;
                 if idx < entries.len() {
@@ -617,7 +626,10 @@ fn main() -> Result<(), slint::PlatformError> {
 
             if let Some(password) = password {
                 // Initialize clipboard if not already done
-                let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+                let mut clipboard_guard = CLIPBOARD.lock().unwrap_or_else(|poisoned| {
+                    warn!("Clipboard mutex poisoned, recovering");
+                    poisoned.into_inner()
+                });
                 if clipboard_guard.is_none() {
                     match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
                         Ok(clipboard) => {
@@ -724,7 +736,10 @@ fn main() -> Result<(), slint::PlatformError> {
             ui.set_status_message(GENERATED_PASSWORD_COPIED_MESSAGE.into());
 
             // Copy to clipboard
-            let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+            let mut clipboard_guard = CLIPBOARD.lock().unwrap_or_else(|poisoned| {
+                warn!("Clipboard mutex poisoned, recovering");
+                poisoned.into_inner()
+            });
             if clipboard_guard.is_none() {
                 match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
                     Ok(clipboard) => {
@@ -764,7 +779,10 @@ fn main() -> Result<(), slint::PlatformError> {
         SESSION_MANAGER.record_activity();
 
         if let Some(ui) = ui_weak.upgrade() {
-            let entries = loaded_entries_clone.lock().unwrap();
+            let entries = loaded_entries_clone.lock().unwrap_or_else(|poisoned| {
+                warn!("Loaded entries mutex poisoned, recovering");
+                poisoned.into_inner()
+            });
 
             let config = SearchConfig::default();
             let matching_indices = search_entries(&entries, query.as_str(), &config);
@@ -838,7 +856,10 @@ fn main() -> Result<(), slint::PlatformError> {
         SESSION_MANAGER.record_activity();
 
         if let Some(ui) = ui_weak.upgrade() {
-            let mut entries = loaded_entries_clone.lock().unwrap();
+            let mut entries = loaded_entries_clone.lock().unwrap_or_else(|poisoned| {
+                warn!("Loaded entries mutex poisoned, recovering");
+                poisoned.into_inner()
+            });
 
             let criteria = match sort_option {
                 1 => SortCriteria::TitleDescending,
@@ -965,7 +986,10 @@ fn main() -> Result<(), slint::PlatformError> {
             );
 
             // Initialize clipboard if needed
-            let mut clipboard_guard = CLIPBOARD.lock().unwrap();
+            let mut clipboard_guard = CLIPBOARD.lock().unwrap_or_else(|poisoned| {
+                warn!("Clipboard mutex poisoned, recovering");
+                poisoned.into_inner()
+            });
             if clipboard_guard.is_none() {
                 match SecureClipboard::new(CLIPBOARD_CONFIG.clear_timeout_seconds) {
                     Ok(clipboard) => {

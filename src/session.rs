@@ -3,6 +3,7 @@
 //! This module provides the [`SessionManager`] which tracks user activity and
 //! automatically locks the application after a configured period of inactivity.
 
+use log::warn;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -74,11 +75,17 @@ impl SessionManager {
     /// session.record_activity(); // Reset timer
     /// ```
     pub fn record_activity(&self) {
-        let mut last_activity = self.last_activity.lock().unwrap();
+        let mut last_activity = self.last_activity.lock().unwrap_or_else(|poisoned| {
+            warn!("Session last_activity mutex poisoned, recovering");
+            poisoned.into_inner()
+        });
         *last_activity = Instant::now();
 
         // Unlock if locked (activity implies successful unlock)
-        let mut is_locked = self.is_locked.lock().unwrap();
+        let mut is_locked = self.is_locked.lock().unwrap_or_else(|poisoned| {
+            warn!("Session is_locked mutex poisoned, recovering");
+            poisoned.into_inner()
+        });
         *is_locked = false;
     }
 
@@ -96,7 +103,10 @@ impl SessionManager {
     /// ```
     #[must_use]
     pub fn should_lock(&self) -> bool {
-        let last_activity = self.last_activity.lock().unwrap();
+        let last_activity = self.last_activity.lock().unwrap_or_else(|poisoned| {
+            warn!("Session last_activity mutex poisoned, recovering");
+            poisoned.into_inner()
+        });
         let elapsed = Instant::now().duration_since(*last_activity);
         elapsed >= self.timeout_duration
     }
@@ -116,7 +126,10 @@ impl SessionManager {
     /// assert!(session.is_locked());
     /// ```
     pub fn lock(&self) {
-        let mut is_locked = self.is_locked.lock().unwrap();
+        let mut is_locked = self.is_locked.lock().unwrap_or_else(|poisoned| {
+            warn!("Session is_locked mutex poisoned, recovering");
+            poisoned.into_inner()
+        });
         *is_locked = true;
     }
 
@@ -135,7 +148,10 @@ impl SessionManager {
     /// ```
     #[must_use]
     pub fn is_locked(&self) -> bool {
-        *self.is_locked.lock().unwrap()
+        *self.is_locked.lock().unwrap_or_else(|poisoned| {
+            warn!("Session is_locked mutex poisoned, recovering");
+            poisoned.into_inner()
+        })
     }
 
     /// Gets the remaining time before auto-lock triggers.
@@ -155,7 +171,10 @@ impl SessionManager {
     /// ```
     #[must_use]
     pub fn time_until_lock(&self) -> Duration {
-        let last_activity = self.last_activity.lock().unwrap();
+        let last_activity = self.last_activity.lock().unwrap_or_else(|poisoned| {
+            warn!("Session last_activity mutex poisoned, recovering");
+            poisoned.into_inner()
+        });
         let elapsed = Instant::now().duration_since(*last_activity);
 
         if elapsed >= self.timeout_duration {
@@ -255,5 +274,41 @@ mod tests {
         let after_activity = session.time_until_lock();
 
         assert!(after_activity > before_activity);
+    }
+
+    #[test]
+    fn test_poisoned_is_locked_mutex_recovers() {
+        let session = Arc::new(SessionManager::new(5));
+        let session_clone = Arc::clone(&session);
+
+        // Poison the is_locked mutex by panicking while holding it
+        let _ = std::panic::catch_unwind(move || {
+            let _guard = session_clone.is_locked.lock().unwrap();
+            panic!("Intentional panic to poison mutex");
+        });
+
+        // Operations should succeed despite poisoned mutex
+        assert!(!session.is_locked());
+        session.lock();
+        assert!(session.is_locked());
+        session.record_activity();
+        assert!(!session.is_locked());
+    }
+
+    #[test]
+    fn test_poisoned_last_activity_mutex_recovers() {
+        let session = Arc::new(SessionManager::new(5));
+        let session_clone = Arc::clone(&session);
+
+        // Poison the last_activity mutex by panicking while holding it
+        let _ = std::panic::catch_unwind(move || {
+            let _guard = session_clone.last_activity.lock().unwrap();
+            panic!("Intentional panic to poison mutex");
+        });
+
+        // Operations should succeed despite poisoned mutex
+        assert!(!session.should_lock());
+        session.record_activity();
+        assert!(session.time_until_lock().as_secs() > 0);
     }
 }
