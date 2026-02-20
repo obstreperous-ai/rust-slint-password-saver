@@ -3,6 +3,8 @@
 //! These tests verify the complete recovery workflow from generation
 //! to verification and access recovery.
 
+use rust_slint_password_saver::errors::SecurityError;
+use rust_slint_password_saver::rate_limit::RateLimiter;
 use rust_slint_password_saver::recovery::{EmergencyRecovery, RecoveryCode};
 use rust_slint_password_saver::storage::{PasswordEntry, PasswordStorage};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -64,9 +66,10 @@ fn test_recovery_key_derivation_is_deterministic() {
     // The key derivation should be deterministic for same codes + password
     // Test that the recovery key is consistently retrievable
     let key1 = recovery1.get_recovery_key();
+    let rate_limiter = RateLimiter::new();
 
     for code in codes {
-        let result = recovery1.recover_access(&code);
+        let result = recovery1.recover_access(&code, &rate_limiter);
         assert!(result.is_ok(), "Should be able to recover with valid code");
         assert_eq!(result.unwrap(), key1, "Should get same key each time");
     }
@@ -384,4 +387,88 @@ fn test_recovery_codes_have_no_ambiguous_characters() {
             code.code
         );
     }
+}
+
+#[test]
+fn test_rate_limit_enforced_after_max_attempts() {
+    let recovery = EmergencyRecovery::create(TEST_PASSWORD);
+    let rate_limiter = RateLimiter::new();
+
+    // Exhaust the rate limiter by making max failed attempts (5 by default)
+    for _ in 0..5 {
+        let _ = recovery.recover_access("INVALID-CODE-XXXX-YYYY", &rate_limiter);
+    }
+
+    // Next attempt should be rate limited
+    let result = recovery.recover_access("INVALID-CODE-XXXX-YYYY", &rate_limiter);
+    assert!(
+        matches!(result, Err(SecurityError::RateLimitExceeded)),
+        "Should return RateLimitExceeded after max attempts"
+    );
+}
+
+#[test]
+fn test_rate_limit_blocks_valid_code_when_exceeded() {
+    let recovery = EmergencyRecovery::create(TEST_PASSWORD);
+    let code = recovery.get_codes()[0].clone();
+    let rate_limiter = RateLimiter::new();
+
+    // Exhaust the rate limiter
+    for _ in 0..5 {
+        let _ = recovery.recover_access("INVALID-CODE-XXXX-YYYY", &rate_limiter);
+    }
+
+    // Even a valid code should be blocked when rate limited
+    let result = recovery.recover_access(&code, &rate_limiter);
+    assert!(
+        matches!(result, Err(SecurityError::RateLimitExceeded)),
+        "Should block even valid code when rate limited"
+    );
+}
+
+#[test]
+fn test_successful_recovery_clears_rate_limit() {
+    let recovery = EmergencyRecovery::create(TEST_PASSWORD);
+    let code = recovery.get_codes()[0].clone();
+    let rate_limiter = RateLimiter::new();
+
+    // Make some failed attempts (less than max)
+    for _ in 0..3 {
+        let _ = recovery.recover_access("INVALID-CODE-XXXX-YYYY", &rate_limiter);
+    }
+
+    // Successful recovery should clear the rate limit
+    let result = recovery.recover_access(&code, &rate_limiter);
+    assert!(result.is_ok(), "Valid code should succeed");
+
+    // Should now be able to make new attempts again
+    let result2 = recovery.recover_access("INVALID-CODE-XXXX-YYYY", &rate_limiter);
+    assert!(
+        matches!(result2, Err(SecurityError::AuthenticationFailed)),
+        "Should get AuthenticationFailed (not RateLimitExceeded) after rate limit reset"
+    );
+}
+
+#[test]
+fn test_recovery_rate_limit_separate_from_login_rate_limit() {
+    let recovery = EmergencyRecovery::create(TEST_PASSWORD);
+    let login_rate_limiter = RateLimiter::new();
+    let recovery_rate_limiter = RateLimiter::new();
+
+    // Exhaust the login rate limiter
+    for _ in 0..5 {
+        let _ = login_rate_limiter.check_and_record_attempt();
+    }
+    assert!(
+        login_rate_limiter.check_and_record_attempt().is_err(),
+        "Login rate limiter should be exhausted"
+    );
+
+    // Recovery rate limiter should be independent and still allow attempts
+    let code = recovery.get_codes()[0].clone();
+    let result = recovery.recover_access(&code, &recovery_rate_limiter);
+    assert!(
+        result.is_ok(),
+        "Recovery should succeed with its own independent rate limiter"
+    );
 }

@@ -27,12 +27,15 @@
 //! }
 //!
 //! // Later, recover access with a valid code
-//! match recovery.recover_access("ABCD-EFGH-IJKL-MNOP") {
+//! let rate_limiter = rust_slint_password_saver::rate_limit::RateLimiter::new();
+//! match recovery.recover_access("ABCD-EFGH-IJKL-MNOP", &rate_limiter) {
 //!     Ok(recovery_key) => println!("Access recovered!"),
 //!     Err(e) => println!("Recovery failed: {}", e),
 //! }
 //! ```
 
+use crate::errors::SecurityError;
+use crate::rate_limit::RateLimiter;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -225,37 +228,51 @@ impl EmergencyRecovery {
     ///
     /// Checks if the provided code matches any of the stored recovery codes.
     /// If valid, returns the recovery master key which can be used to decrypt
-    /// the password database.
+    /// the password database. Rate limiting is enforced to prevent brute-force attacks.
     ///
     /// # Arguments
     ///
     /// * `code` - The recovery code to verify
+    /// * `rate_limiter` - The rate limiter to enforce attempt limits
     ///
     /// # Returns
     ///
     /// * `Ok(Vec<u8>)` - The recovery master key if the code is valid
-    /// * `Err(String)` - An error message if the code is invalid
+    /// * `Err(SecurityError::RateLimitExceeded)` - If too many attempts have been made
+    /// * `Err(SecurityError::AuthenticationFailed)` - If the code is invalid
     ///
     /// # Example
     ///
     /// ```no_run
     /// use rust_slint_password_saver::recovery::EmergencyRecovery;
+    /// use rust_slint_password_saver::rate_limit::RateLimiter;
     ///
     /// let recovery = EmergencyRecovery::create("MyMasterPassword123!");
     /// let code = recovery.get_codes()[0].clone();
+    /// let rate_limiter = RateLimiter::new();
     ///
-    /// match recovery.recover_access(&code) {
+    /// match recovery.recover_access(&code, &rate_limiter) {
     ///     Ok(key) => println!("Access granted!"),
     ///     Err(e) => println!("Access denied: {}", e),
     /// }
     /// ```
     #[allow(dead_code)] // Public API method
-    pub fn recover_access(&self, code: &str) -> Result<Vec<u8>, String> {
+    pub fn recover_access(
+        &self,
+        code: &str,
+        rate_limiter: &RateLimiter,
+    ) -> Result<Vec<u8>, SecurityError> {
+        // Enforce rate limiting to prevent brute-force attacks
+        rate_limiter
+            .check_and_record_attempt()
+            .map_err(|_| SecurityError::RateLimitExceeded)?;
+
         // Verify code matches one of the recovery codes
         if self.recovery_codes.iter().any(|rc| rc.verify(code)) {
+            rate_limiter.record_success();
             Ok(self.recovery_master_key.clone())
         } else {
-            Err("Invalid recovery code".to_string())
+            Err(SecurityError::AuthenticationFailed)
         }
     }
 
@@ -372,9 +389,10 @@ mod tests {
     fn test_recover_access_with_valid_code() {
         let recovery = EmergencyRecovery::create("test_password");
         let code = recovery.get_codes()[0].clone();
+        let rate_limiter = RateLimiter::new();
 
         // Should succeed with valid code
-        let result = recovery.recover_access(&code);
+        let result = recovery.recover_access(&code, &rate_limiter);
         assert!(result.is_ok());
 
         // Should return the recovery key
@@ -385,11 +403,15 @@ mod tests {
     #[test]
     fn test_recover_access_with_invalid_code() {
         let recovery = EmergencyRecovery::create("test_password");
+        let rate_limiter = RateLimiter::new();
 
         // Should fail with invalid code
-        let result = recovery.recover_access("INVALID-CODE-XXXX-YYYY");
+        let result = recovery.recover_access("INVALID-CODE-XXXX-YYYY", &rate_limiter);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Invalid recovery code");
+        assert!(matches!(
+            result.unwrap_err(),
+            SecurityError::AuthenticationFailed
+        ));
     }
 
     #[test]
@@ -397,13 +419,14 @@ mod tests {
         let recovery = EmergencyRecovery::create("test_password");
         let hashes = recovery.get_code_hashes();
         let key = recovery.get_recovery_key();
+        let rate_limiter = RateLimiter::new();
 
         // Create new recovery from hashes
         let recovered = EmergencyRecovery::from_hashes(hashes, key.clone());
 
         // Should be able to verify with original code
         let code = recovery.get_codes()[0].clone();
-        let result = recovered.recover_access(&code);
+        let result = recovered.recover_access(&code, &rate_limiter);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), key);
     }
@@ -448,9 +471,10 @@ mod tests {
         let recovery = EmergencyRecovery::create("test_password");
         let codes = recovery.get_codes();
 
-        // All 3 codes should work
+        // All 3 codes should work independently with fresh rate limiters
         for code in codes {
-            let result = recovery.recover_access(&code);
+            let rate_limiter = RateLimiter::new();
+            let result = recovery.recover_access(&code, &rate_limiter);
             assert!(result.is_ok());
         }
     }
