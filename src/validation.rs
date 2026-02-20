@@ -47,6 +47,53 @@ pub const MAX_MASTER_PASSWORD_LENGTH: usize = 500;
 /// Minimum length for master passwords (12 characters for security)
 pub const MIN_MASTER_PASSWORD_LENGTH: usize = 12;
 
+/// Generic string field validation helper.
+///
+/// # Arguments
+///
+/// * `input` - The string to validate
+/// * `field_name` - Human-readable name used in error messages
+/// * `min_length` - Minimum required length; `0` means empty input is allowed
+/// * `max_length` - Maximum allowed length
+/// * `char_validator` - Optional per-character predicate; returns `true` if the
+///   character is acceptable
+fn validate_string_field(
+    input: &str,
+    field_name: &str,
+    min_length: usize,
+    max_length: usize,
+    char_validator: Option<fn(char) -> bool>,
+) -> Result<(), String> {
+    if input.is_empty() {
+        if min_length > 0 {
+            return Err(format!("{} cannot be empty", field_name));
+        }
+        return Ok(());
+    }
+
+    if input.len() < min_length {
+        return Err(format!(
+            "{} too short (min {} characters)",
+            field_name, min_length
+        ));
+    }
+
+    if input.len() > max_length {
+        return Err(format!(
+            "{} too long (max {} characters)",
+            field_name, max_length
+        ));
+    }
+
+    if let Some(validator) = char_validator {
+        if input.chars().any(|c| !validator(c)) {
+            return Err(format!("{} contains invalid characters", field_name));
+        }
+    }
+
+    Ok(())
+}
+
 /// Validates a password entry title.
 ///
 /// # Validation Rules
@@ -79,19 +126,13 @@ pub const MIN_MASTER_PASSWORD_LENGTH: usize = 12;
 /// assert!(validate_title("Title\nWith Newline").is_err());
 /// ```
 pub fn validate_title(title: &str) -> Result<(), String> {
-    if title.is_empty() {
-        return Err("Title cannot be empty".into());
-    }
-    if title.len() > MAX_TITLE_LENGTH {
-        return Err(format!(
-            "Title too long (max {} characters)",
-            MAX_TITLE_LENGTH
-        ));
-    }
-    if title.chars().any(char::is_control) {
-        return Err("Title contains invalid characters".into());
-    }
-    Ok(())
+    validate_string_field(
+        title,
+        "Title",
+        1,
+        MAX_TITLE_LENGTH,
+        Some(|c| !c.is_control()),
+    )
 }
 
 /// Validates a username.
@@ -126,17 +167,14 @@ pub fn validate_title(title: &str) -> Result<(), String> {
 /// assert!(validate_username("user\x00name").is_err());
 /// ```
 pub fn validate_username(username: &str) -> Result<(), String> {
-    // Username is optional, so empty is OK
-    if username.len() > MAX_USERNAME_LENGTH {
-        return Err(format!(
-            "Username too long (max {} characters)",
-            MAX_USERNAME_LENGTH
-        ));
-    }
-    if username.chars().any(char::is_control) {
-        return Err("Username contains invalid characters".into());
-    }
-    Ok(())
+    // Username is optional, so empty is OK (min_length = 0)
+    validate_string_field(
+        username,
+        "Username",
+        0,
+        MAX_USERNAME_LENGTH,
+        Some(|c| !c.is_control()),
+    )
 }
 
 /// Validates a password.
@@ -175,21 +213,15 @@ pub fn validate_username(username: &str) -> Result<(), String> {
 /// assert!(validate_password("pass\tword").is_ok());
 /// ```
 pub fn validate_password(password: &str) -> Result<(), String> {
-    if password.is_empty() {
-        return Err("Password cannot be empty".into());
-    }
-    if password.len() > MAX_PASSWORD_LENGTH {
-        return Err(format!(
-            "Password too long (max {} characters)",
-            MAX_PASSWORD_LENGTH
-        ));
-    }
     // Note: Tab character is allowed as it may be used in some passwords,
     // but other control characters (newlines, null bytes, etc.) are rejected
-    if password.chars().any(|c| c.is_control() && c != '\t') {
-        return Err("Password contains invalid characters".into());
-    }
-    Ok(())
+    validate_string_field(
+        password,
+        "Password",
+        1,
+        MAX_PASSWORD_LENGTH,
+        Some(|c| !c.is_control() || c == '\t'),
+    )
 }
 
 /// Validates a master password.
@@ -226,31 +258,72 @@ pub fn validate_password(password: &str) -> Result<(), String> {
 /// assert!(validate_master_password("MyPassword\x00With Null").is_err());
 /// ```
 pub fn validate_master_password(master_password: &str) -> Result<(), String> {
-    if master_password.is_empty() {
-        return Err("Master password cannot be empty".into());
-    }
-    if master_password.len() < MIN_MASTER_PASSWORD_LENGTH {
-        return Err(format!(
-            "Master password too short (min {} characters)",
-            MIN_MASTER_PASSWORD_LENGTH
-        ));
-    }
-    if master_password.len() > MAX_MASTER_PASSWORD_LENGTH {
-        return Err(format!(
-            "Master password too long (max {} characters)",
-            MAX_MASTER_PASSWORD_LENGTH
-        ));
-    }
     // Master password should not contain control characters
-    if master_password.chars().any(char::is_control) {
-        return Err("Master password contains invalid characters".into());
-    }
-    Ok(())
+    validate_string_field(
+        master_password,
+        "Master password",
+        MIN_MASTER_PASSWORD_LENGTH,
+        MAX_MASTER_PASSWORD_LENGTH,
+        Some(|c| !c.is_control()),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Helper function tests
+    #[test]
+    fn test_validate_string_field_empty_required() {
+        let result = validate_string_field("", "Field", 1, 100, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_string_field_empty_optional() {
+        assert!(validate_string_field("", "Field", 0, 100, None).is_ok());
+    }
+
+    #[test]
+    fn test_validate_string_field_too_short() {
+        let result = validate_string_field("ab", "Field", 5, 100, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too short"));
+    }
+
+    #[test]
+    fn test_validate_string_field_too_long() {
+        let result = validate_string_field(&"a".repeat(11), "Field", 1, 10, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too long"));
+    }
+
+    #[test]
+    fn test_validate_string_field_invalid_char() {
+        let result =
+            validate_string_field("bad\nvalue", "Field", 1, 100, Some(|c| !c.is_control()));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_validate_string_field_valid() {
+        assert!(validate_string_field("hello", "Field", 1, 100, Some(|c| !c.is_control())).is_ok());
+    }
+
+    #[test]
+    fn test_validate_string_field_no_char_validator() {
+        // Without a char validator, control characters are accepted
+        assert!(validate_string_field("hello\n", "Field", 1, 100, None).is_ok());
+    }
+
+    #[test]
+    fn test_validate_string_field_exact_min_and_max() {
+        assert!(validate_string_field("abc", "Field", 3, 3, None).is_ok());
+        assert!(validate_string_field("ab", "Field", 3, 3, None).is_err());
+        assert!(validate_string_field("abcd", "Field", 3, 3, None).is_err());
+    }
 
     // Title validation tests
     #[test]
