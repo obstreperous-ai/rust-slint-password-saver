@@ -129,3 +129,38 @@ fn test_password_change_integration() {
     // Clean up
     let _ = fs::remove_file(&test_path);
 }
+
+/// Verify that a newly created directory has secure 0700 permissions (Unix only).
+///
+/// This test validates the happy path: after creating a directory and setting
+/// permissions to 0700, `fs::metadata()` should confirm the mode is exactly 0700.
+#[cfg(unix)]
+#[test]
+fn test_directory_permissions_verification() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let test_dir =
+        std::env::temp_dir().join(format!("test_permission_verify_dir_{}", std::process::id()));
+
+    // Clean up any previous run
+    let _ = fs::remove_dir_all(&test_dir);
+
+    // Create the directory
+    fs::create_dir_all(&test_dir).expect("Failed to create test directory");
+
+    // Set permissions to 0700
+    let permissions = fs::Permissions::from_mode(0o700);
+    fs::set_permissions(&test_dir, permissions).expect("Failed to set permissions");
+
+    // Verify permissions were actually set (the happy path)
+    let metadata = fs::metadata(&test_dir).expect("Failed to read metadata");
+    let actual_mode = metadata.permissions().mode() & 0o777;
+    assert_eq!(
+        actual_mode, 0o700,
+        "Directory permissions should be 0700, got {:o}",
+        actual_mode
+    );
+
+    // Clean up
+    let _ = fs::remove_dir_all(&test_dir);
+}
