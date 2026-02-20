@@ -4611,7 +4611,6 @@ dependencies = [
  "hex",
  "hmac",
  "hostname",
- "lazy_static",
  "log",
  "rand 0.8.5",
  "reqwest",
