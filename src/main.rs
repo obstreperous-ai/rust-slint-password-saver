@@ -102,15 +102,20 @@ const STRENGTH_COLOR_STRONG: (u8, u8, u8) = (45, 80, 22);
 ///
 /// # Returns
 ///
-/// A `PathBuf` pointing to the storage file location. Parent directory
-/// is created if it doesn't exist. On Unix systems, the directory is
-/// created with secure permissions (0700).
+/// A `Result<PathBuf, SecurityError>` pointing to the storage file location.
+/// Parent directory is created if it doesn't exist. On Unix systems, the
+/// directory is created with secure permissions (0700) which are then verified.
+///
+/// # Errors
+///
+/// Returns `SecurityError::InvalidInput` if directory permissions cannot be
+/// set to the required 0700 on Unix systems (e.g., on NFS or network shares).
 ///
 /// # Platform Support
 ///
 /// Works on macOS, Linux, and other Unix-like systems. Uses `HOME` environment
 /// variable on Unix and `USERPROFILE` on Windows.
-fn get_storage_path() -> PathBuf {
+fn get_storage_path() -> Result<PathBuf, errors::SecurityError> {
     // Try to get home directory from environment variables
     // On Unix: $HOME, on Windows: %USERPROFILE%
     let home_dir = std::env::var("HOME")
@@ -126,12 +131,31 @@ fn get_storage_path() -> PathBuf {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
 
-        // Set secure permissions on the directory (0700 on Unix)
+        // Set secure permissions on the directory (0700 on Unix) and verify
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             let permissions = std::fs::Permissions::from_mode(0o700);
             let _ = std::fs::set_permissions(parent, permissions);
+
+            // Verify permissions were actually set (may silently fail on NFS/network shares)
+            let metadata = std::fs::metadata(parent).map_err(|e| {
+                log::error!(
+                    "Failed to read directory metadata for permission verification: {}",
+                    e
+                );
+                errors::SecurityError::StorageError
+            })?;
+            let actual_mode = metadata.permissions().mode() & 0o777;
+            if actual_mode != 0o700 {
+                log::error!(
+                    "Failed to set secure directory permissions. Expected 0700, got {:o}",
+                    actual_mode
+                );
+                return Err(errors::SecurityError::InvalidInput(
+                    "Cannot secure storage directory with required permissions".to_string(),
+                ));
+            }
         }
 
         // Set secure permissions on the directory (ACL on Windows)
@@ -142,7 +166,7 @@ fn get_storage_path() -> PathBuf {
         }
     }
 
-    path
+    Ok(path)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -162,7 +186,16 @@ fn main() -> Result<(), slint::PlatformError> {
     let ui = AppWindow::new()?;
 
     // Initialize storage with cross-platform path
-    let storage_path = get_storage_path();
+    let storage_path = match get_storage_path() {
+        Ok(path) => path,
+        Err(e) => {
+            log::error!(
+                "Failed to initialize secure storage path: {}",
+                e.debug_message()
+            );
+            return Err(slint::PlatformError::Other(e.user_message()));
+        }
+    };
 
     // Shared state for loaded password entries (for search/filter functionality)
     let loaded_entries: Arc<Mutex<Vec<PasswordEntry>>> = Arc::new(Mutex::new(Vec::new()));
