@@ -49,6 +49,12 @@
 //! let loaded = storage.load_entries(master_password).unwrap();
 //! ```
 
+// Allow lazy_static for compatibility with Rust 1.70+
+// Will migrate to std::sync::LazyLock when minimum version is 1.80+
+#![allow(clippy::non_std_lazy_statics)]
+
+slint::include_modules!();
+
 pub mod audit_log;
 pub mod backup;
 pub mod clipboard;
@@ -62,6 +68,7 @@ pub mod search;
 pub mod secure_delete;
 pub mod session;
 pub mod storage;
+pub mod ui_handlers;
 pub mod update_checker;
 pub mod validation;
 

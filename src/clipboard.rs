@@ -139,6 +139,7 @@ impl SecureClipboard {
 
 /// Configuration for clipboard security
 #[allow(dead_code)] // Part of public API, may be used in future
+#[derive(Clone, Copy)]
 pub struct ClipboardConfig {
     /// Whether auto-clear is enabled
     pub auto_clear_enabled: bool,
