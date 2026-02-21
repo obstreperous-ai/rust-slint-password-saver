@@ -38,7 +38,12 @@ All test files with hardcoded credentials have been marked with appropriate secu
    - Contains: Test passwords for authentication error testing
    - Suppressions: File-level comment and per-test CodeQL annotations
 
-5. **`src/validation.rs`**
+5. **`tests/password_strength_test.rs`**
+   - Purpose: Edge case and boundary tests for password strength validation
+   - Contains: Boundary-condition passwords for length, character type, and entropy testing
+   - Suppressions: File-level comment and per-test CodeQL annotations
+
+6. **`src/validation.rs`**
    - Purpose: Documentation examples for validation functions
    - Contains: Example passwords in doc comments
    - Suppressions: Module-level security note and inline CodeQL annotations
