@@ -21,9 +21,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 
 // NOTE: Test contains hardcoded password - TESTING_SECURITY_NOTE.md
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 const MASTER_PASSWORD: &str = "SecurityTest123!";
 
 /// Helper to create a `PasswordEntry`.
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded entry password
 fn make_entry(title: &str) -> PasswordEntry {
     PasswordEntry {
         title: title.to_string(),

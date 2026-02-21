@@ -12,6 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 
 // NOTE: Test contains hardcoded password - TESTING_SECURITY_NOTE.md
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 const MASTER_PASSWORD: &str = "TestLifecycle123!";
 
 /// Helper to create a `PasswordEntry` with the current timestamp.

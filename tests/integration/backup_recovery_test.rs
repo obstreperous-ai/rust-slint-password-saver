@@ -14,6 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 
 // NOTE: Test contains hardcoded password - TESTING_SECURITY_NOTE.md
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 const MASTER_PASSWORD: &str = "BackupTest123!";
 
 /// Helper to create a `PasswordEntry`.
@@ -159,6 +160,7 @@ fn test_import_does_not_duplicate_existing_entries() {
 
 /// Test listing backup files in a directory.
 #[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
 fn test_list_backups_in_directory() {
     let temp_dir = tempdir().unwrap();
     let backup_dir = temp_dir.path();
