@@ -75,13 +75,13 @@ impl RecoveryCode {
         // Use character set without ambiguous characters (0, O, 1, I, l)
         // 30-character set provides ~77 bits of entropy (16 × log2(30) ≈ 77 bits)
         // This is comparable to a 12-character alphanumeric password
-        let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-        // Generate 16 random characters
+        // Generate 16 random characters (O(1) byte access instead of O(n) chars().nth())
         let code: String = (0..16)
             .map(|_| {
-                let idx = rng.gen_range(0..chars.len());
-                chars.chars().nth(idx).unwrap()
+                let idx = rng.gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
             })
             .collect();
 
