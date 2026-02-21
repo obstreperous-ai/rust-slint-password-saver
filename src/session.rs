@@ -7,6 +7,21 @@ use log::warn;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// Default session inactivity timeout in minutes.
+///
+/// # Security Rationale
+///
+/// The application automatically locks after this period of inactivity to:
+/// - Protect against unauthorized physical access (unattended workstation)
+/// - Limit exposure window if a user forgets to lock manually
+/// - Comply with security best practices (CIS Controls, NIST SP 800-53)
+///
+/// The 5-minute default balances:
+/// - Security: Short enough to limit exposure on unattended systems
+/// - Usability: Long enough for normal usage without frequent re-authentication
+/// - Industry standard: Matches common password manager defaults (Bitwarden, 1Password)
+pub const DEFAULT_SESSION_TIMEOUT_MINUTES: u64 = 5;
+
 /// Manages session state and automatic timeout functionality.
 ///
 /// The `SessionManager` tracks the last user activity and determines when the

@@ -194,26 +194,24 @@ pub fn validate_password_strength(password: &str) -> Result<(), SecurityError> {
     Ok(())
 }
 
-/// Adds random timing jitter to prevent precise timing measurements.
+/// Adds random timing jitter to mitigate timing attacks.
 ///
-/// # Timing Attack Protection
+/// # Security Rationale
 ///
-/// This function introduces a small random delay (1-10ms) to authentication operations
-/// to make timing attacks harder. By adding unpredictable noise to operation timing,
-/// we prevent attackers from using statistical analysis to deduce information about
-/// passwords based on execution time.
+/// While cryptographic operations use constant-time comparison via
+/// `subtle::ConstantTimeEq`, this jitter provides defense-in-depth
+/// against timing analysis. The 1-10ms range is chosen to:
+/// - Add observable noise to timing measurements
+/// - Remain imperceptible to users (< 20ms threshold)
+/// - Complement constant-time comparison (primary defense)
 ///
-/// # Security Note
+/// Note: This is NOT the primary timing attack mitigation. All
+/// secret comparisons must use constant-time operations first.
 ///
-/// While timing jitter alone is not sufficient to prevent all timing attacks, it
-/// complements other defenses like constant-time operations and consistent error handling.
-/// Together, these measures provide defense-in-depth against timing side-channel attacks.
+/// # Parameters
 ///
-/// # Implementation
-///
-/// Uses `rand::thread_rng()` to generate cryptographically secure random numbers,
-/// ensuring the jitter is unpredictable and cannot be compensated for by averaging
-/// multiple measurements.
+/// - Jitter range: 1-10 milliseconds
+/// - Distribution: Uniform random
 fn add_timing_jitter() {
     let jitter_ms = rand::thread_rng().gen_range(1..=10);
     thread::sleep(Duration::from_millis(jitter_ms));
