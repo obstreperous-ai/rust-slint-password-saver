@@ -30,6 +30,22 @@ use arboard::Clipboard;
 use std::thread;
 use std::time::Duration;
 
+/// Auto-clear timeout for clipboard contents.
+///
+/// # Security Rationale
+///
+/// Passwords are automatically cleared from the clipboard after
+/// 30 seconds to prevent:
+/// - Accidental pasting into wrong applications
+/// - Clipboard scraping by malware
+/// - Shoulder-surfing attacks
+///
+/// The 30-second duration balances:
+/// - User convenience (enough time to paste)
+/// - Security (limited exposure window)
+/// - Industry standard (matches `KeePass`, `1Password` behavior)
+pub const AUTO_CLEAR_TIMEOUT_SECONDS: u64 = 30;
+
 /// Secure clipboard manager with auto-clear functionality
 pub struct SecureClipboard {
     clipboard: Clipboard,
@@ -151,7 +167,7 @@ impl Default for ClipboardConfig {
     fn default() -> Self {
         Self {
             auto_clear_enabled: true,
-            clear_timeout_seconds: 30, // Clear after 30 seconds
+            clear_timeout_seconds: AUTO_CLEAR_TIMEOUT_SECONDS,
         }
     }
 }

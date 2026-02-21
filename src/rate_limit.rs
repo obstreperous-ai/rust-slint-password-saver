@@ -36,6 +36,32 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+/// Maximum failed authentication attempts before lockout.
+///
+/// # Security Rationale
+///
+/// Set to 5 attempts to balance:
+/// - Security: Prevents brute force (5 attempts = ~15 bits max)
+/// - Usability: Allows for typos without immediate lockout
+/// - Industry standard: NIST SP 800-63B recommends 3-10 attempts
+const MAX_ATTEMPTS_PER_WINDOW: usize = 5;
+
+/// Time window for counting failed attempts.
+///
+/// Set to 5 minutes (300 seconds) to:
+/// - Group related login attempts
+/// - Expire old attempts naturally
+/// - Prevent accumulation of attempts over long periods
+const RATE_LIMIT_WINDOW_SECONDS: u64 = 5 * 60;
+
+/// Lockout duration after exceeding max attempts.
+///
+/// Set to 1 minute to:
+/// - Slow down automated attacks (1 min per 5 attempts = 12 attempts/hour)
+/// - Minimize user frustration (brief lockout)
+/// - Comply with OWASP recommendations (30s-5min range)
+const LOCKOUT_DURATION_SECONDS: u64 = 60;
+
 /// Rate limiter for controlling decryption attempts.
 ///
 /// This structure tracks failed authentication attempts and enforces rate limiting
@@ -93,9 +119,9 @@ impl RateLimiter {
     pub fn new() -> Self {
         Self {
             attempts: Mutex::new(Vec::new()),
-            max_attempts: 5,
-            window: Duration::from_secs(300),          // 5 minutes
-            lockout_duration: Duration::from_secs(60), // 1 minute lockout
+            max_attempts: MAX_ATTEMPTS_PER_WINDOW,
+            window: Duration::from_secs(RATE_LIMIT_WINDOW_SECONDS),
+            lockout_duration: Duration::from_secs(LOCKOUT_DURATION_SECONDS),
         }
     }
 

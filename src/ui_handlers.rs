@@ -30,7 +30,7 @@ use crate::password_strength::{
 use crate::rate_limit::RateLimiter;
 use crate::recovery::EmergencyRecovery;
 use crate::search::{search_entries, sort_entries, SearchConfig, SortCriteria};
-use crate::session::SessionManager;
+use crate::session::{SessionManager, DEFAULT_SESSION_TIMEOUT_MINUTES};
 use crate::storage::{PasswordEntry, PasswordStorage};
 use crate::update_checker::UpdateChecker;
 use crate::validation::{
@@ -107,7 +107,7 @@ impl UIHandlers {
             storage_path,
             loaded_entries: Arc::new(Mutex::new(Vec::new())),
             rate_limiter: Arc::new(RateLimiter::new()),
-            session: Arc::new(SessionManager::new(5)), // 5 minute timeout
+            session: Arc::new(SessionManager::new(DEFAULT_SESSION_TIMEOUT_MINUTES)),
             clipboard: Arc::new(Mutex::new(None)),
             clipboard_config: ClipboardConfig::default(),
         }
