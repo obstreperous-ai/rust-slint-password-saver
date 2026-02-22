@@ -23,7 +23,7 @@
 
 use log::warn;
 use rust_slint_password_saver::{
-    audit_log::{get_audit_log_path, AuditEventType, AuditLogger},
+    audit_log::{get_audit_hmac_key_path, get_audit_log_path, AuditEventType, AuditLogger},
     errors,
     storage::PasswordStorage,
     ui_handlers::UIHandlers,
@@ -113,7 +113,7 @@ fn get_storage_path() -> Result<PathBuf, errors::SecurityError> {
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<(), slint::PlatformError> {
     // Initialize audit logging
-    let audit_logger = AuditLogger::new(get_audit_log_path());
+    let audit_logger = AuditLogger::new(get_audit_log_path(), &get_audit_hmac_key_path());
     let startup_entry = AuditLogger::create_entry(
         AuditEventType::ApplicationStartup,
         true,

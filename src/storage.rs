@@ -20,7 +20,7 @@
 //! - **Timing Attack Protection**: Constant-time comparison and timing jitter for sensitive operations
 //! - **Audit Trail**: All operations logged for forensic analysis
 
-use crate::audit_log::{get_audit_log_path, AuditEventType, AuditLogger};
+use crate::audit_log::{get_audit_hmac_key_path, get_audit_log_path, AuditEventType, AuditLogger};
 use crate::errors::SecurityError;
 use crate::integrity::{CorruptionReport, IntegrityChecker};
 use crate::secure_delete::secure_update_file;
@@ -525,7 +525,7 @@ impl PasswordStorage {
         master_password: &str,
     ) -> Result<(), SecurityError> {
         // Initialize audit logger
-        let audit_logger = AuditLogger::new(get_audit_log_path());
+        let audit_logger = AuditLogger::new(get_audit_log_path(), &get_audit_hmac_key_path());
 
         // Log file access attempt
         let file_access_entry = AuditLogger::create_entry(
@@ -664,7 +664,7 @@ impl PasswordStorage {
         }
 
         // Initialize audit logger
-        let audit_logger = AuditLogger::new(get_audit_log_path());
+        let audit_logger = AuditLogger::new(get_audit_log_path(), &get_audit_hmac_key_path());
 
         // Log file access attempt
         let file_access_entry = AuditLogger::create_entry(
@@ -967,7 +967,7 @@ impl PasswordStorage {
         recovery_key: &[u8],
     ) -> Result<(), SecurityError> {
         // Initialize audit logger
-        let audit_logger = AuditLogger::new(get_audit_log_path());
+        let audit_logger = AuditLogger::new(get_audit_log_path(), &get_audit_hmac_key_path());
 
         // Log file access attempt
         let file_access_entry = AuditLogger::create_entry(

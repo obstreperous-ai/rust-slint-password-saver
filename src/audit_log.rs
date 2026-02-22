@@ -13,10 +13,9 @@
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::convert::TryInto;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -95,7 +94,7 @@ pub enum AuditEventType {
 /// - Log file is append-only to prevent tampering
 /// - Each entry includes HMAC for integrity verification
 /// - Logs are stored separately from encrypted password data
-/// - HMAC key derived from system-specific information
+/// - HMAC key is a cryptographically random persistent key stored with 0600 permissions
 ///
 /// # Example
 ///
@@ -104,7 +103,7 @@ pub enum AuditEventType {
 /// use std::path::PathBuf;
 /// use std::time::{SystemTime, UNIX_EPOCH};
 ///
-/// let logger = AuditLogger::new(PathBuf::from("/tmp/audit.log"));
+/// let logger = AuditLogger::new(PathBuf::from("/tmp/audit.log"), &PathBuf::from("/tmp/audit_hmac.key"));
 ///
 /// let entry = AuditEntry {
 ///     timestamp: SystemTime::now()
@@ -132,10 +131,11 @@ impl AuditLogger {
     /// # Arguments
     ///
     /// * `log_path` - Path where audit log will be stored
+    /// * `hmac_key_path` - Path where the persistent HMAC key is stored (created on first use)
     ///
     /// # Returns
     ///
-    /// A new `AuditLogger` instance with a derived HMAC key
+    /// A new `AuditLogger` instance with a persistent cryptographically random HMAC key
     ///
     /// # Example
     ///
@@ -143,13 +143,14 @@ impl AuditLogger {
     /// use rust_slint_password_saver::audit_log::AuditLogger;
     /// use std::path::PathBuf;
     ///
-    /// let logger = AuditLogger::new(PathBuf::from("~/.password_saver/audit.log"));
+    /// let logger = AuditLogger::new(
+    ///     PathBuf::from("/tmp/audit.log"),
+    ///     &PathBuf::from("/tmp/audit_hmac.key"),
+    /// );
     /// ```
     #[must_use]
-    pub fn new(log_path: PathBuf) -> Self {
-        // Generate HMAC key - in production, this should be stored securely
-        // For this implementation, we derive it from system information
-        let hmac_key = Self::derive_hmac_key();
+    pub fn new(log_path: PathBuf, hmac_key_path: &Path) -> Self {
+        let hmac_key = Self::load_or_create_hmac_key(hmac_key_path);
 
         // Ensure parent directory exists
         if let Some(parent) = log_path.parent() {
@@ -159,35 +160,56 @@ impl AuditLogger {
         Self { log_path, hmac_key }
     }
 
-    /// Derives an HMAC key for log integrity protection.
+    /// Loads an existing HMAC key from `key_path`, or generates and persists a new one.
     ///
-    /// This is a simplified implementation. In production, the HMAC key should be:
-    /// - Stored securely (e.g., in system keyring)
-    /// - Generated cryptographically (not derived from hostname)
-    /// - Rotated periodically
+    /// On first launch, generates a 32-byte cryptographically random key using `OsRng`
+    /// and writes it to `key_path` with 0600 permissions. On subsequent launches, reads
+    /// the key from the file.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_path` - Path to the persistent HMAC key file
     ///
     /// # Returns
     ///
     /// A 32-byte HMAC key
-    fn derive_hmac_key() -> [u8; 32] {
-        // Simplified key derivation - use hostname as entropy source
-        // In production, use proper key management
-        let hostname = hostname::get()
-            .unwrap_or_else(|_| std::ffi::OsString::from("default"))
-            .to_string_lossy()
-            .to_string();
-
-        // Hash the hostname to create a 32-byte key
-        use sha2::Digest;
-        let mut hasher = Sha256::new();
-        hasher.update(hostname.as_bytes());
-        hasher.update(b"audit_log_hmac_key_v1");
-        let result = hasher.finalize();
-
-        let key: [u8; 32] = result
-            .as_slice()
-            .try_into()
-            .expect("Sha256 output must be 32 bytes");
+    #[must_use]
+    pub fn load_or_create_hmac_key(key_path: &Path) -> [u8; 32] {
+        if key_path.exists() {
+            if let Ok(bytes) = fs::read(key_path) {
+                if bytes.len() == 32 {
+                    let mut key = [0u8; 32];
+                    key.copy_from_slice(&bytes);
+                    return key;
+                }
+            }
+        }
+        // Generate new random key
+        let mut key = [0u8; 32];
+        use rand::RngCore;
+        rand::rngs::OsRng.fill_bytes(&mut key);
+        // Persist with secure permissions
+        if let Err(e) = fs::write(key_path, key) {
+            log::warn!(
+                "Failed to persist audit HMAC key to {}: {}. \
+                 HMAC integrity will not survive restarts.",
+                key_path.display(),
+                e
+            );
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = fs::Permissions::from_mode(0o600);
+            if let Err(e) = fs::set_permissions(key_path, permissions) {
+                log::warn!(
+                    "Failed to set 0600 permissions on audit HMAC key {}: {}. \
+                     Key file may be world-readable.",
+                    key_path.display(),
+                    e
+                );
+            }
+        }
         key
     }
 
@@ -253,7 +275,10 @@ impl AuditLogger {
     /// use std::path::PathBuf;
     /// use std::time::{SystemTime, UNIX_EPOCH};
     ///
-    /// let logger = AuditLogger::new(PathBuf::from("/tmp/audit.log"));
+    /// let logger = AuditLogger::new(
+    ///     PathBuf::from("/tmp/audit.log"),
+    ///     &PathBuf::from("/tmp/audit_hmac.key"),
+    /// );
     ///
     /// let entry = AuditEntry {
     ///     timestamp: SystemTime::now()
@@ -375,7 +400,10 @@ impl AuditLogger {
     /// use rust_slint_password_saver::audit_log::{AuditLogger, AuditEventType};
     /// use std::path::PathBuf;
     ///
-    /// let logger = AuditLogger::new(PathBuf::from("/tmp/audit.log"));
+    /// let logger = AuditLogger::new(
+    ///     PathBuf::from("/tmp/audit.log"),
+    ///     &PathBuf::from("/tmp/audit_hmac.key"),
+    /// );
     /// let entry = AuditLogger::create_entry(
     ///     AuditEventType::ApplicationStartup,
     ///     true,
@@ -437,6 +465,37 @@ pub fn get_audit_log_path() -> PathBuf {
     path
 }
 
+/// Helper function to get the default audit HMAC key path.
+///
+/// Returns the path to the persistent HMAC key file used for audit log integrity:
+/// - Unix-like systems: `~/.password_saver/audit_hmac.key`
+/// - Windows: `%USERPROFILE%/.password_saver/audit_hmac.key`
+///
+/// # Returns
+///
+/// A `PathBuf` pointing to the audit HMAC key location
+///
+/// # Example
+///
+/// ```
+/// use rust_slint_password_saver::audit_log::get_audit_hmac_key_path;
+///
+/// let key_path = get_audit_hmac_key_path();
+/// println!("HMAC key: {:?}", key_path);
+/// ```
+#[must_use]
+pub fn get_audit_hmac_key_path() -> PathBuf {
+    let home_dir = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| String::from("."));
+
+    let mut path = PathBuf::from(home_dir);
+    path.push(".password_saver");
+    path.push("audit_hmac.key");
+
+    path
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -459,19 +518,22 @@ mod tests {
     #[test]
     fn test_audit_logger_creation() {
         let temp_path = PathBuf::from("/tmp/test_audit.log");
-        let logger = AuditLogger::new(temp_path.clone());
+        let temp_key_path = PathBuf::from("/tmp/test_audit_key.key");
+        let logger = AuditLogger::new(temp_path.clone(), &temp_key_path);
 
         // Verify logger was created
         assert!(logger.hmac_key.len() == 32);
 
         // Clean up
         let _ = fs::remove_file(temp_path);
+        let _ = fs::remove_file(temp_key_path);
     }
 
     #[test]
     fn test_log_event() {
         let temp_path = PathBuf::from("/tmp/test_audit_log_event.log");
-        let logger = AuditLogger::new(temp_path.clone());
+        let temp_key_path = PathBuf::from("/tmp/test_audit_log_event.key");
+        let logger = AuditLogger::new(temp_path.clone(), &temp_key_path);
 
         let entry = AuditLogger::create_entry(
             AuditEventType::MasterPasswordCheck,
@@ -491,12 +553,14 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_file(temp_path);
+        let _ = fs::remove_file(temp_key_path);
     }
 
     #[test]
     fn test_hmac_computation() {
         let temp_path = PathBuf::from("/tmp/test_audit_hmac.log");
-        let logger = AuditLogger::new(temp_path.clone());
+        let temp_key_path = PathBuf::from("/tmp/test_audit_hmac.key");
+        let logger = AuditLogger::new(temp_path.clone(), &temp_key_path);
 
         let entry = AuditLogger::create_entry(
             AuditEventType::FileAccess,
@@ -510,6 +574,7 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_file(temp_path);
+        let _ = fs::remove_file(temp_key_path);
     }
 
     #[test]
@@ -520,5 +585,76 @@ mod tests {
 
         let deserialized: AuditEventType = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, AuditEventType::PasswordsSaved);
+    }
+
+    #[test]
+    fn test_hmac_key_persistence() {
+        let temp_key_path = PathBuf::from("/tmp/test_persist_key.key");
+        let _ = fs::remove_file(&temp_key_path);
+
+        // First call: key does not exist, should be generated and saved
+        let key1 = AuditLogger::load_or_create_hmac_key(&temp_key_path);
+        assert!(temp_key_path.exists(), "Key file should be created");
+        assert_eq!(key1.len(), 32);
+
+        // Second call: key exists, should be loaded (same value)
+        let key2 = AuditLogger::load_or_create_hmac_key(&temp_key_path);
+        assert_eq!(key1, key2, "Same key should be loaded on subsequent calls");
+
+        // Clean up
+        let _ = fs::remove_file(temp_key_path);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_hmac_key_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_key_path = PathBuf::from("/tmp/test_perm_key.key");
+        let _ = fs::remove_file(&temp_key_path);
+
+        let _ = AuditLogger::load_or_create_hmac_key(&temp_key_path);
+        assert!(temp_key_path.exists());
+
+        let metadata = fs::metadata(&temp_key_path).unwrap();
+        let mode = metadata.permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "Key file should have 0600 permissions");
+
+        // Clean up
+        let _ = fs::remove_file(temp_key_path);
+    }
+
+    #[test]
+    fn test_different_keys_fail_hmac_verification() {
+        let log_path = PathBuf::from("/tmp/test_tamper_audit.log");
+        let key_path1 = PathBuf::from("/tmp/test_tamper_key1.key");
+        let key_path2 = PathBuf::from("/tmp/test_tamper_key2.key");
+        let _ = fs::remove_file(&key_path1);
+        let _ = fs::remove_file(&key_path2);
+
+        // Create a logger with key1 and log an event
+        let logger1 = AuditLogger::new(log_path.clone(), &key_path1);
+        let entry = AuditLogger::create_entry(AuditEventType::ApplicationStartup, true, None);
+        logger1.log_event(&entry).unwrap();
+
+        // Read the logged entry's HMAC
+        let content = fs::read_to_string(&log_path).unwrap();
+        let logged_entry: AuditEntry = serde_json::from_str(content.trim()).unwrap();
+        let original_hmac = logged_entry.hmac.clone();
+
+        // Create a logger with a different key and compute HMAC for the same entry
+        let logger2 = AuditLogger::new(log_path.clone(), &key_path2);
+        let hmac2 = logger2.compute_hmac(&logged_entry).unwrap();
+
+        // The HMACs should differ because the keys are different
+        assert_ne!(
+            original_hmac, hmac2,
+            "HMAC from a different key should not match"
+        );
+
+        // Clean up
+        let _ = fs::remove_file(log_path);
+        let _ = fs::remove_file(key_path1);
+        let _ = fs::remove_file(key_path2);
     }
 }
