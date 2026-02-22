@@ -15,7 +15,9 @@
 //! ## Example
 //!
 //! ```
-//! use rust_slint_password_saver::password_generator::{generate_password, PasswordGeneratorConfig};
+//! use rust_slint_password_saver::password_generator::{
+//!     generate_password, CharsetFlags, PasswordGeneratorConfig,
+//! };
 //!
 //! // Generate with default configuration (16 chars, all types, exclude ambiguous)
 //! let config = PasswordGeneratorConfig::default();
@@ -25,33 +27,45 @@
 //! // Generate with custom configuration
 //! let config = PasswordGeneratorConfig {
 //!     length: 20,
-//!     use_uppercase: true,
-//!     use_lowercase: true,
-//!     use_digits: true,
-//!     use_special: false,
+//!     charset: CharsetFlags::UPPERCASE | CharsetFlags::LOWERCASE | CharsetFlags::DIGITS,
 //!     exclude_ambiguous: true,
 //! };
 //! let password = generate_password(&config).expect("Failed to generate password");
 //! ```
 
+use bitflags::bitflags;
 use rand::{thread_rng, Rng};
+
+bitflags! {
+    /// Character set flags for password generation.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct CharsetFlags: u8 {
+        /// Include lowercase letters (a-z)
+        const LOWERCASE = 0b0001;
+        /// Include uppercase letters (A-Z)
+        const UPPERCASE = 0b0010;
+        /// Include digits (0-9)
+        const DIGITS    = 0b0100;
+        /// Include special characters (!@#$%...)
+        const SPECIAL   = 0b1000;
+    }
+}
+
+impl Default for CharsetFlags {
+    fn default() -> Self {
+        Self::all()
+    }
+}
 
 /// Configuration for password generation.
 ///
 /// Specifies the length and character types to include in generated passwords.
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PasswordGeneratorConfig {
     /// Length of the password (must be 8-128 characters)
     pub length: usize,
-    /// Include uppercase letters (A-Z)
-    pub use_uppercase: bool,
-    /// Include lowercase letters (a-z)
-    pub use_lowercase: bool,
-    /// Include digits (0-9)
-    pub use_digits: bool,
-    /// Include special characters (!@#$%^&*()_+-=[]{}|;:,.<>?)
-    pub use_special: bool,
+    /// Character sets to include (combination of [`CharsetFlags`] flags)
+    pub charset: CharsetFlags,
     /// Exclude ambiguous characters (O,0,I,l,1)
     pub exclude_ambiguous: bool,
 }
@@ -60,10 +74,7 @@ impl Default for PasswordGeneratorConfig {
     fn default() -> Self {
         Self {
             length: 16,
-            use_uppercase: true,
-            use_lowercase: true,
-            use_digits: true,
-            use_special: true,
+            charset: CharsetFlags::all(),
             exclude_ambiguous: true,
         }
     }
@@ -112,7 +123,7 @@ pub fn generate_password(config: &PasswordGeneratorConfig) -> Result<String, Str
     // Build character set based on configuration
     let mut charset = String::new();
 
-    if config.use_lowercase {
+    if config.charset.contains(CharsetFlags::LOWERCASE) {
         if config.exclude_ambiguous {
             charset.push_str("abcdefghjkmnpqrstuvwxyz"); // Exclude i, l, o
         } else {
@@ -120,7 +131,7 @@ pub fn generate_password(config: &PasswordGeneratorConfig) -> Result<String, Str
         }
     }
 
-    if config.use_uppercase {
+    if config.charset.contains(CharsetFlags::UPPERCASE) {
         if config.exclude_ambiguous {
             charset.push_str("ABCDEFGHJKLMNPQRSTUVWXYZ"); // Exclude I, O
         } else {
@@ -128,7 +139,7 @@ pub fn generate_password(config: &PasswordGeneratorConfig) -> Result<String, Str
         }
     }
 
-    if config.use_digits {
+    if config.charset.contains(CharsetFlags::DIGITS) {
         if config.exclude_ambiguous {
             charset.push_str("23456789"); // Exclude 0, 1
         } else {
@@ -136,7 +147,7 @@ pub fn generate_password(config: &PasswordGeneratorConfig) -> Result<String, Str
         }
     }
 
-    if config.use_special {
+    if config.charset.contains(CharsetFlags::SPECIAL) {
         charset.push_str("!@#$%^&*()_+-=[]{}|;:,.<>?");
     }
 
@@ -178,16 +189,18 @@ pub fn generate_password(config: &PasswordGeneratorConfig) -> Result<String, Str
 ///
 /// `true` if password meets all requirements, `false` otherwise
 fn validate_generated_password(password: &str, config: &PasswordGeneratorConfig) -> bool {
-    if config.use_uppercase && !password.chars().any(char::is_uppercase) {
+    if config.charset.contains(CharsetFlags::UPPERCASE) && !password.chars().any(char::is_uppercase)
+    {
         return false;
     }
-    if config.use_lowercase && !password.chars().any(char::is_lowercase) {
+    if config.charset.contains(CharsetFlags::LOWERCASE) && !password.chars().any(char::is_lowercase)
+    {
         return false;
     }
-    if config.use_digits && !password.chars().any(char::is_numeric) {
+    if config.charset.contains(CharsetFlags::DIGITS) && !password.chars().any(char::is_numeric) {
         return false;
     }
-    if config.use_special
+    if config.charset.contains(CharsetFlags::SPECIAL)
         && !password
             .chars()
             .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c))
@@ -244,19 +257,19 @@ pub fn calculate_entropy(password: &str, charset_size: usize) -> f64 {
 pub fn calculate_charset_size(config: &PasswordGeneratorConfig) -> usize {
     let mut size = 0;
 
-    if config.use_lowercase {
+    if config.charset.contains(CharsetFlags::LOWERCASE) {
         size += if config.exclude_ambiguous { 23 } else { 26 };
     }
 
-    if config.use_uppercase {
+    if config.charset.contains(CharsetFlags::UPPERCASE) {
         size += if config.exclude_ambiguous { 24 } else { 26 };
     }
 
-    if config.use_digits {
+    if config.charset.contains(CharsetFlags::DIGITS) {
         size += if config.exclude_ambiguous { 8 } else { 10 };
     }
 
-    if config.use_special {
+    if config.charset.contains(CharsetFlags::SPECIAL) {
         size += 28; // "!@#$%^&*()_+-=[]{}|;:,.<>?"
     }
 
@@ -271,10 +284,10 @@ mod tests {
     fn test_default_config() {
         let config = PasswordGeneratorConfig::default();
         assert_eq!(config.length, 16);
-        assert!(config.use_uppercase);
-        assert!(config.use_lowercase);
-        assert!(config.use_digits);
-        assert!(config.use_special);
+        assert!(config.charset.contains(CharsetFlags::UPPERCASE));
+        assert!(config.charset.contains(CharsetFlags::LOWERCASE));
+        assert!(config.charset.contains(CharsetFlags::DIGITS));
+        assert!(config.charset.contains(CharsetFlags::SPECIAL));
         assert!(config.exclude_ambiguous);
     }
 
@@ -282,10 +295,7 @@ mod tests {
     fn test_validate_generated_password() {
         let config = PasswordGeneratorConfig {
             length: 16,
-            use_uppercase: true,
-            use_lowercase: true,
-            use_digits: true,
-            use_special: true,
+            charset: CharsetFlags::all(),
             exclude_ambiguous: false,
         };
 
@@ -310,10 +320,7 @@ mod tests {
         // All types, exclude ambiguous
         let config = PasswordGeneratorConfig {
             length: 16,
-            use_uppercase: true,
-            use_lowercase: true,
-            use_digits: true,
-            use_special: true,
+            charset: CharsetFlags::all(),
             exclude_ambiguous: true,
         };
         assert_eq!(calculate_charset_size(&config), 23 + 24 + 8 + 28);
@@ -328,10 +335,7 @@ mod tests {
         // Lowercase only
         let config = PasswordGeneratorConfig {
             length: 16,
-            use_uppercase: false,
-            use_lowercase: true,
-            use_digits: false,
-            use_special: false,
+            charset: CharsetFlags::LOWERCASE,
             exclude_ambiguous: false,
         };
         assert_eq!(calculate_charset_size(&config), 26);

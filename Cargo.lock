@@ -4607,6 +4607,7 @@ dependencies = [
  "aes-gcm",
  "arboard",
  "argon2",
+ "bitflags 2.10.0",
  "env_logger",
  "hex",
  "hmac",

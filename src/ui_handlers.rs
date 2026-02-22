@@ -22,7 +22,8 @@
 
 use crate::clipboard::{ClipboardConfig, SecureClipboard};
 use crate::password_generator::{
-    calculate_charset_size, calculate_entropy, generate_password, PasswordGeneratorConfig,
+    calculate_charset_size, calculate_entropy, generate_password, CharsetFlags,
+    PasswordGeneratorConfig,
 };
 use crate::password_strength::{
     assess_password_strength, validate_password_strength, PasswordRequirements, PasswordStrength,
@@ -583,12 +584,22 @@ impl UIHandlers {
         self.session.record_activity();
 
         // Get configuration from UI
+        let mut charset = CharsetFlags::empty();
+        if ui.get_generator_use_uppercase() {
+            charset |= CharsetFlags::UPPERCASE;
+        }
+        if ui.get_generator_use_lowercase() {
+            charset |= CharsetFlags::LOWERCASE;
+        }
+        if ui.get_generator_use_digits() {
+            charset |= CharsetFlags::DIGITS;
+        }
+        if ui.get_generator_use_special() {
+            charset |= CharsetFlags::SPECIAL;
+        }
         let config = PasswordGeneratorConfig {
             length: ui.get_generator_length() as usize,
-            use_uppercase: ui.get_generator_use_uppercase(),
-            use_lowercase: ui.get_generator_use_lowercase(),
-            use_digits: ui.get_generator_use_digits(),
-            use_special: ui.get_generator_use_special(),
+            charset,
             exclude_ambiguous: ui.get_generator_exclude_ambiguous(),
         };
 
