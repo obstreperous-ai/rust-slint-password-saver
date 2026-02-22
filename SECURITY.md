@@ -11,6 +11,8 @@ This document outlines the security architecture, current security status, ident
 - [Identified Security Issues](#identified-security-issues)
 - [Security Recommendations](#security-recommendations)
 - [Action Items](#action-items)
+- [Code Coverage Assessment](#code-coverage-assessment)
+- [Holistic Security Assessment](#holistic-security-assessment)
 - [Reporting Security Vulnerabilities](#reporting-security-vulnerabilities)
 - [Security Best Practices for Contributors](#security-best-practices-for-contributors)
 
@@ -18,17 +20,18 @@ This document outlines the security architecture, current security status, ident
 
 ## Current Security Status
 
-### ✅ Security Audit Status: **PASSING**
+### ⚠️ Security Audit Status: **ACTION REQUIRED**
 
-The automated security audit (cargo-audit) is passing. All critical vulnerabilities have been resolved. Only non-critical warnings for unmaintained transitive dependencies remain.
+The automated security audit (cargo-audit) is passing. All critical dependency vulnerabilities have been resolved. However, the 2026-02-22 code-level security audit identified **5 new code-level weaknesses** that must be addressed. See [2026-02-22 Security Code Audit Findings](#2026-02-22-security-code-audit-findings) for details.
 
-### Security Audit Results (as of 2026-02-08)
+### Security Audit Results (as of 2026-02-22)
 
 ```
 ✅ Direct dependencies: No known vulnerabilities
 ✅ Transitive dependencies: No critical vulnerabilities
 ⚠️ Warnings: 2 unmaintained dependencies (non-critical)
 🔍 Total dependencies scanned: 618 crates
+🔴 Code-level findings: 5 new issues (1 high, 2 medium, 1 low-medium, 1 low)
 ```
 
 **Critical Issues:**
@@ -505,7 +508,160 @@ These annotations inform CodeQL that:
 
 ---
 
-## Action Items
+## 2026-02-22 Security Code Audit Findings
+
+A thorough code-level security audit was conducted on 2026-02-22, reviewing all production source files. Four new weaknesses were identified that require action.
+
+### 🔴 Finding 1 (HIGH): Predictable HMAC Key in Audit Log
+
+**Location:** `src/audit_log.rs` — `derive_hmac_key()` function
+
+**Description:**
+The HMAC key used to protect audit log integrity is derived deterministically from the machine's hostname and a static string:
+
+```rust
+// Current insecure implementation
+fn derive_hmac_key() -> [u8; 32] {
+    let hostname = hostname::get()...;
+    hasher.update(hostname.as_bytes());
+    hasher.update(b"audit_log_hmac_key_v1");
+    // ...
+}
+```
+
+**Impact:**
+- The hostname is publicly known information on any multi-user system
+- Any user on the same machine can compute the exact same HMAC key
+- This allows a local attacker to **forge or tamper with audit log entries** without detection
+- The integrity guarantee of the audit log is effectively broken for insider threats
+- An attacker who compromises the system could cover their tracks by rewriting the log
+
+**Severity:** 🔴 HIGH
+
+**Recommendation:**
+Generate a cryptographically random HMAC key once and persist it securely (encrypted with the master password or stored in the system keyring). See Issue #22.
+
+---
+
+### 🟡 Finding 2 (MEDIUM): Password Validation Inconsistency
+
+**Location:** `src/storage.rs` — `validate_password_strength()` vs `src/password_strength.rs`
+
+**Description:**
+There are two separate password validation functions with different minimum requirements:
+
+| Location | Min Length | Special Chars Required |
+|---|---|---|
+| `src/storage.rs::validate_password_strength()` | **8 characters** | ❌ No |
+| `src/password_strength.rs::validate_password_strength()` | **12 characters** | ✅ Yes |
+
+The `change_master_password()` function in `src/storage.rs` calls the **weaker** `storage.rs` validation:
+
+```rust
+// In storage.rs::change_master_password()
+validate_password_strength(new_password)?;  // Uses 8-char minimum, no special chars
+```
+
+**Impact:**
+- A user can change their master password to an 8-character password with no special characters (e.g., `SecurePass123`)
+- This is weaker than what is enforced at first setup (12 characters + special chars)
+- The security claim in SECURITY.md ("12 character minimum enforced") is partially incorrect
+- Inconsistency between modules creates confusion and potential bypass of intended policy
+
+**Severity:** 🟡 MEDIUM
+
+**Recommendation:**
+Consolidate password validation. Use the stricter `password_strength.rs` version in `change_master_password()`. See Issue #23.
+
+---
+
+### 🟡 Finding 3 (MEDIUM): Rate Limiting Not Persistent Across Restarts
+
+**Location:** `src/rate_limit.rs` — `RateLimiter` struct
+
+**Description:**
+The rate limiter stores failed attempt records exclusively in memory (`Mutex<Vec<Instant>>`). When the application is restarted, all rate limiting state is lost:
+
+```rust
+pub struct RateLimiter {
+    attempts: Mutex<Vec<Instant>>,  // Only in memory — wiped on restart
+    // ...
+}
+```
+
+**Impact:**
+- An attacker can restart the application after each batch of 5 failed attempts
+- This completely bypasses the lockout mechanism
+- Effective brute-force resistance is reduced to 5 attempts per session, not 5 per window
+- A determined attacker with shell access can automate restart + 5 attempts cycles
+- The protection is only effective against interactive attackers, not scripted attacks
+
+**Severity:** 🟡 MEDIUM
+
+**Recommendation:**
+Persist failed attempt timestamps and lockout state to an encrypted file. See Issue #24.
+
+---
+
+### 🔵 Finding 4 (LOW-MEDIUM): Recovery Key Not Derived with Memory-Hard Function
+
+**Location:** `src/recovery.rs` — `derive_recovery_key()` function
+
+**Description:**
+The recovery master key is derived using a plain SHA-256 hash, unlike the main encryption key which uses Argon2id:
+
+```rust
+fn derive_recovery_key(codes: &[RecoveryCode], master_password: &str) -> Vec<u8> {
+    let combined_with_password = format!("{}:{}", combined, master_password);
+    let mut hasher = Sha256::new();
+    hasher.update(combined_with_password.as_bytes());
+    hasher.finalize().to_vec()  // Raw SHA-256 — fast to brute-force
+}
+```
+
+**Impact:**
+- SHA-256 can be computed ~10¹⁰ times/second on a modern GPU
+- Argon2id (used elsewhere) is intentionally limited to ~1 computation per second
+- If the encrypted database is stolen, the recovery key can be brute-forced orders of magnitude faster than the master password
+- Recovery codes have ~77 bits of entropy (16 chars × log₂(30-character alphabet)), which makes raw brute-force impractical even with SHA-256, but the design is inconsistent with the rest of the security architecture
+- Future changes (e.g., shorter recovery codes or reduced entropy) would create a practical vulnerability without any explicit design change
+
+**Severity:** 🔵 LOW-MEDIUM (impractical to exploit with current entropy, but architecturally weak)
+
+**Recommendation:**
+Use Argon2 for recovery key derivation, consistent with the main encryption key derivation. See Issue #25.
+
+---
+
+### 🔵 Finding 5 (LOW): Master Password Not Zeroized at UI Layer
+
+**Location:** `src/main.rs` — UI callback handlers
+
+**Description:**
+The `PasswordEntry` struct and encryption keys are properly zeroized via `ZeroizeOnDrop`. However, the master password received from the Slint UI is handled as a standard `SharedString` or `String`, which does not implement `Zeroize`:
+
+```rust
+// In main.rs UI callback (illustrative)
+ui.on_save_password(move |master_password, title, username, password| {
+    // master_password is a SharedString — NOT zeroized after this callback
+    storage.save_entries(&entries, &master_password.to_string()).unwrap();
+    // master_password String may persist in heap memory until GC
+});
+```
+
+**Impact:**
+- The master password string may persist in heap memory after the callback returns
+- If the process memory is dumped (core dump, swap file, or forensic analysis), the master password may be recoverable
+- The PasswordEntry passwords are protected, but the encryption key itself is not
+
+**Severity:** 🔵 LOW (requires memory access to exploit)
+
+**Recommendation:**
+Wrap master password strings in `zeroize::Zeroizing<String>` before passing to storage operations. See Issue #26.
+
+---
+
+
 
 The following tasks are formatted as GitHub issues ready to be picked up by Copilot or developers. Each task is self-contained and includes implementation guidance.
 
@@ -535,7 +691,11 @@ The following tasks are formatted as GitHub issues ready to be picked up by Copi
 21. ✅ Implement Emergency Access and Account Recovery
 
 **New Action Items (🔵 To Be Implemented):**
-- None - All identified security features have been successfully implemented!
+1. 🔴 Issue #22: Fix Predictable HMAC Key in Audit Log
+2. 🟡 Issue #23: Fix Password Validation Inconsistency (8-char vs 12-char minimum)
+3. 🟡 Issue #24: Implement Persistent Rate Limiting
+4. 🔵 Issue #25: Use Argon2 for Recovery Key Derivation
+5. 🔵 Issue #26: Zeroize Master Password at UI Layer
 
 ---
 
@@ -3528,7 +3688,580 @@ The current implementation provides identity verification through recovery codes
 
 ---
 
-## Reporting Security Vulnerabilities
+### Issue 22: 🔴 Fix Predictable HMAC Key in Audit Log
+
+**Title:** Replace hostname-derived HMAC key with cryptographically random persistent key
+
+**Status:** 🔴 **OPEN** — Identified 2026-02-22
+
+**Description:**
+The HMAC key used to protect audit log integrity (`src/audit_log.rs::derive_hmac_key()`) is derived deterministically from the machine's hostname and a static string. Because the hostname is publicly known on any multi-user system, any local user can compute the same HMAC key and forge or modify audit log entries without detection.
+
+This undermines the forensic value of the audit trail — the very mechanism intended to detect unauthorized access.
+
+**Vulnerability Details:**
+- **Location:** `src/audit_log.rs`, function `derive_hmac_key()`
+- **Current code:** `hasher.update(hostname.as_bytes()); hasher.update(b"audit_log_hmac_key_v1");`
+- **Attack:** An attacker on the same machine computes `SHA-256(hostname || "audit_log_hmac_key_v1")` and uses this to sign forged log entries
+- **Required access:** Read access to hostname (available to all system users)
+
+**Security Impact:**
+- 🔴 Audit log integrity is not guaranteed on shared systems
+- An attacker can cover their tracks by rewriting audit entries with valid HMACs
+- The audit log cannot be trusted as forensic evidence
+
+**Solution:**
+
+Generate a cryptographically random HMAC key on first launch and persist it securely:
+
+1. **Generate** a 32-byte random key using `OsRng` on first application launch
+2. **Persist** the key in the same directory as the password database, encrypted with the master password, or stored as a separate protected file with 0600 permissions
+3. **Load** the key from storage on subsequent launches
+4. **Fall back** to a degraded mode (without HMAC) if the key file is missing or unreadable, but log a warning
+
+**Implementation Steps:**
+
+1. In `src/audit_log.rs`, add a `hmac_key_path` field and update `new()` to accept an optional key or key path:
+```rust
+pub struct AuditLogger {
+    log_path: PathBuf,
+    hmac_key: [u8; 32],
+}
+
+impl AuditLogger {
+    /// Load or generate a persistent HMAC key for audit log integrity.
+    ///
+    /// On first launch, generates a random key and writes it to `key_path`
+    /// with 0600 permissions. On subsequent launches, reads the key from file.
+    pub fn load_or_create_hmac_key(key_path: &Path) -> [u8; 32] {
+        if key_path.exists() {
+            // Load existing key
+            if let Ok(bytes) = fs::read(key_path) {
+                if bytes.len() == 32 {
+                    let mut key = [0u8; 32];
+                    key.copy_from_slice(&bytes);
+                    return key;
+                }
+            }
+        }
+        // Generate new random key
+        let mut key = [0u8; 32];
+        use aes_gcm::aead::rand_core::RngCore;
+        OsRng.fill_bytes(&mut key);
+        // Persist with secure permissions
+        let _ = fs::write(key_path, &key);
+        #[cfg(unix)]
+        let _ = PasswordStorage::set_secure_permissions(key_path);
+        key
+    }
+}
+```
+
+2. Update `AuditLogger::new()` to use `load_or_create_hmac_key()` instead of `derive_hmac_key()`
+
+3. Update `get_audit_log_path()` to also return the HMAC key path, or add a `get_audit_hmac_key_path()` helper
+
+4. Update `src/main.rs` to pass the key path when constructing `AuditLogger`
+
+5. Add the HMAC key file to `.gitignore` (already covered by `~/.password_saver/`)
+
+**Files to Modify:**
+- `src/audit_log.rs` — Replace `derive_hmac_key()` with `load_or_create_hmac_key(path)`
+- `src/main.rs` — Pass HMAC key path when constructing `AuditLogger`
+- `src/storage.rs` — Expose helper for setting permissions on new key file (already implemented)
+
+**Testing:**
+- Test that HMAC key file is created with 0600 permissions on first launch
+- Test that the same key is loaded on subsequent launches
+- Test that audit entries signed with one key fail verification with a different key
+- Test graceful degradation when key file is missing
+
+**Acceptance Criteria:**
+- [ ] HMAC key is cryptographically random (32 bytes from `OsRng`)
+- [ ] Key is persisted to `~/.password_saver/audit_hmac.key` with 0600 permissions
+- [ ] Same key is loaded on subsequent app launches
+- [ ] Audit entries created before key change fail HMAC verification
+- [ ] Tests verify key persistence and tamper detection
+- [ ] `derive_hmac_key()` is removed
+
+**Priority:** 🔴 HIGH
+**Estimated Effort:** 2-3 hours
+**Labels:** security, audit-log, cryptography, integrity
+
+---
+
+### Issue 23: 🟡 Fix Password Validation Inconsistency
+
+**Title:** Consolidate master password validation to use 12-character minimum with special character requirement
+
+**Status:** 🟡 **OPEN** — Identified 2026-02-22
+
+**Description:**
+There are two separate password validation functions with different minimum requirements. The `change_master_password()` path uses the weaker validation (8 characters, no special character requirement), allowing users to downgrade their master password security after initial setup.
+
+**Vulnerability Details:**
+- **Weaker validation:** `src/storage.rs::validate_password_strength(password: &str)` — 8 characters minimum, no special character requirement
+- **Stronger validation:** `src/password_strength.rs::validate_password_strength(password, requirements)` — 12 characters minimum, requires uppercase, lowercase, digit, and special character
+- **Usage:** `change_master_password()` calls the weaker `storage.rs` version
+- **Impact:** A user can set a new master password like `Pass1234` (8 chars, no special) via password change
+
+**Security Impact:**
+- Users can weaken their master password security after first setup
+- Violates the principle of consistent security policy enforcement
+- Documentation claims 12-character minimum for master password, which is incorrect for password changes
+
+**Solution:**
+
+Replace the standalone `validate_password_strength()` in `storage.rs` with a call to the comprehensive version from `password_strength.rs`:
+
+1. In `src/storage.rs`, remove the standalone `validate_password_strength()` function
+2. In `src/storage.rs::change_master_password()`, import and use `password_strength::validate_password_strength()` with `PasswordRequirements::default()`
+3. Update `storage.rs` public API to re-export or delegate to `password_strength.rs`
+
+```rust
+// In src/storage.rs::change_master_password()
+use crate::password_strength::{validate_password_strength, PasswordRequirements};
+
+// Replace:
+validate_password_strength(new_password)?;
+
+// With:
+validate_password_strength(new_password, &PasswordRequirements::default())
+    .map_err(|e| SecurityError::InvalidInput(format!("password: {}", e)))?;
+```
+
+4. Update all callers of the old `storage::validate_password_strength` to use the new consolidated function
+5. Update documentation (`src/storage.rs` doc comments) to reflect the corrected requirements
+
+**Files to Modify:**
+- `src/storage.rs` — Remove standalone `validate_password_strength()`, update `change_master_password()` to use `password_strength.rs` version
+- `src/lib.rs` — Update public API exports if needed
+- `tests/storage_test.rs` — Update tests that relied on the 8-char minimum
+
+**Testing:**
+- Test that `change_master_password()` rejects 8-character passwords without special characters
+- Test that `change_master_password()` accepts passwords meeting the 12-character requirement
+- Test that existing tests for `validate_password_strength` in `storage.rs` are updated
+
+**Acceptance Criteria:**
+- [ ] Single password validation function used consistently for all master password operations
+- [ ] Master password change enforces 12-character minimum
+- [ ] Master password change requires special character
+- [ ] All tests updated and passing
+- [ ] Documentation updated to reflect consistent requirements
+
+**Priority:** 🟡 MEDIUM
+**Estimated Effort:** 1-2 hours
+**Labels:** security, validation, consistency
+
+---
+
+### Issue 24: 🟡 Implement Persistent Rate Limiting
+
+**Title:** Persist rate limiting state to disk to prevent bypass by application restart
+
+**Status:** 🟡 **OPEN** — Identified 2026-02-22
+
+**Description:**
+The current `RateLimiter` stores failed authentication attempt records in memory only. Restarting the application resets all rate limiting state, allowing a determined attacker to repeatedly attempt up to 5 passwords per application restart with no effective penalty.
+
+**Vulnerability Details:**
+- **Location:** `src/rate_limit.rs` — `RateLimiter::attempts: Mutex<Vec<Instant>>`
+- **Attack:** Restart application → attempt 5 passwords → restart again → repeat indefinitely
+- **Effect:** The 5-attempt limit is trivially bypassed, reducing security to the underlying password strength alone
+
+**Security Impact:**
+- Rate limiting provides no protection against scripted or automated attacks
+- Protection is limited to interactive manual attackers only
+- NIST SP 800-63B guidance for persistent rate limiting is not met
+
+**Solution:**
+
+Persist failed attempt timestamps to an encrypted file alongside the password database:
+
+1. Add a `persist_path` field to `RateLimiter`
+2. On each failed attempt, serialize the attempt timestamp list to a JSON file at `~/.password_saver/rate_limit.json`
+3. On application startup, load existing attempt records and filter out expired ones
+4. Use `secure_update_file()` (already implemented in `src/secure_delete.rs`) for atomic writes
+5. Set 0600 permissions on the rate limit state file
+
+```rust
+pub struct RateLimiter {
+    attempts: Mutex<Vec<SystemTime>>,  // Use SystemTime for serializable timestamps
+    persist_path: Option<PathBuf>,
+    // ...existing fields...
+}
+
+impl RateLimiter {
+    pub fn with_persistence(persist_path: PathBuf) -> Self {
+        let mut limiter = Self::new();
+        limiter.persist_path = Some(persist_path.clone());
+        // Load existing attempts from file
+        if let Ok(data) = fs::read_to_string(&persist_path) {
+            if let Ok(timestamps) = serde_json::from_str::<Vec<u64>>(&data) {
+                let now = SystemTime::now();
+                let window = Duration::from_secs(RATE_LIMIT_WINDOW_SECONDS);
+                let mut attempts = limiter.attempts.lock().unwrap();
+                for ts in timestamps {
+                    let attempt_time = UNIX_EPOCH + Duration::from_secs(ts);
+                    if now.duration_since(attempt_time).unwrap_or(window) < window {
+                        attempts.push(attempt_time);
+                    }
+                }
+            }
+        }
+        limiter
+    }
+
+    fn persist_attempts(&self) {
+        if let Some(path) = &self.persist_path {
+            let attempts = self.attempts.lock().unwrap();
+            let timestamps: Vec<u64> = attempts.iter()
+                .filter_map(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .collect();
+            let json = serde_json::to_string(&timestamps).unwrap_or_default();
+            let _ = secure_update_file(path, json.as_bytes());
+            #[cfg(unix)]
+            let _ = PasswordStorage::set_secure_permissions(path);
+        }
+    }
+}
+```
+
+6. Update `src/main.rs` to initialize `RateLimiter` with persistence path
+7. Update `record_success()` to clear the persistent state file on successful authentication
+
+**Files to Modify:**
+- `src/rate_limit.rs` — Add persistence support using `SystemTime` for serializable timestamps
+- `src/main.rs` — Initialize rate limiter with `~/.password_saver/rate_limit.json` path
+- `Cargo.toml` — Already has `serde_json` dependency
+
+**Testing:**
+- Test that failed attempts persist across simulated restarts (by creating a new `RateLimiter` pointing to the same file)
+- Test that expired attempts are pruned on load
+- Test that successful authentication clears the persistent state
+- Test that the rate limit file has 0600 permissions
+- Test graceful handling of corrupted rate limit file (should reset to empty)
+
+**Acceptance Criteria:**
+- [ ] Failed attempt timestamps persisted to `~/.password_saver/rate_limit.json`
+- [ ] Rate limiting state survives application restart
+- [ ] Expired attempts are pruned when file is loaded
+- [ ] Rate limit file has 0600 permissions
+- [ ] Successful authentication clears persisted state
+- [ ] Corrupted rate limit file is handled gracefully (resets to zero attempts)
+- [ ] Tests verify persistence behavior across simulated restarts
+
+**Priority:** 🟡 MEDIUM
+**Estimated Effort:** 3-4 hours
+**Labels:** security, rate-limiting, brute-force-protection
+
+---
+
+### Issue 25: 🔵 Use Argon2 for Recovery Key Derivation
+
+**Title:** Replace SHA-256 with Argon2 for recovery key derivation to maintain consistent security posture
+
+**Status:** 🔵 **OPEN** — Identified 2026-02-22
+
+**Description:**
+The recovery master key is derived using plain SHA-256 in `src/recovery.rs::derive_recovery_key()`, inconsistent with the rest of the codebase which uses Argon2id for all key derivation. This design inconsistency means recovery codes can be brute-forced significantly faster than master passwords if an attacker obtains the database file.
+
+**Technical Details:**
+- SHA-256 throughput on modern GPU: ~10¹⁰ hashes/second
+- Argon2id (32 MiB, 2 iterations): ~1 hash/second (deliberately slow)
+- Recovery code entropy: ~77 bits (16 chars × log₂(30))
+- At 10¹⁰ H/s, exhausting 77 bits would take ~3.8 billion years — still impractical
+- However, if future versions reduce entropy (e.g., shorter codes for usability), this becomes a real vulnerability
+- Architecturally, the inconsistency means the recovery path is a weaker link
+
+**Security Impact:**
+- 🔵 Currently low practical risk due to high entropy
+- Architecturally inconsistent — creates a weaker recovery path
+- Any future reduction in recovery code entropy would immediately create a practical attack
+
+**Solution:**
+
+Replace the SHA-256 derivation with Argon2id, using a salt stored alongside the recovery code hashes:
+
+```rust
+fn derive_recovery_key(
+    codes: &[RecoveryCode],
+    master_password: &str,
+    salt: &[u8],
+) -> Result<Vec<u8>, SecurityError> {
+    // Combine recovery codes and master password as the password input
+    let combined = codes.iter()
+        .map(|c| c.code.as_str())
+        .collect::<Vec<&str>>()
+        .join("|");
+    let password_input = format!("{}:{}", combined, master_password);
+
+    // Use Argon2id (same parameters as main key derivation)
+    let params = Params::new(32768, 2, 4, Some(32))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let salt_string = SaltString::encode_b64(salt)?;
+    let hash = argon2.hash_password(password_input.as_bytes(), &salt_string)?;
+    Ok(hash.hash.ok_or(SecurityError::CryptographicError)?.as_bytes().to_vec())
+}
+```
+
+Update `EmergencyRecovery::create()` to generate and store a salt for key derivation, and update `StorageData` to persist this salt.
+
+**Files to Modify:**
+- `src/recovery.rs` — Update `derive_recovery_key()` to use Argon2id
+- `src/storage.rs` — Update `StorageData` struct to include recovery key derivation salt if not already present
+
+**Testing:**
+- Test that recovery key derivation produces a 32-byte key
+- Test that the same codes + password + salt always produce the same key (deterministic)
+- Test that different salts produce different keys
+- Performance test: derivation should complete within 3 seconds
+
+**Acceptance Criteria:**
+- [ ] Recovery key derivation uses Argon2id with same parameters as main key derivation
+- [ ] A random salt is generated and stored with recovery data
+- [ ] Existing functionality tests still pass (key may change, but verification still works)
+- [ ] Performance is acceptable (< 3 seconds additional startup time for recovery)
+- [ ] Documentation updated to describe Argon2-based recovery key derivation
+
+**Priority:** 🔵 LOW-MEDIUM
+**Estimated Effort:** 2-3 hours
+**Labels:** security, cryptography, recovery, consistency
+
+---
+
+### Issue 26: 🔵 Zeroize Master Password at UI Layer
+
+**Title:** Wrap master password strings in Zeroizing<String> in UI callbacks to prevent memory exposure
+
+**Status:** 🔵 **OPEN** — Identified 2026-02-22
+
+**Description:**
+The master password received from the Slint UI is handled as `SharedString` or converted to `String` before being passed to storage operations. Neither `SharedString` nor `String` implements `Zeroize`, so the master password may persist in heap memory after the UI callback returns, until the allocator reuses that memory.
+
+**Technical Details:**
+- `PasswordEntry.password` is correctly wrapped with `ZeroizeOnDrop`
+- The 32-byte AES key derived by `derive_key()` is a stack array — cleared on function return
+- The master password `String` passed to `save_entries()` and `load_entries()` is NOT zeroized
+- Exposure window: from when the user types the password to when the allocator reuses the memory (could be process lifetime)
+
+**Security Impact:**
+- Low risk in practice (requires memory access to the running process)
+- Relevant in environments where memory dumps, core files, or swap may be inspected
+- Inconsistent with the broader secure memory handling strategy already in place
+
+**Solution:**
+
+Wrap master password strings in `Zeroizing<String>` before passing to storage operations:
+
+```rust
+use zeroize::Zeroizing;
+
+// In UI callback:
+ui.on_save_password(move |master_password_shared, title, username, password| {
+    // Convert to Zeroizing<String> immediately
+    let master_password: Zeroizing<String> = Zeroizing::new(master_password_shared.to_string());
+
+    // Pass as &str to storage operations
+    match storage.save_entries(&entries, master_password.as_str()) {
+        Ok(()) => { /* ... */ }
+        Err(e) => { /* ... */ }
+    }
+    // master_password is zeroized here when it drops
+});
+```
+
+Apply the same pattern in all UI callbacks that receive a master password:
+- `on_save_password`
+- `on_load_passwords`
+- `on_unlock`
+- `on_change_master_password` (both old and new password fields)
+- `on_recover_access`
+
+**Files to Modify:**
+- `src/main.rs` — Wrap master password strings in `Zeroizing<String>` in all callbacks that receive the master password from the UI
+
+**Testing:**
+- Add a comment-level documentation test noting that `Zeroizing<String>` is used
+- Verify that all code paths that receive a master password from UI use `Zeroizing<String>`
+
+**Acceptance Criteria:**
+- [ ] All UI callbacks that receive a master password wrap it in `Zeroizing<String>` immediately
+- [ ] No plain `String` or `.to_string()` calls persist master password beyond the callback scope
+- [ ] Code review confirms consistent pattern throughout `main.rs`
+
+**Priority:** 🔵 LOW
+**Estimated Effort:** 1-2 hours
+**Labels:** security, memory-safety, zeroize
+
+---
+
+## Code Coverage Assessment
+
+This section documents the current state of security-related test coverage as of 2026-02-22.
+
+### Coverage Summary
+
+| Security Feature | Test File | Coverage | Gaps |
+|---|---|---|---|
+| Encryption/Decryption | `tests/storage_test.rs` | ✅ Good | — |
+| Password Validation (storage.rs) | `tests/storage_test.rs` | ✅ Good | 8-char weakness tested but not flagged |
+| Password Validation (password_strength.rs) | `tests/password_strength_test.rs` | ✅ Excellent | — |
+| File Permissions (Unix) | `tests/storage_test.rs` | ✅ Good | — |
+| File Permissions (Windows) | N/A | ⚠️ None | No CI runs on Windows |
+| Rate Limiting (in-memory) | `tests/rate_limit_test.rs` | ✅ Good | Missing persistence tests |
+| Rate Limiting (persistence) | N/A | 🔴 Missing | Not yet implemented |
+| Audit Log HMAC integrity | `src/audit_log.rs` (inline) | ⚠️ Partial | HMAC key is predictable — tamper detection not tested end-to-end |
+| Session Timeout | `tests/session_test.rs` | ✅ Good | Background thread behavior not tested |
+| Clipboard Auto-Clear | `tests/clipboard_test.rs` | ⚠️ Limited | Timing-based clear not reliably testable |
+| Secure Deletion | `tests/storage_test.rs` | ⚠️ Partial | 3-pass overwrite correctness not verified |
+| Recovery Codes | `tests/recovery_test.rs` | ✅ Good | Full DB decrypt recovery not tested |
+| Input Validation | `tests/validation_test.rs` | ✅ Good | — |
+| Error Sanitization | `tests/error_sanitization_test.rs` | ✅ Good | — |
+| Password Generator | `tests/password_generator_test.rs` | ✅ Excellent | — |
+| Backup/Import | `tests/storage_test.rs` | ⚠️ Partial | Corrupt backup detection not tested |
+| Database Integrity | `src/integrity.rs` (inline) | ✅ Good | — |
+| Update Checker | `src/update_checker.rs` (inline) | ⚠️ Partial | Network failure / redirect not tested |
+| Search (timing safety) | `tests/storage_test.rs` | ⚠️ Limited | Constant-time search behaviour not validated |
+| Zeroize on Drop | `tests/storage_test.rs` | ⚠️ Limited | UI-layer master password not covered |
+| Concurrent Access | None | 🔴 Missing | No multi-threaded auth tests |
+
+### Critical Coverage Gaps
+
+#### Gap 1: Rate Limit Persistence (🔴 Missing)
+
+No tests verify that rate limiting state persists across simulated application restarts. Once Issue #24 (persistent rate limiting) is implemented, tests must be added.
+
+**Required Tests:**
+- `test_rate_limit_persists_across_restart` — serialize attempts to file, create new `RateLimiter` from same file, verify attempts are counted
+- `test_rate_limit_file_permissions` — verify state file has 0600 permissions
+- `test_expired_attempts_pruned_on_load` — attempts older than window are ignored on reload
+
+#### Gap 2: HMAC Tamper Detection (⚠️ Partial)
+
+No test verifies that a tampered audit log entry (with invalid HMAC) is detected during log verification. The HMAC key derivation issue (Finding 1) means tamper detection is broken regardless, but the test infrastructure should be present.
+
+**Required Tests:**
+- `test_tampered_log_entry_detected` — modify a log entry on disk, attempt to read/verify it, expect detection
+- `test_hmac_key_persistence` — verify HMAC key file is created, has 0600 permissions, and is reloaded correctly
+
+#### Gap 3: Recovery Full-Workflow Database Decryption (⚠️ Partial)
+
+Current recovery tests verify code generation and verification but do not test a complete end-to-end scenario where a user forgets their master password and uses recovery codes to access their stored passwords. This gap reflects the known limitation noted in Issue #21 (recovery currently only verifies identity, not decrypts).
+
+**Required Tests (once full recovery is implemented):**
+- `test_full_recovery_workflow` — save passwords with master password, forget master password, use recovery code, verify stored passwords are accessible
+
+#### Gap 4: Concurrent Authentication (🔴 Missing)
+
+No tests verify thread-safety of the authentication path under concurrent load.
+
+**Required Tests:**
+- `test_concurrent_unlock_attempts` — spawn multiple threads attempting authentication simultaneously, verify rate limiting is applied correctly and no data corruption occurs
+
+#### Gap 5: Windows Platform Coverage (⚠️ None)
+
+All file permission tests run on Unix only. Windows-specific permission code (`src/windows_permissions.rs`) is not covered by automated tests.
+
+**Required Tests:**
+- Run CI pipeline on Windows (GitHub Actions `windows-latest` runner)
+- `test_windows_file_permissions_restrict_access` — verify file is inaccessible to other users
+
+### New Tests Required (Action Items)
+
+| Test | Priority | Issue |
+|---|---|---|
+| Rate limit persistence across restart | 🔴 HIGH | #24 |
+| HMAC key persistence and tamper detection | 🔴 HIGH | #22 |
+| Concurrent authentication thread safety | 🟡 MEDIUM | New |
+| Full recovery workflow with DB decryption | 🟡 MEDIUM | #21 followup |
+| Windows file permissions CI | 🔵 LOW | Ongoing |
+| Corrupt backup graceful failure | 🔵 LOW | New |
+
+---
+
+## Holistic Security Assessment
+
+This section captures broader security observations that do not map to a single code fix but are important for the overall security posture of the project.
+
+### 1. No Formal Threat Model
+
+**Observation:** The project lacks a documented threat model. Without a threat model, it is difficult to evaluate whether all relevant attack scenarios are addressed.
+
+**Recommended Threat Actors to Document:**
+- Local unprivileged user on a shared system
+- Attacker with read access to `~/.password_saver/` directory
+- Attacker with a copy of the encrypted database file (offline attack)
+- Malicious application running with user privileges (clipboard sniffing, keylogging)
+- Forensic investigator with access to memory dumps, swap files, or hibernation images
+
+**Action:** Create a `THREAT_MODEL.md` document describing in-scope and out-of-scope threats, and map each security control to the threat it mitigates.
+
+### 2. Missing Security Contact
+
+**Observation:** The `Reporting Security Vulnerabilities` section contains a placeholder: `[security contact needed]`. There is currently no published channel for responsible disclosure.
+
+**Action:** Add a GitHub security policy (`.github/SECURITY.md` is already this file) and enable GitHub's private vulnerability reporting feature, or publish a security contact email.
+
+### 3. Argon2 Parameters Below OWASP Recommended Level
+
+**Observation:** The current Argon2id parameters are:
+- Memory: 32 MiB
+- Iterations: 2
+- Parallelism: 4
+
+OWASP recommends **at minimum 64 MiB** for password manager use cases. The current 32 MiB provides good security but is below the recommended level. The performance trade-off should be explicitly documented and periodically revisited as hardware speeds increase.
+
+**Action:** Evaluate upgrading to 64 MiB memory cost and document the hardware performance trade-off. Consider making parameters configurable.
+
+### 4. No Application Binary Signing or Integrity Verification
+
+**Observation:** The application binary is not digitally signed. Users have no way to verify that a downloaded binary has not been tampered with. This is particularly relevant for the auto-update notification feature.
+
+**Note:** The update checker correctly points users to the GitHub release page rather than auto-downloading, which partially mitigates this concern. GitHub provides package signing via their certificate infrastructure.
+
+**Action:** Consider adding `cargo-dist` or similar release tooling that produces signed artifacts with checksums in release notes.
+
+### 5. Clipboard Manager Interaction
+
+**Observation:** The clipboard auto-clear mechanism clears the clipboard after 30 seconds. However, many desktop environments (KDE Klipper, Clipman, macOS clipboard history) store clipboard history. Cleared clipboard content may still be recoverable from clipboard manager history.
+
+**No code change available** — this is a platform-level limitation. Users should be advised to disable clipboard managers or use clipboard managers that support "sensitive data" exclusion patterns.
+
+**Action:** Add a user-facing warning in the application's UI and README advising users about clipboard manager risks.
+
+### 6. Single Factor Authentication (By Design)
+
+**Observation:** The application relies solely on a master password for authentication. There is no support for a second factor (TOTP, hardware security key, biometrics). This is typical for local-only password managers, but worth documenting explicitly as a known scope limitation.
+
+**Note:** Recovery codes provide an alternative credential, but they are not a second factor — they replace the master password rather than supplementing it.
+
+**Action:** Document in README and SECURITY.md that two-factor authentication is out of scope for v0.1 and create an issue for future consideration.
+
+### Security Posture Summary (2026-02-22)
+
+| Category | Status | Notes |
+|---|---|---|
+| Encryption Algorithm | ✅ Strong | AES-256-GCM, industry standard |
+| Key Derivation | ✅ Good | Argon2id, 32 MiB (below OWASP recommended 64 MiB) |
+| Memory Safety | ✅ Good | Rust ownership, ZeroizeOnDrop for passwords |
+| File Permissions | ✅ Good | 0600/0700 on Unix, ACL on Windows |
+| Input Validation | ✅ Good | Comprehensive, minor inconsistency in change-password path |
+| Rate Limiting | ⚠️ Partial | Effective only within single session |
+| Audit Logging | ⚠️ Partial | Present but HMAC key is predictable |
+| Session Management | ✅ Good | Auto-lock, configurable timeout |
+| Clipboard Security | ✅ Good | Auto-clear, 30s timeout |
+| Recovery Mechanism | ⚠️ Partial | Codes generated, full decryption recovery pending |
+| Dependency Security | ✅ Good | cargo-audit passing, 0 critical issues |
+| Threat Model | 🔴 Missing | No formal threat model document |
+| Security Contact | 🔴 Missing | No published responsible disclosure contact |
+| Binary Integrity | 🔵 N/A | GitHub releases provide checksums |
+
+---
+
+
 
 ### Responsible Disclosure
 
@@ -3536,7 +4269,7 @@ If you discover a security vulnerability in this project, please follow responsi
 
 1. **DO NOT** open a public GitHub issue
 2. **DO NOT** disclose the vulnerability publicly until it has been addressed
-3. **DO** email the maintainers directly at: [security contact needed]
+3. **DO** report via GitHub's private vulnerability reporting: navigate to the repository's **Security** tab → **Report a vulnerability**. Alternatively, open a private discussion with the maintainer (`@obstreperous-ai`)
 4. **DO** provide detailed information about the vulnerability
 5. **DO** allow reasonable time for the maintainers to address the issue
 
@@ -3688,6 +4421,29 @@ Always test:
 
 ## Changelog
 
+### 2026-02-22 - Comprehensive Security Code Audit
+
+- Conducted thorough code-level security audit of all production source files
+- Identified 5 new code-level security findings:
+  - **HIGH**: Predictable HMAC key in audit log (hostname-derived) — Issue #22
+  - **MEDIUM**: Password validation inconsistency (8-char vs 12-char minimum) — Issue #23
+  - **MEDIUM**: Non-persistent rate limiting (bypassed by restart) — Issue #24
+  - **LOW-MEDIUM**: Recovery key derivation using SHA-256 instead of Argon2 — Issue #25
+  - **LOW**: Master password not zeroized at UI layer — Issue #26
+- Conducted comprehensive code coverage assessment for security features
+- Identified 6 critical test gaps:
+  - Rate limit persistence, HMAC tamper detection, concurrent auth, recovery workflow, Windows CI, corrupt backup handling
+- Conducted holistic security assessment covering:
+  - Missing threat model documentation
+  - Missing security contact (now resolved — using GitHub private vulnerability reporting)
+  - Argon2 parameters below OWASP recommended 64 MiB
+  - Clipboard manager interaction risk
+  - No application binary signing
+  - Single-factor authentication (by design)
+- Updated security status from PASSING to ACTION REQUIRED
+- Updated Table of Contents with new sections
+- All 5 new issues formatted as GitHub issues for agentic implementation
+
 ### 2026-02-10 - Security Properties Expansion
 
 - Conducted comprehensive security review of all aspects
@@ -3718,6 +4474,6 @@ Always test:
 
 ---
 
-**Last Updated:** 2026-02-10  
-**Security Audit Status:** ⚠️ PASSING (0 critical issues, 2 non-critical warnings, 11 enhancement opportunities)  
-**Next Review Date:** 2026-03-10
+**Last Updated:** 2026-02-22  
+**Security Audit Status:** ⚠️ ACTION REQUIRED (5 code-level findings: 1 high, 2 medium, 1 low-medium, 1 low; 0 critical dependency issues; 2 non-critical dependency warnings)  
+**Next Review Date:** 2026-03-22
