@@ -257,7 +257,8 @@ fn test_recovery_code_round_trip_through_storage() {
 fn test_audit_log_records_events() {
     let temp_dir = tempdir().unwrap();
     let log_path = temp_dir.path().join("audit.log");
-    let logger = AuditLogger::new(log_path.clone());
+    let key_path = temp_dir.path().join("audit_hmac.key");
+    let logger = AuditLogger::new(log_path.clone(), &key_path);
 
     // Log a PasswordsSaved event.
     let entry = AuditLogger::create_entry(
@@ -306,7 +307,8 @@ fn test_audit_log_records_events() {
 fn test_audit_log_entries_have_hmac() {
     let temp_dir = tempdir().unwrap();
     let log_path = temp_dir.path().join("audit_hmac.log");
-    let logger = AuditLogger::new(log_path.clone());
+    let key_path = temp_dir.path().join("audit_hmac.key");
+    let logger = AuditLogger::new(log_path.clone(), &key_path);
 
     let entry = AuditLogger::create_entry(AuditEventType::ApplicationStartup, true, None);
     logger.log_event(&entry).expect("Failed to log event");
