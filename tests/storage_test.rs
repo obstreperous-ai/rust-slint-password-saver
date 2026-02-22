@@ -811,3 +811,200 @@ fn test_timing_jitter_is_applied() {
     // Clean up
     let _ = fs::remove_file(&test_path);
 }
+
+// ---------------------------------------------------------------------------
+// Trait implementation tests (PartialEq, Eq, Hash, Ord)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_partial_eq_equal_entries() {
+    let ts = current_timestamp();
+    let a = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user@example.com".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "password_a".to_string(),
+        created_at: ts,
+    };
+    let b = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user@example.com".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "password_b".to_string(), // different password – should still be equal
+        created_at: ts,
+    };
+    assert_eq!(
+        a, b,
+        "Entries with same title/username/timestamp must be equal regardless of password"
+    );
+}
+
+#[test]
+fn test_partial_eq_different_title() {
+    let ts = current_timestamp();
+    let a = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: ts,
+    };
+    let b = PasswordEntry {
+        title: "GitLab".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: ts,
+    };
+    assert_ne!(a, b, "Entries with different titles must not be equal");
+}
+
+#[test]
+fn test_partial_eq_different_username() {
+    let ts = current_timestamp();
+    let a = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "alice".to_string(),
+        password: "pass".to_string(),
+        created_at: ts,
+    };
+    let b = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "bob".to_string(),
+        password: "pass".to_string(),
+        created_at: ts,
+    };
+    assert_ne!(a, b, "Entries with different usernames must not be equal");
+}
+
+#[test]
+fn test_partial_eq_different_timestamp() {
+    let a = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: 1_000_000,
+    };
+    let b = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: 2_000_000,
+    };
+    assert_ne!(a, b, "Entries with different timestamps must not be equal");
+}
+
+#[test]
+fn test_partial_eq_password_does_not_affect_equality() {
+    let ts = 1_700_000_000u64;
+    let a = PasswordEntry {
+        title: "Site".to_string(),
+        username: "user".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "secret_one".to_string(),
+        created_at: ts,
+    };
+    let b = PasswordEntry {
+        title: "Site".to_string(),
+        username: "user".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "completely_different_secret".to_string(),
+        created_at: ts,
+    };
+    assert_eq!(a, b, "Password must not affect equality");
+}
+
+#[test]
+fn test_hash_equal_entries_have_same_hash() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let ts = 1_700_000_000u64;
+    let a = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "pass_a".to_string(),
+        created_at: ts,
+    };
+    let b = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "pass_b".to_string(), // different password
+        created_at: ts,
+    };
+
+    let hash_of = |e: &PasswordEntry| {
+        let mut h = DefaultHasher::new();
+        e.hash(&mut h);
+        h.finish()
+    };
+
+    assert_eq!(
+        hash_of(&a),
+        hash_of(&b),
+        "Equal entries must have the same hash"
+    );
+}
+
+#[test]
+fn test_ord_sorts_by_timestamp_then_title() {
+    let early = PasswordEntry {
+        title: "ZZZ".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: 1_000,
+    };
+    let late_a = PasswordEntry {
+        title: "AAA".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: 2_000,
+    };
+    let late_b = PasswordEntry {
+        title: "BBB".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: 2_000,
+    };
+
+    let mut entries = [late_b.clone(), early.clone(), late_a.clone()];
+    entries.sort();
+
+    assert_eq!(entries[0], early, "Earliest timestamp should sort first");
+    assert_eq!(entries[1], late_a, "Same timestamp: AAA before BBB");
+    assert_eq!(entries[2], late_b, "Same timestamp: BBB after AAA");
+}
+
+#[test]
+fn test_hashset_deduplication() {
+    use std::collections::HashSet;
+
+    let ts = 1_700_000_000u64;
+    let a = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "pass_a".to_string(),
+        created_at: ts,
+    };
+    let b = PasswordEntry {
+        title: "GitHub".to_string(),
+        username: "user".to_string(),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        password: "pass_b".to_string(), // same identity, different password
+        created_at: ts,
+    };
+    let c = PasswordEntry {
+        title: "Gmail".to_string(),
+        username: "user".to_string(),
+        password: "pass".to_string(),
+        created_at: ts,
+    };
+
+    let set: HashSet<PasswordEntry> = vec![a, b, c].into_iter().collect();
+    assert_eq!(
+        set.len(),
+        2,
+        "HashSet must deduplicate entries with same title/username/timestamp"
+    );
+}
