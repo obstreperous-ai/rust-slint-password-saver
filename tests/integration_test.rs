@@ -66,8 +66,10 @@ fn test_password_change_integration() {
     let _ = fs::remove_file(&test_path);
 
     let storage = PasswordStorage::new(test_path.clone());
-    let old_password = "OldSecure123";
-    let new_password = "NewSecure456";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let old_password = "OldS3cur3P@ss!";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let new_password = "NewS3cur3P@ss!";
 
     // Create initial test data
     let entries = vec![
