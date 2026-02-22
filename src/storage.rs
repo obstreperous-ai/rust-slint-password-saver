@@ -35,7 +35,9 @@ use argon2::{
 use log::warn;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
@@ -87,6 +89,41 @@ pub struct PasswordEntry {
     pub password: String,
     #[zeroize(skip)]
     pub created_at: u64,
+}
+
+impl PartialEq for PasswordEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title
+            && self.username == other.username
+            && self.created_at == other.created_at
+        // Note: password intentionally NOT compared
+    }
+}
+
+impl Eq for PasswordEntry {}
+
+impl Hash for PasswordEntry {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.title.hash(state);
+        self.username.hash(state);
+        self.created_at.hash(state);
+        // Note: password intentionally NOT hashed
+    }
+}
+
+impl PartialOrd for PasswordEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PasswordEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.created_at
+            .cmp(&other.created_at)
+            .then_with(|| self.title.cmp(&other.title))
+            .then_with(|| self.username.cmp(&other.username))
+    }
 }
 
 /// Manages encrypted storage of password entries using AES-256-GCM encryption.
