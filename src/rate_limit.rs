@@ -9,6 +9,8 @@
 //! - **Brute-force protection**: Limits attempts within a time window
 //! - **Exponential backoff**: Enforces lockout after max attempts exceeded
 //! - **Automatic cleanup**: Removes old attempts outside the time window
+//! - **Persistent state**: Failed attempt timestamps are persisted to disk to
+//!   survive application restarts, preventing bypass via restart cycling
 //!
 //! # Example
 //!
@@ -33,8 +35,11 @@
 //! assert!(limiter.check_and_record_attempt().is_ok());
 //! ```
 
+use crate::secure_delete::secure_update_file;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Maximum failed authentication attempts before lockout.
 ///
@@ -73,6 +78,12 @@ const LOCKOUT_DURATION_SECONDS: u64 = 60;
 /// - **Time window**: 5 minutes (300 seconds)
 /// - **Lockout duration**: 1 minute (60 seconds)
 ///
+/// # Persistence
+///
+/// When created with [`RateLimiter::with_persistence`], failed attempt timestamps
+/// are persisted to disk at the given path. This ensures rate limiting state
+/// survives application restarts, preventing bypass via restart cycling.
+///
 /// # Example
 ///
 /// ```
@@ -87,14 +98,16 @@ const LOCKOUT_DURATION_SECONDS: u64 = 60;
 /// }
 /// ```
 pub struct RateLimiter {
-    /// Vector of attempt timestamps
-    attempts: Mutex<Vec<Instant>>,
+    /// Vector of attempt timestamps (using `SystemTime` for serializable cross-restart state)
+    attempts: Mutex<Vec<SystemTime>>,
     /// Maximum number of attempts allowed in the time window
     max_attempts: usize,
     /// Time window for counting attempts
     window: Duration,
     /// Duration to lock out after exceeding max attempts
     lockout_duration: Duration,
+    /// Optional path for persisting attempt timestamps to disk
+    persist_path: Option<PathBuf>,
 }
 
 impl RateLimiter {
@@ -103,6 +116,9 @@ impl RateLimiter {
     /// Default configuration:
     /// - 5 attempts per 5-minute window
     /// - 1-minute lockout after exceeding limit
+    /// - No persistence (state is in-memory only)
+    ///
+    /// To enable persistence across restarts, use [`RateLimiter::with_persistence`].
     ///
     /// # Returns
     ///
@@ -122,7 +138,60 @@ impl RateLimiter {
             max_attempts: MAX_ATTEMPTS_PER_WINDOW,
             window: Duration::from_secs(RATE_LIMIT_WINDOW_SECONDS),
             lockout_duration: Duration::from_secs(LOCKOUT_DURATION_SECONDS),
+            persist_path: None,
         }
+    }
+
+    /// Creates a rate limiter that persists failed attempt timestamps to disk.
+    ///
+    /// On construction, any existing attempt records from a previous session are
+    /// loaded from `persist_path` and unexpired entries are restored. This ensures
+    /// the rate limit cannot be bypassed by restarting the application.
+    ///
+    /// On each recorded attempt, the timestamp list is serialised as JSON and
+    /// written atomically via [`secure_update_file`]. On successful authentication
+    /// the file is cleared.
+    ///
+    /// A corrupted or missing persist file is handled gracefully — the rate limiter
+    /// starts with an empty attempt list.
+    ///
+    /// # Arguments
+    ///
+    /// * `persist_path` - Path to the JSON file used to persist attempt timestamps
+    ///
+    /// # Returns
+    ///
+    /// A new `RateLimiter` with state loaded from `persist_path` (if it exists)
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rust_slint_password_saver::rate_limit::RateLimiter;
+    /// use std::path::PathBuf;
+    ///
+    /// let limiter = RateLimiter::with_persistence(PathBuf::from("/tmp/rate_limit.json"));
+    /// ```
+    #[must_use]
+    pub fn with_persistence(persist_path: PathBuf) -> Self {
+        let mut limiter = Self::new();
+        // Load existing attempts from file, filtering out expired ones
+        if let Ok(data) = fs::read_to_string(&persist_path) {
+            if let Ok(timestamps) = serde_json::from_str::<Vec<u64>>(&data) {
+                let now = SystemTime::now();
+                let window = Duration::from_secs(RATE_LIMIT_WINDOW_SECONDS);
+                if let Ok(mut attempts) = limiter.attempts.lock() {
+                    for ts in timestamps {
+                        let attempt_time = UNIX_EPOCH + Duration::from_secs(ts);
+                        if now.duration_since(attempt_time).unwrap_or(window) < window {
+                            attempts.push(attempt_time);
+                        }
+                    }
+                }
+            }
+            // If serde_json::from_str fails (corrupted file), attempts remain empty — graceful reset
+        }
+        limiter.persist_path = Some(persist_path);
+        limiter
     }
 
     /// Checks if an attempt is allowed and records it if so.
@@ -132,6 +201,7 @@ impl RateLimiter {
     /// 2. Checks if max attempts have been exceeded
     /// 3. If exceeded, enforces lockout duration
     /// 4. Records the current attempt if allowed
+    /// 5. Persists the updated attempt list to disk (if persistence is configured)
     ///
     /// # Returns
     ///
@@ -164,48 +234,56 @@ impl RateLimiter {
     /// }
     /// ```
     pub fn check_and_record_attempt(&self) -> Result<(), String> {
-        let mut attempts = self
-            .attempts
-            .lock()
-            .map_err(|_| "Internal error: Failed to acquire rate limiter lock".to_string())?;
+        {
+            let mut attempts = self
+                .attempts
+                .lock()
+                .map_err(|_| "Internal error: Failed to acquire rate limiter lock".to_string())?;
 
-        let now = Instant::now();
+            let now = SystemTime::now();
 
-        // Remove attempts outside the time window
-        attempts.retain(|&attempt_time| now.duration_since(attempt_time) < self.window);
+            // Remove attempts outside the time window
+            attempts.retain(|attempt_time| {
+                now.duration_since(*attempt_time).unwrap_or(self.window) < self.window
+            });
 
-        // Check if we've exceeded max attempts
-        if attempts.len() >= self.max_attempts {
-            // Find the most recent attempt in the window to enforce lockout from there
-            if let Some(&most_recent_attempt) = attempts.last() {
-                let time_since_most_recent = now.duration_since(most_recent_attempt);
+            // Check if we've exceeded max attempts
+            if attempts.len() >= self.max_attempts {
+                // Find the most recent attempt in the window to enforce lockout from there
+                if let Some(&most_recent_attempt) = attempts.last() {
+                    let time_since_most_recent =
+                        now.duration_since(most_recent_attempt).unwrap_or_default();
 
-                // If we're still within the lockout period after the most recent attempt
-                if time_since_most_recent < self.lockout_duration {
-                    let remaining_secs = self
-                        .lockout_duration
-                        .checked_sub(time_since_most_recent)
-                        .map_or(0, |d| d.as_secs());
-                    return Err(format!(
-                        "Too many failed attempts. Please wait {} seconds before trying again.",
-                        remaining_secs
-                    ));
+                    // If we're still within the lockout period after the most recent attempt
+                    if time_since_most_recent < self.lockout_duration {
+                        let remaining_secs = self
+                            .lockout_duration
+                            .checked_sub(time_since_most_recent)
+                            .map_or(0, |d| d.as_secs());
+                        return Err(format!(
+                            "Too many failed attempts. Please wait {} seconds before trying again.",
+                            remaining_secs
+                        ));
+                    }
+
+                    // If lockout has expired, clear old attempts and allow this one
+                    attempts.clear();
                 }
-
-                // If lockout has expired, clear old attempts and allow this one
-                attempts.clear();
             }
-        }
 
-        // Record this attempt
-        attempts.push(now);
+            // Record this attempt
+            attempts.push(now);
+            // MutexGuard released here so persist_attempts can acquire the lock
+        }
+        self.persist_attempts();
         Ok(())
     }
 
     /// Records a successful authentication and clears all failed attempts.
     ///
     /// This method should be called when the user successfully authenticates
-    /// with the correct master password. It resets the rate limiter state.
+    /// with the correct master password. It resets the rate limiter state both
+    /// in memory and in the persistent file (if persistence is configured).
     ///
     /// # Example
     ///
@@ -223,6 +301,37 @@ impl RateLimiter {
     pub fn record_success(&self) {
         if let Ok(mut attempts) = self.attempts.lock() {
             attempts.clear();
+        }
+        // Persist the cleared state (writes an empty array to the file)
+        self.persist_attempts();
+    }
+
+    /// Serialises the current attempt list to the persist file (if configured).
+    ///
+    /// Each timestamp is stored as a Unix epoch seconds value. The file is written
+    /// atomically via [`secure_update_file`] and set to 0600 permissions on Unix.
+    /// Any I/O error is silently ignored — persistence is best-effort.
+    fn persist_attempts(&self) {
+        if let Some(path) = &self.persist_path {
+            let timestamps: Vec<u64> = self
+                .attempts
+                .lock()
+                .map(|attempts| {
+                    attempts
+                        .iter()
+                        .filter_map(|t| t.duration_since(UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let json = serde_json::to_string(&timestamps).unwrap_or_else(|_| "[]".to_string());
+            let _ = secure_update_file(path, json.as_bytes());
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let permissions = fs::Permissions::from_mode(0o600);
+                let _ = fs::set_permissions(path, permissions);
+            }
         }
     }
 
@@ -248,10 +357,12 @@ impl RateLimiter {
     #[allow(dead_code)]
     pub fn attempt_count(&self) -> usize {
         self.attempts.lock().map_or(0, |attempts| {
-            let now = Instant::now();
+            let now = SystemTime::now();
             attempts
                 .iter()
-                .filter(|&&attempt_time| now.duration_since(attempt_time) < self.window)
+                .filter(|attempt_time| {
+                    now.duration_since(**attempt_time).unwrap_or(self.window) < self.window
+                })
                 .count()
         })
     }
@@ -371,6 +482,7 @@ mod tests {
             max_attempts: 5,
             window: Duration::from_millis(100), // 100ms window
             lockout_duration: Duration::from_millis(50),
+            persist_path: None,
         };
 
         // Make some attempts

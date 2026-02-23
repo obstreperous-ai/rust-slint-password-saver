@@ -1,4 +1,5 @@
 use rust_slint_password_saver::rate_limit::RateLimiter;
+use tempfile::tempdir;
 
 #[test]
 fn test_rate_limiter_integration() {
@@ -131,4 +132,138 @@ fn test_time_window_cleanup() {
 
     // Verify attempts are tracked
     assert_eq!(limiter.attempt_count(), 3);
+}
+
+// ─── Persistence tests ───────────────────────────────────────────────────────
+
+/// Simulates application restart by creating a second `RateLimiter` pointing to
+/// the same file.  The second limiter should inherit the attempt count from the
+/// first, so the rate limit cannot be bypassed by restarting.
+#[test]
+fn test_persistence_survives_restart() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let persist_path = dir.path().join("rate_limit.json");
+
+    // First "session": make 3 attempts
+    {
+        let limiter = RateLimiter::with_persistence(persist_path.clone());
+        for _ in 0..3 {
+            assert!(limiter.check_and_record_attempt().is_ok());
+        }
+        // attempt_count should be 3
+        assert_eq!(limiter.attempt_count(), 3);
+    }
+
+    // Second "session" (simulated restart): load from the same file
+    {
+        let limiter = RateLimiter::with_persistence(persist_path.clone());
+        // Should restore the 3 attempts from the previous session
+        assert_eq!(
+            limiter.attempt_count(),
+            3,
+            "Attempt count should be restored after restart"
+        );
+
+        // 2 more attempts should still be allowed
+        assert!(limiter.check_and_record_attempt().is_ok());
+        assert!(limiter.check_and_record_attempt().is_ok());
+
+        // Now we have 5 — next one should be blocked
+        assert!(
+            limiter.check_and_record_attempt().is_err(),
+            "Should be rate limited after restoring persistent state"
+        );
+    }
+}
+
+/// Expired attempt timestamps must be pruned when the file is loaded so that
+/// old data does not carry over beyond the rate-limit window.
+#[test]
+fn test_persistence_expired_attempts_pruned() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let persist_path = dir.path().join("rate_limit.json");
+
+    // Write a file containing timestamps that are well in the past (> 5 min ago)
+    let old_ts: Vec<u64> = vec![1, 2, 3]; // Unix epoch seconds — definitely expired
+    let json = serde_json::to_string(&old_ts).unwrap();
+    std::fs::write(&persist_path, json).unwrap();
+
+    // Loading the file should discard all expired timestamps
+    let limiter = RateLimiter::with_persistence(persist_path);
+    assert_eq!(
+        limiter.attempt_count(),
+        0,
+        "Expired attempts should be pruned on load"
+    );
+}
+
+/// A successful authentication should clear the persist file so that the next
+/// session starts with zero failed attempts.
+#[test]
+fn test_persistence_success_clears_state() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let persist_path = dir.path().join("rate_limit.json");
+
+    // Make some attempts and then record success
+    {
+        let limiter = RateLimiter::with_persistence(persist_path.clone());
+        for _ in 0..3 {
+            let _ = limiter.check_and_record_attempt();
+        }
+        limiter.record_success();
+    }
+
+    // Simulate a restart — should start with zero attempts
+    {
+        let limiter = RateLimiter::with_persistence(persist_path);
+        assert_eq!(
+            limiter.attempt_count(),
+            0,
+            "Attempt count should be 0 after successful auth cleared state"
+        );
+    }
+}
+
+/// A corrupted rate limit file must be handled gracefully — the limiter should
+/// start with an empty attempt list rather than panicking.
+#[test]
+fn test_persistence_corrupted_file_handled_gracefully() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let persist_path = dir.path().join("rate_limit.json");
+
+    // Write invalid JSON to simulate a corrupted file
+    std::fs::write(&persist_path, b"not valid json{{{{").unwrap();
+
+    // Should not panic and should start with zero attempts
+    let limiter = RateLimiter::with_persistence(persist_path);
+    assert_eq!(
+        limiter.attempt_count(),
+        0,
+        "Corrupted persist file should reset to zero attempts"
+    );
+    // Normal operation should still work
+    assert!(limiter.check_and_record_attempt().is_ok());
+}
+
+/// The rate limit file must be created with 0600 permissions on Unix to prevent
+/// other users on the same system from reading or modifying it.
+#[cfg(unix)]
+#[test]
+fn test_persistence_file_has_secure_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().expect("Failed to create temp dir");
+    let persist_path = dir.path().join("rate_limit.json");
+
+    let limiter = RateLimiter::with_persistence(persist_path.clone());
+    // Trigger a write by recording one attempt
+    let _ = limiter.check_and_record_attempt();
+
+    let metadata = std::fs::metadata(&persist_path).expect("Failed to read persist file metadata");
+    let mode = metadata.permissions().mode() & 0o777;
+    assert_eq!(
+        mode, 0o600,
+        "Rate limit file must have 0600 permissions, got {:o}",
+        mode
+    );
 }
