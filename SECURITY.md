@@ -589,10 +589,10 @@ pub struct RateLimiter {
 - A determined attacker with shell access can automate restart + 5 attempts cycles
 - The protection is only effective against interactive attackers, not scripted attacks
 
-**Severity:** 🟡 MEDIUM
+**Severity:** 🟡 MEDIUM — ✅ **RESOLVED** in Issue #24
 
-**Recommendation:**
-Persist failed attempt timestamps and lockout state to an encrypted file. See Issue #24.
+**Resolution:**
+Failed attempt timestamps are now persisted to `~/.password_saver/rate_limit.json` (0600 permissions). State survives application restart. See Issue #24 for full details.
 
 ---
 
@@ -686,7 +686,7 @@ The following tasks are formatted as GitHub issues ready to be picked up by Copi
 **New Action Items (🔵 To Be Implemented):**
 1. 🔴 Issue #22: Fix Predictable HMAC Key in Audit Log
 2. 🟡 Issue #23: Fix Password Validation Inconsistency (8-char vs 12-char minimum)
-3. 🟡 Issue #24: Implement Persistent Rate Limiting
+3. ✅ Issue #24: Implement Persistent Rate Limiting — **RESOLVED 2026-02-23**
 4. 🔵 Issue #25: Use Argon2 for Recovery Key Derivation
 5. 🔵 Issue #26: Zeroize Master Password at UI Layer
 
@@ -3826,102 +3826,49 @@ crate::password_strength::validate_password_strength(
 
 ---
 
-### Issue 24: 🟡 Implement Persistent Rate Limiting
+### Issue 24: 🟢 Implement Persistent Rate Limiting
 
 **Title:** Persist rate limiting state to disk to prevent bypass by application restart
 
-**Status:** 🟡 **OPEN** — Identified 2026-02-22
+**Status:** 🟢 **RESOLVED** — Identified 2026-02-22, Fixed 2026-02-23
 
 **Description:**
-The current `RateLimiter` stores failed authentication attempt records in memory only. Restarting the application resets all rate limiting state, allowing a determined attacker to repeatedly attempt up to 5 passwords per application restart with no effective penalty.
+The `RateLimiter` previously stored failed authentication attempt records in memory only. Restarting the application reset all rate limiting state, allowing a determined attacker to repeatedly attempt up to 5 passwords per application restart with no effective penalty.
 
 **Vulnerability Details:**
 - **Location:** `src/rate_limit.rs` — `RateLimiter::attempts: Mutex<Vec<Instant>>`
 - **Attack:** Restart application → attempt 5 passwords → restart again → repeat indefinitely
-- **Effect:** The 5-attempt limit is trivially bypassed, reducing security to the underlying password strength alone
+- **Effect:** The 5-attempt limit was trivially bypassed, reducing security to the underlying password strength alone
 
 **Security Impact:**
 - Rate limiting provides no protection against scripted or automated attacks
 - Protection is limited to interactive manual attackers only
 - NIST SP 800-63B guidance for persistent rate limiting is not met
 
-**Solution:**
+**Resolution:**
 
-Persist failed attempt timestamps to an encrypted file alongside the password database:
+Failed attempt timestamps are now persisted to `~/.password_saver/rate_limit.json` using `SystemTime` (serializable Unix epoch seconds). Key changes:
 
-1. Add a `persist_path` field to `RateLimiter`
-2. On each failed attempt, serialize the attempt timestamp list to a JSON file at `~/.password_saver/rate_limit.json`
-3. On application startup, load existing attempt records and filter out expired ones
-4. Use `secure_update_file()` (already implemented in `src/secure_delete.rs`) for atomic writes
-5. Set 0600 permissions on the rate limit state file
+1. `RateLimiter` now has a `persist_path: Option<PathBuf>` field and uses `Mutex<Vec<SystemTime>>` for serializable timestamps
+2. `RateLimiter::with_persistence(path)` constructor loads existing (non-expired) attempts from file on startup
+3. `persist_attempts()` writes the attempt list atomically via `secure_update_file()` after every recorded attempt
+4. `record_success()` clears both in-memory state and the persist file
+5. The persist file is written with 0600 permissions on Unix
+6. Corrupted/missing persist files are handled gracefully (reset to zero attempts)
+7. `UIHandlers::new()` initialises the rate limiter with persistence at `<storage_dir>/rate_limit.json`
 
-```rust
-pub struct RateLimiter {
-    attempts: Mutex<Vec<SystemTime>>,  // Use SystemTime for serializable timestamps
-    persist_path: Option<PathBuf>,
-    // ...existing fields...
-}
-
-impl RateLimiter {
-    pub fn with_persistence(persist_path: PathBuf) -> Self {
-        let mut limiter = Self::new();
-        limiter.persist_path = Some(persist_path.clone());
-        // Load existing attempts from file
-        if let Ok(data) = fs::read_to_string(&persist_path) {
-            if let Ok(timestamps) = serde_json::from_str::<Vec<u64>>(&data) {
-                let now = SystemTime::now();
-                let window = Duration::from_secs(RATE_LIMIT_WINDOW_SECONDS);
-                let mut attempts = limiter.attempts.lock().unwrap();
-                for ts in timestamps {
-                    let attempt_time = UNIX_EPOCH + Duration::from_secs(ts);
-                    if now.duration_since(attempt_time).unwrap_or(window) < window {
-                        attempts.push(attempt_time);
-                    }
-                }
-            }
-        }
-        limiter
-    }
-
-    fn persist_attempts(&self) {
-        if let Some(path) = &self.persist_path {
-            let attempts = self.attempts.lock().unwrap();
-            let timestamps: Vec<u64> = attempts.iter()
-                .filter_map(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .collect();
-            let json = serde_json::to_string(&timestamps).unwrap_or_default();
-            let _ = secure_update_file(path, json.as_bytes());
-            #[cfg(unix)]
-            let _ = PasswordStorage::set_secure_permissions(path);
-        }
-    }
-}
-```
-
-6. Update `src/main.rs` to initialize `RateLimiter` with persistence path
-7. Update `record_success()` to clear the persistent state file on successful authentication
-
-**Files to Modify:**
-- `src/rate_limit.rs` — Add persistence support using `SystemTime` for serializable timestamps
-- `src/main.rs` — Initialize rate limiter with `~/.password_saver/rate_limit.json` path
-- `Cargo.toml` — Already has `serde_json` dependency
-
-**Testing:**
-- Test that failed attempts persist across simulated restarts (by creating a new `RateLimiter` pointing to the same file)
-- Test that expired attempts are pruned on load
-- Test that successful authentication clears the persistent state
-- Test that the rate limit file has 0600 permissions
-- Test graceful handling of corrupted rate limit file (should reset to empty)
+**Files Modified:**
+- `src/rate_limit.rs` — Added persistence support using `SystemTime` for serializable timestamps
+- `src/ui_handlers.rs` — Initialise rate limiter with `<storage_dir>/rate_limit.json` path
 
 **Acceptance Criteria:**
-- [ ] Failed attempt timestamps persisted to `~/.password_saver/rate_limit.json`
-- [ ] Rate limiting state survives application restart
-- [ ] Expired attempts are pruned when file is loaded
-- [ ] Rate limit file has 0600 permissions
-- [ ] Successful authentication clears persisted state
-- [ ] Corrupted rate limit file is handled gracefully (resets to zero attempts)
-- [ ] Tests verify persistence behavior across simulated restarts
+- [x] Failed attempt timestamps persisted to `~/.password_saver/rate_limit.json`
+- [x] Rate limiting state survives application restart
+- [x] Expired attempts are pruned when file is loaded
+- [x] Rate limit file has 0600 permissions
+- [x] Successful authentication clears persisted state
+- [x] Corrupted rate limit file is handled gracefully (resets to zero attempts)
+- [x] Tests verify persistence behavior across simulated restarts
 
 **Priority:** 🟡 MEDIUM
 **Estimated Effort:** 3-4 hours
@@ -4081,8 +4028,7 @@ This section documents the current state of security-related test coverage as of
 | Password Validation (password_strength.rs) | `tests/password_strength_test.rs` | ✅ Excellent | — |
 | File Permissions (Unix) | `tests/storage_test.rs` | ✅ Good | — |
 | File Permissions (Windows) | N/A | ⚠️ None | No CI runs on Windows |
-| Rate Limiting (in-memory) | `tests/rate_limit_test.rs` | ✅ Good | Missing persistence tests |
-| Rate Limiting (persistence) | N/A | 🔴 Missing | Not yet implemented |
+| Rate Limiting (persistent) | `tests/rate_limit_test.rs` | ✅ Excellent | Persistence across restarts, 0600 permissions, corrupted file handling all tested |
 | Audit Log HMAC integrity | `src/audit_log.rs` (inline) | ⚠️ Partial | HMAC key is predictable — tamper detection not tested end-to-end |
 | Session Timeout | `tests/session_test.rs` | ✅ Good | Background thread behavior not tested |
 | Clipboard Auto-Clear | `tests/clipboard_test.rs` | ⚠️ Limited | Timing-based clear not reliably testable |
@@ -4100,14 +4046,15 @@ This section documents the current state of security-related test coverage as of
 
 ### Critical Coverage Gaps
 
-#### Gap 1: Rate Limit Persistence (🔴 Missing)
+#### Gap 1: Rate Limit Persistence (✅ Resolved — Issue #24)
 
-No tests verify that rate limiting state persists across simulated application restarts. Once Issue #24 (persistent rate limiting) is implemented, tests must be added.
-
-**Required Tests:**
-- `test_rate_limit_persists_across_restart` — serialize attempts to file, create new `RateLimiter` from same file, verify attempts are counted
-- `test_rate_limit_file_permissions` — verify state file has 0600 permissions
-- `test_expired_attempts_pruned_on_load` — attempts older than window are ignored on reload
+Rate limiting state now persists to `~/.password_saver/rate_limit.json` across application restarts.
+Tests added in `tests/rate_limit_test.rs`:
+- `test_persistence_survives_restart` — attempts restored from file after simulated restart
+- `test_persistence_file_has_secure_permissions` — state file has 0600 permissions (Unix)
+- `test_persistence_expired_attempts_pruned` — expired attempts ignored on reload
+- `test_persistence_success_clears_state` — successful auth clears the persist file
+- `test_persistence_corrupted_file_handled_gracefully` — corrupted file resets to zero attempts
 
 #### Gap 2: HMAC Tamper Detection (⚠️ Partial)
 
@@ -4143,7 +4090,7 @@ All file permission tests run on Unix only. Windows-specific permission code (`s
 
 | Test | Priority | Issue |
 |---|---|---|
-| Rate limit persistence across restart | 🔴 HIGH | #24 |
+| ~~Rate limit persistence across restart~~ | ~~🔴 HIGH~~ | ~~#24~~ ✅ Done |
 | HMAC key persistence and tamper detection | 🔴 HIGH | #22 |
 | Concurrent authentication thread safety | 🟡 MEDIUM | New |
 | Full recovery workflow with DB decryption | 🟡 MEDIUM | #21 followup |
@@ -4397,7 +4344,7 @@ Always test:
 - Identified 5 new code-level security findings:
   - **HIGH**: Predictable HMAC key in audit log (hostname-derived) — Issue #22
   - **MEDIUM**: Password validation inconsistency (8-char vs 12-char minimum) — Issue #23
-  - **MEDIUM**: Non-persistent rate limiting (bypassed by restart) — Issue #24
+  - **MEDIUM**: Non-persistent rate limiting (bypassed by restart) — Issue #24 ✅ RESOLVED
   - **LOW-MEDIUM**: Recovery key derivation using SHA-256 instead of Argon2 — Issue #25
   - **LOW**: Master password not zeroized at UI layer — Issue #26
 - Conducted comprehensive code coverage assessment for security features

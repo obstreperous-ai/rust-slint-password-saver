@@ -168,8 +168,6 @@ pub struct PasswordStorage {
     storage_path: PathBuf,
 }
 
-
-
 /// Adds random timing jitter to mitigate timing attacks.
 ///
 /// # Security Rationale

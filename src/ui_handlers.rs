@@ -94,7 +94,8 @@ impl UIHandlers {
     ///
     /// Initialises all shared state with sensible defaults:
     /// - Empty loaded entries cache
-    /// - Rate limiter with default settings (5 attempts per 5-minute window)
+    /// - Rate limiter with persistence at `<storage_dir>/rate_limit.json`
+    ///   (5 attempts per 5-minute window, state survives restarts)
     /// - Session manager with 5-minute inactivity timeout
     /// - Uninitialised clipboard (lazy-initialised on first use)
     /// - Default clipboard configuration (30-second auto-clear)
@@ -104,10 +105,15 @@ impl UIHandlers {
     /// * `storage_path` - Path to the encrypted password storage file
     #[must_use]
     pub fn new(storage_path: PathBuf) -> Self {
+        // Derive the rate limit persistence path from the storage directory
+        let rate_limit_path = storage_path.parent().map_or_else(
+            || PathBuf::from("rate_limit.json"),
+            |parent| parent.join("rate_limit.json"),
+        );
         Self {
             storage_path,
             loaded_entries: Arc::new(Mutex::new(Vec::new())),
-            rate_limiter: Arc::new(RateLimiter::new()),
+            rate_limiter: Arc::new(RateLimiter::with_persistence(rate_limit_path)),
             session: Arc::new(SessionManager::new(DEFAULT_SESSION_TIMEOUT_MINUTES)),
             clipboard: Arc::new(Mutex::new(None)),
             clipboard_config: ClipboardConfig::default(),
