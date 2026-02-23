@@ -543,35 +543,28 @@ Generate a cryptographically random HMAC key once and persist it securely (encry
 
 ---
 
-### 🟡 Finding 2 (MEDIUM): Password Validation Inconsistency
+### ✅ Finding 2 (MEDIUM): Password Validation Inconsistency — **FIXED**
 
 **Location:** `src/storage.rs` — `validate_password_strength()` vs `src/password_strength.rs`
 
 **Description:**
-There are two separate password validation functions with different minimum requirements:
+There were two separate password validation functions with different minimum requirements:
 
 | Location | Min Length | Special Chars Required |
 |---|---|---|
-| `src/storage.rs::validate_password_strength()` | **8 characters** | ❌ No |
+| ~~`src/storage.rs::validate_password_strength()`~~ | ~~**8 characters**~~ | ~~❌ No~~ |
 | `src/password_strength.rs::validate_password_strength()` | **12 characters** | ✅ Yes |
 
-The `change_master_password()` function in `src/storage.rs` calls the **weaker** `storage.rs` validation:
+The `change_master_password()` function in `src/storage.rs` previously called the **weaker** `storage.rs` validation. This has been fixed.
 
-```rust
-// In storage.rs::change_master_password()
-validate_password_strength(new_password)?;  // Uses 8-char minimum, no special chars
-```
+**Fix Applied:**
+- Removed `validate_password_strength()` from `src/storage.rs`
+- `change_master_password()` now uses `password_strength::validate_password_strength()` with `PasswordRequirements::default()` (12-char minimum + special character requirement)
+- All master password operations now consistently enforce the same strong requirements
 
-**Impact:**
-- A user can change their master password to an 8-character password with no special characters (e.g., `SecurePass123`)
-- This is weaker than what is enforced at first setup (12 characters + special chars)
-- The security claim in SECURITY.md ("12 character minimum enforced") is partially incorrect
-- Inconsistency between modules creates confusion and potential bypass of intended policy
+**Severity:** ✅ **RESOLVED**
 
-**Severity:** 🟡 MEDIUM
-
-**Recommendation:**
-Consolidate password validation. Use the stricter `password_strength.rs` version in `change_master_password()`. See Issue #23.
+**Reference:** Issue #23
 
 ---
 
@@ -3790,68 +3783,45 @@ impl AuditLogger {
 
 ---
 
-### Issue 23: 🟡 Fix Password Validation Inconsistency
+### Issue 23: ✅ Fix Password Validation Inconsistency
 
 **Title:** Consolidate master password validation to use 12-character minimum with special character requirement
 
-**Status:** 🟡 **OPEN** — Identified 2026-02-22
+**Status:** ✅ **FIXED** — Resolved 2026-02-22
 
 **Description:**
-There are two separate password validation functions with different minimum requirements. The `change_master_password()` path uses the weaker validation (8 characters, no special character requirement), allowing users to downgrade their master password security after initial setup.
+There were two separate password validation functions with different minimum requirements. The `change_master_password()` path used the weaker validation (8 characters, no special character requirement), allowing users to downgrade their master password security after initial setup.
 
 **Vulnerability Details:**
-- **Weaker validation:** `src/storage.rs::validate_password_strength(password: &str)` — 8 characters minimum, no special character requirement
-- **Stronger validation:** `src/password_strength.rs::validate_password_strength(password, requirements)` — 12 characters minimum, requires uppercase, lowercase, digit, and special character
-- **Usage:** `change_master_password()` calls the weaker `storage.rs` version
-- **Impact:** A user can set a new master password like `Pass1234` (8 chars, no special) via password change
+- **Weaker validation (REMOVED):** `src/storage.rs::validate_password_strength(password: &str)` — 8 characters minimum, no special character requirement
+- **Stronger validation (NOW USED):** `src/password_strength.rs::validate_password_strength(password, requirements)` — 12 characters minimum, requires uppercase, lowercase, digit, and special character
+- **Fix:** `change_master_password()` now calls the comprehensive `password_strength::validate_password_strength()` with `PasswordRequirements::default()`
 
-**Security Impact:**
-- Users can weaken their master password security after first setup
-- Violates the principle of consistent security policy enforcement
-- Documentation claims 12-character minimum for master password, which is incorrect for password changes
+**Resolution:**
 
-**Solution:**
-
-Replace the standalone `validate_password_strength()` in `storage.rs` with a call to the comprehensive version from `password_strength.rs`:
-
-1. In `src/storage.rs`, remove the standalone `validate_password_strength()` function
-2. In `src/storage.rs::change_master_password()`, import and use `password_strength::validate_password_strength()` with `PasswordRequirements::default()`
-3. Update `storage.rs` public API to re-export or delegate to `password_strength.rs`
+Removed the standalone `validate_password_strength()` from `storage.rs` and updated `change_master_password()` to use the comprehensive version from `password_strength.rs`:
 
 ```rust
 // In src/storage.rs::change_master_password()
-use crate::password_strength::{validate_password_strength, PasswordRequirements};
-
-// Replace:
-validate_password_strength(new_password)?;
-
-// With:
-validate_password_strength(new_password, &PasswordRequirements::default())
-    .map_err(|e| SecurityError::InvalidInput(format!("password: {}", e)))?;
+crate::password_strength::validate_password_strength(
+    new_password,
+    &crate::password_strength::PasswordRequirements::default(),
+)
+.map_err(|e| SecurityError::InvalidInput(format!("password: {}", e)))?;
 ```
 
-4. Update all callers of the old `storage::validate_password_strength` to use the new consolidated function
-5. Update documentation (`src/storage.rs` doc comments) to reflect the corrected requirements
-
-**Files to Modify:**
-- `src/storage.rs` — Remove standalone `validate_password_strength()`, update `change_master_password()` to use `password_strength.rs` version
-- `src/lib.rs` — Update public API exports if needed
-- `tests/storage_test.rs` — Update tests that relied on the 8-char minimum
-
-**Testing:**
-- Test that `change_master_password()` rejects 8-character passwords without special characters
-- Test that `change_master_password()` accepts passwords meeting the 12-character requirement
-- Test that existing tests for `validate_password_strength` in `storage.rs` are updated
+**Files Modified:**
+- `src/storage.rs` — Removed standalone `validate_password_strength()`, updated `change_master_password()` to use `password_strength.rs` version
+- `tests/storage_test.rs` — Updated tests to use passwords meeting the 12-char minimum with special character requirement
 
 **Acceptance Criteria:**
-- [ ] Single password validation function used consistently for all master password operations
-- [ ] Master password change enforces 12-character minimum
-- [ ] Master password change requires special character
-- [ ] All tests updated and passing
-- [ ] Documentation updated to reflect consistent requirements
+- [x] Single password validation function used consistently for all master password operations
+- [x] Master password change enforces 12-character minimum
+- [x] Master password change requires special character
+- [x] All tests updated and passing
+- [x] Documentation updated to reflect consistent requirements
 
 **Priority:** 🟡 MEDIUM
-**Estimated Effort:** 1-2 hours
 **Labels:** security, validation, consistency
 
 ---

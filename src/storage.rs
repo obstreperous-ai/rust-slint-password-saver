@@ -168,68 +168,7 @@ pub struct PasswordStorage {
     storage_path: PathBuf,
 }
 
-/// Validates the strength of a master password.
-///
-/// Checks that the password meets minimum security requirements:
-/// - At least 8 characters long
-/// - Contains at least one uppercase letter
-/// - Contains at least one lowercase letter
-/// - Contains at least one number
-///
-/// # Arguments
-///
-/// * `password` - The password to validate
-///
-/// # Returns
-///
-/// - `Ok(())` if password meets all strength requirements
-/// - `Err(SecurityError)` with details if password is too weak
-///
-/// # Example
-///
-/// ```
-/// use rust_slint_password_saver::storage::validate_password_strength;
-///
-/// // Strong password
-/// assert!(validate_password_strength("SecurePass123").is_ok());
-///
-/// // Too short
-/// assert!(validate_password_strength("Pass1").is_err());
-///
-/// // No uppercase
-/// assert!(validate_password_strength("password123").is_err());
-/// ```
-pub fn validate_password_strength(password: &str) -> Result<(), SecurityError> {
-    // Check minimum length
-    if password.len() < 8 {
-        return Err(SecurityError::InvalidInput(
-            "password: must be at least 8 characters long".into(),
-        ));
-    }
 
-    // Check for at least one uppercase letter
-    if !password.chars().any(char::is_uppercase) {
-        return Err(SecurityError::InvalidInput(
-            "password: must contain at least one uppercase letter".into(),
-        ));
-    }
-
-    // Check for at least one lowercase letter
-    if !password.chars().any(char::is_lowercase) {
-        return Err(SecurityError::InvalidInput(
-            "password: must contain at least one lowercase letter".into(),
-        ));
-    }
-
-    // Check for at least one number
-    if !password.chars().any(char::is_numeric) {
-        return Err(SecurityError::InvalidInput(
-            "password: must contain at least one number".into(),
-        ));
-    }
-
-    Ok(())
-}
 
 /// Adds random timing jitter to mitigate timing attacks.
 ///
@@ -865,7 +804,7 @@ impl PasswordStorage {
     ///
     /// This method performs the following operations:
     /// 1. Verifies the old password by attempting to load entries
-    /// 2. Validates the new password strength
+    /// 2. Validates the new password strength (12+ characters, uppercase, lowercase, digit, special character)
     /// 3. Ensures the new password is different from the old one
     /// 4. Re-encrypts all entries with the new password
     ///
@@ -878,7 +817,7 @@ impl PasswordStorage {
     ///
     /// `Ok(())` on success, or a `SecurityError` if:
     /// - Old password is incorrect
-    /// - New password doesn't meet strength requirements
+    /// - New password doesn't meet strength requirements (12-char minimum, special character required)
     /// - New password is same as old password
     /// - Storage file doesn't exist
     /// - Re-encryption fails
@@ -898,7 +837,7 @@ impl PasswordStorage {
     ///
     /// let storage = PasswordStorage::new(PathBuf::from("passwords.enc"));
     ///
-    /// match storage.change_master_password("OldPassword123", "NewPassword456") {
+    /// match storage.change_master_password("OldP@ssword123!", "NewP@ssword456!") {
     ///     Ok(()) => println!("Password changed successfully"),
     ///     Err(e) => eprintln!("Failed to change password: {}", e),
     /// }
@@ -916,8 +855,12 @@ impl PasswordStorage {
         // Step 1: Load entries with old password (verifies old password is correct)
         let entries = self.load_entries(old_password)?;
 
-        // Step 2: Validate new password strength
-        validate_password_strength(new_password)?;
+        // Step 2: Validate new password strength using the comprehensive validator
+        crate::password_strength::validate_password_strength(
+            new_password,
+            &crate::password_strength::PasswordRequirements::default(),
+        )
+        .map_err(|e| SecurityError::InvalidInput(format!("password: {}", e)))?;
 
         // Step 3: Ensure new password is different from old password
         // Use constant-time comparison to prevent timing attacks that could leak
@@ -1280,44 +1223,5 @@ mod tests {
         assert_eq!(entry.title, deserialized.title);
         assert_eq!(entry.username, deserialized.username);
         assert_eq!(entry.password, deserialized.password);
-    }
-
-    #[test]
-    fn test_validate_password_strength_valid() {
-        assert!(validate_password_strength("SecurePass123").is_ok());
-        assert!(validate_password_strength("MyPassword1").is_ok());
-        assert!(validate_password_strength("Abc12345").is_ok());
-    }
-
-    #[test]
-    fn test_validate_password_strength_too_short() {
-        let result = validate_password_strength("Pass1");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.user_message().contains("at least 8 characters"));
-    }
-
-    #[test]
-    fn test_validate_password_strength_no_uppercase() {
-        let result = validate_password_strength("password123");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.user_message().contains("uppercase letter"));
-    }
-
-    #[test]
-    fn test_validate_password_strength_no_lowercase() {
-        let result = validate_password_strength("PASSWORD123");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.user_message().contains("lowercase letter"));
-    }
-
-    #[test]
-    fn test_validate_password_strength_no_number() {
-        let result = validate_password_strength("PasswordOnly");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.user_message().contains("number"));
     }
 }

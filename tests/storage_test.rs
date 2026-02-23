@@ -426,8 +426,10 @@ fn test_change_master_password_success() {
     let _ = fs::remove_file(&test_path);
 
     let storage = PasswordStorage::new(test_path.clone());
-    let old_password = "OldPassword123";
-    let new_password = "NewPassword456";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let old_password = "OldP@ssword123!";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let new_password = "NewP@ssword456!";
 
     // Create and save test entries with old password
     let entries = vec![
@@ -486,9 +488,12 @@ fn test_change_master_password_wrong_old_password() {
     let _ = fs::remove_file(&test_path);
 
     let storage = PasswordStorage::new(test_path.clone());
-    let correct_password = "CorrectPassword123";
-    let wrong_password = "WrongPassword123";
-    let new_password = "NewPassword456";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let correct_password = "C0rrectP@ssword!";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let wrong_password = "Wr0ngP@ssword123";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let new_password = "NewP@ssword456!";
 
     // Create and save test entry
     let entries = vec![PasswordEntry {
@@ -522,8 +527,9 @@ fn test_change_master_password_weak_new_password() {
     let _ = fs::remove_file(&test_path);
 
     let storage = PasswordStorage::new(test_path.clone());
-    let old_password = "OldPassword123";
-    let weak_password = "weak"; // Too short, no uppercase, no numbers
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let old_password = "OldP@ssword123!";
+    let weak_password = "weak"; // Too short, no uppercase, no numbers, no special char
 
     // Create and save test entry
     let entries = vec![PasswordEntry {
@@ -541,7 +547,7 @@ fn test_change_master_password_weak_new_password() {
     let result = storage.change_master_password(old_password, weak_password);
     assert!(result.is_err(), "Should fail with weak new password");
     let error = result.unwrap_err();
-    assert!(error.user_message().contains("at least 8 characters"));
+    assert!(error.user_message().contains("at least 12 characters"));
 
     // Verify original password still works
     let loaded = storage.load_entries(old_password);
@@ -560,7 +566,8 @@ fn test_change_master_password_same_password() {
 
     let storage = PasswordStorage::new(test_path.clone());
 
-    let password = "SamePassword123";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let password = "S@meP@ssword123!";
 
     // Create and save test entry
     let entries = vec![PasswordEntry {
@@ -714,7 +721,8 @@ fn test_constant_time_password_comparison() {
     let _ = fs::remove_file(&test_path);
 
     let storage = PasswordStorage::new(test_path.clone());
-    let password = "SamePassword123";
+    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    let password = "S@meP@ssword123!";
 
     // Create and save test entry
     let entries = vec![PasswordEntry {
