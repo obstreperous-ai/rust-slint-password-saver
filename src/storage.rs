@@ -519,6 +519,7 @@ impl PasswordStorage {
             encrypted_data,
             recovery_code_hashes: None,
             encrypted_recovery_key: None,
+            recovery_key_salt: None,
         };
 
         // Serialize storage data to JSON and write to disk
@@ -885,6 +886,7 @@ impl PasswordStorage {
     /// and emergency recovery information. The recovery data includes:
     /// - Hashes of recovery codes (for verification)
     /// - Encrypted recovery key (encrypted with master password)
+    /// - Salt used for Argon2id recovery key derivation
     ///
     /// # Arguments
     ///
@@ -892,6 +894,7 @@ impl PasswordStorage {
     /// * `master_password` - Master password for encryption
     /// * `recovery_code_hashes` - SHA-256 hashes of recovery codes
     /// * `recovery_key` - Recovery master key (will be encrypted before storage)
+    /// * `recovery_key_salt` - Salt used for Argon2id derivation of the recovery key
     ///
     /// # Returns
     ///
@@ -906,6 +909,7 @@ impl PasswordStorage {
         master_password: &str,
         recovery_code_hashes: Vec<String>,
         recovery_key: &[u8],
+        recovery_key_salt: Vec<u8>,
     ) -> Result<(), SecurityError> {
         // Initialize audit logger
         let audit_logger = AuditLogger::new(get_audit_log_path(), &get_audit_hmac_key_path());
@@ -970,6 +974,7 @@ impl PasswordStorage {
             encrypted_data,
             recovery_code_hashes: Some(recovery_code_hashes),
             encrypted_recovery_key: Some(recovery_data),
+            recovery_key_salt: Some(recovery_key_salt),
         };
 
         // Serialize storage data to JSON and write to disk
@@ -1000,15 +1005,18 @@ impl PasswordStorage {
 
     /// Load recovery data from storage.
     ///
-    /// Returns the recovery code hashes and encrypted recovery key if available.
+    /// Returns the recovery code hashes, encrypted recovery key, and the
+    /// Argon2id salt used for recovery key derivation, if available.
     ///
     /// # Returns
     ///
-    /// `Ok(Some((hashes, encrypted_key)))` if recovery data exists,
+    /// `Ok(Some((hashes, encrypted_key, recovery_key_salt)))` if recovery data exists,
     /// `Ok(None)` if no recovery data is stored (backward compatibility),
     /// `Err(SecurityError)` if file operations fail
     #[allow(clippy::type_complexity)]
-    pub fn load_recovery_data(&self) -> Result<Option<(Vec<String>, Vec<u8>)>, SecurityError> {
+    pub fn load_recovery_data(
+        &self,
+    ) -> Result<Option<(Vec<String>, Vec<u8>, Option<Vec<u8>>)>, SecurityError> {
         if !self.storage_path.exists() {
             return Ok(None);
         }
@@ -1026,7 +1034,9 @@ impl PasswordStorage {
             storage_data.recovery_code_hashes,
             storage_data.encrypted_recovery_key,
         ) {
-            (Some(hashes), Some(encrypted_key)) => Ok(Some((hashes, encrypted_key))),
+            (Some(hashes), Some(encrypted_key)) => {
+                Ok(Some((hashes, encrypted_key, storage_data.recovery_key_salt)))
+            }
             _ => Ok(None),
         }
     }
@@ -1058,7 +1068,9 @@ impl PasswordStorage {
         master_password: &str,
     ) -> Result<Option<Vec<u8>>, SecurityError> {
         // Load recovery data
-        let Some((hashes, encrypted_recovery_data)) = self.load_recovery_data()? else {
+        let Some((hashes, encrypted_recovery_data, _recovery_key_salt)) =
+            self.load_recovery_data()?
+        else {
             return Ok(None);
         };
 
@@ -1133,6 +1145,9 @@ struct StorageData {
     /// Encrypted recovery key - Optional for backward compatibility
     #[serde(default, skip_serializing_if = "Option::is_none")]
     encrypted_recovery_key: Option<Vec<u8>>,
+    /// Salt used for Argon2id recovery key derivation - Optional for backward compatibility
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery_key_salt: Option<Vec<u8>>,
 }
 
 #[cfg(test)]

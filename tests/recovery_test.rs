@@ -96,6 +96,7 @@ fn test_save_and_load_with_recovery() {
     let recovery = EmergencyRecovery::create(TEST_PASSWORD);
     let recovery_hashes = recovery.get_code_hashes();
     let recovery_key = recovery.get_recovery_key();
+    let recovery_key_salt = recovery.get_recovery_key_salt();
 
     // Save with recovery
     storage
@@ -104,6 +105,7 @@ fn test_save_and_load_with_recovery() {
             TEST_PASSWORD,
             recovery_hashes,
             &recovery_key,
+            recovery_key_salt,
         )
         .expect("Should save entries with recovery");
 
@@ -114,7 +116,7 @@ fn test_save_and_load_with_recovery() {
 
     assert!(loaded_recovery.is_some(), "Recovery data should be present");
 
-    let (loaded_hashes, _encrypted_key) = loaded_recovery.unwrap();
+    let (loaded_hashes, _encrypted_key, _recovery_salt) = loaded_recovery.unwrap();
     assert_eq!(loaded_hashes.len(), 3, "Should have 3 recovery code hashes");
 }
 
@@ -140,6 +142,7 @@ fn test_recovery_with_valid_code() {
     let codes = recovery.get_codes();
     let recovery_hashes = recovery.get_code_hashes();
     let recovery_key = recovery.get_recovery_key();
+    let recovery_key_salt = recovery.get_recovery_key_salt();
 
     // Save with recovery
     storage
@@ -148,6 +151,7 @@ fn test_recovery_with_valid_code() {
             TEST_PASSWORD,
             recovery_hashes.clone(),
             &recovery_key,
+            recovery_key_salt,
         )
         .expect("Should save entries with recovery");
 
@@ -202,6 +206,7 @@ fn test_recovery_with_invalid_code() {
     let recovery = EmergencyRecovery::create(TEST_PASSWORD);
     let recovery_hashes = recovery.get_code_hashes();
     let recovery_key = recovery.get_recovery_key();
+    let recovery_key_salt = recovery.get_recovery_key_salt();
 
     // Save with recovery
     storage
@@ -210,6 +215,7 @@ fn test_recovery_with_invalid_code() {
             TEST_PASSWORD,
             recovery_hashes,
             &recovery_key,
+            recovery_key_salt,
         )
         .expect("Should save entries with recovery");
 
@@ -318,6 +324,7 @@ fn test_full_recovery_workflow() {
     let codes = recovery.get_codes();
     let recovery_hashes = recovery.get_code_hashes();
     let recovery_key = recovery.get_recovery_key();
+    let recovery_key_salt = recovery.get_recovery_key_salt();
 
     storage
         .save_entries_with_recovery(
@@ -325,6 +332,7 @@ fn test_full_recovery_workflow() {
             TEST_PASSWORD,
             recovery_hashes,
             &recovery_key,
+            recovery_key_salt,
         )
         .expect("Should save with recovery");
 

@@ -9,7 +9,8 @@
 //!
 //! - Recovery codes are cryptographically random (using OS RNG)
 //! - Codes are hashed before storage (never stored in plaintext)
-//! - Recovery key derivation uses SHA-256
+//! - Recovery key derivation uses Argon2id (same parameters as main key derivation)
+//! - A random salt is generated per recovery setup and stored with the recovery data
 //! - Recovery codes provide equivalent security to master password
 //! - Rate limiting applies to recovery attempts (prevents brute force)
 //!
@@ -36,6 +37,11 @@
 
 use crate::errors::SecurityError;
 use crate::rate_limit::RateLimiter;
+use aes_gcm::aead::OsRng;
+use argon2::{
+    password_hash::{PasswordHasher, SaltString},
+    Algorithm, Argon2, Params, Version,
+};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -145,10 +151,13 @@ impl RecoveryCode {
 ///
 /// Manages multiple recovery codes and provides methods to recover access
 /// to the password database when the master password is lost.
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct EmergencyRecovery {
     recovery_codes: Vec<RecoveryCode>,
     recovery_master_key: Vec<u8>,
+    /// Random salt used for Argon2id recovery key derivation (stored with recovery data).
+    recovery_key_salt: Vec<u8>,
 }
 
 impl EmergencyRecovery {
@@ -178,12 +187,19 @@ impl EmergencyRecovery {
         // Generate 3 recovery codes
         let codes: Vec<RecoveryCode> = (0..3).map(|_| RecoveryCode::generate()).collect();
 
-        // Derive recovery key from recovery codes
-        let recovery_master_key = Self::derive_recovery_key(&codes, master_password);
+        // Generate a random salt for Argon2id key derivation
+        let salt = SaltString::generate(&mut OsRng);
+        let recovery_key_salt = salt.as_str().as_bytes().to_vec();
+
+        // Derive recovery key using Argon2id
+        let recovery_master_key =
+            Self::derive_recovery_key(&codes, master_password, &recovery_key_salt)
+                .expect("Argon2id recovery key derivation failed with fixed parameters — this is a programming error");
 
         Self {
             recovery_codes: codes,
             recovery_master_key,
+            recovery_key_salt,
         }
     }
 
@@ -222,6 +238,19 @@ impl EmergencyRecovery {
     #[must_use]
     pub fn get_recovery_key(&self) -> Vec<u8> {
         self.recovery_master_key.clone()
+    }
+
+    /// Get the salt used for Argon2id recovery key derivation.
+    ///
+    /// This salt must be stored alongside the recovery data so that the key can
+    /// be deterministically re-derived from codes + master password + salt.
+    ///
+    /// # Returns
+    ///
+    /// The recovery key derivation salt as a byte vector.
+    #[must_use]
+    pub fn get_recovery_key_salt(&self) -> Vec<u8> {
+        self.recovery_key_salt.clone()
     }
 
     /// Verify a recovery code and provide access if valid.
@@ -276,20 +305,26 @@ impl EmergencyRecovery {
         }
     }
 
-    /// Derive the recovery master key from recovery codes and master password.
+    /// Derive the recovery master key from recovery codes, master password, and a salt.
     ///
     /// Combines all recovery codes with the master password and derives a key
-    /// using SHA-256. This key can decrypt the database.
+    /// using Argon2id (same parameters as main key derivation). This key can
+    /// decrypt the database.
     ///
     /// # Arguments
     ///
     /// * `codes` - The recovery codes to derive from
     /// * `master_password` - The master password for additional entropy
+    /// * `salt` - Random salt bytes for Argon2id (must be stored with recovery data)
     ///
     /// # Returns
     ///
-    /// A 32-byte recovery key.
-    fn derive_recovery_key(codes: &[RecoveryCode], master_password: &str) -> Vec<u8> {
+    /// A 32-byte recovery key, or a `SecurityError` if derivation fails.
+    fn derive_recovery_key(
+        codes: &[RecoveryCode],
+        master_password: &str,
+        salt: &[u8],
+    ) -> Result<Vec<u8>, SecurityError> {
         // Combine recovery codes and master password
         let combined = codes
             .iter()
@@ -298,12 +333,23 @@ impl EmergencyRecovery {
             .join("|");
 
         // Include master password for additional entropy
-        let combined_with_password = format!("{}:{}", combined, master_password);
+        let password_input = format!("{}:{}", combined, master_password);
 
-        // Derive key using SHA-256
-        let mut hasher = Sha256::new();
-        hasher.update(combined_with_password.as_bytes());
-        hasher.finalize().to_vec()
+        // Derive key using Argon2id — same parameters as main key derivation
+        // Memory: 32 MiB, Iterations: 2, Parallelism: 4, Output: 32 bytes
+        let params = Params::new(32768, 2, 4, Some(32))
+            .map_err(|_| SecurityError::CryptographicError)?;
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+        let salt_string =
+            SaltString::encode_b64(salt).map_err(|_| SecurityError::CryptographicError)?;
+        let hash = argon2
+            .hash_password(password_input.as_bytes(), &salt_string)
+            .map_err(|_| SecurityError::CryptographicError)?;
+        Ok(hash
+            .hash
+            .ok_or(SecurityError::CryptographicError)?
+            .as_bytes()
+            .to_vec())
     }
 
     /// Create an `EmergencyRecovery` instance from stored hashes and a known recovery key.
@@ -314,13 +360,18 @@ impl EmergencyRecovery {
     ///
     /// * `hashes` - The stored recovery code hashes
     /// * `recovery_key` - The stored recovery master key
+    /// * `recovery_key_salt` - The salt used for Argon2id derivation (stored with recovery data)
     ///
     /// # Returns
     ///
     /// An `EmergencyRecovery` instance that can verify codes.
     #[must_use]
     #[allow(dead_code)] // Public API method
-    pub fn from_hashes(hashes: Vec<String>, recovery_key: Vec<u8>) -> Self {
+    pub fn from_hashes(
+        hashes: Vec<String>,
+        recovery_key: Vec<u8>,
+        recovery_key_salt: Vec<u8>,
+    ) -> Self {
         let recovery_codes: Vec<RecoveryCode> = hashes
             .into_iter()
             .map(|hash| RecoveryCode {
@@ -332,6 +383,7 @@ impl EmergencyRecovery {
         Self {
             recovery_codes,
             recovery_master_key: recovery_key,
+            recovery_key_salt,
         }
     }
 }
@@ -419,10 +471,11 @@ mod tests {
         let recovery = EmergencyRecovery::create("test_password");
         let hashes = recovery.get_code_hashes();
         let key = recovery.get_recovery_key();
+        let salt = recovery.get_recovery_key_salt();
         let rate_limiter = RateLimiter::new();
 
         // Create new recovery from hashes
-        let recovered = EmergencyRecovery::from_hashes(hashes, key.clone());
+        let recovered = EmergencyRecovery::from_hashes(hashes, key.clone(), salt);
 
         // Should be able to verify with original code
         let code = recovery.get_codes()[0].clone();
@@ -435,6 +488,7 @@ mod tests {
     fn test_recovery_key_derivation_deterministic() {
         let recovery1 = EmergencyRecovery::create("test_password");
         let codes = recovery1.get_codes();
+        let salt = recovery1.get_recovery_key_salt();
 
         // Manually recreate recovery codes with same values
         let recovery_codes: Vec<RecoveryCode> = codes
@@ -450,11 +504,58 @@ mod tests {
             })
             .collect();
 
-        let key1 = EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password");
-        let key2 = EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password");
+        let key1 =
+            EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt)
+                .expect("Key derivation should succeed");
+        let key2 =
+            EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt)
+                .expect("Key derivation should succeed");
 
         // Keys should be identical
         assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_recovery_key_derivation_different_salts() {
+        let recovery1 = EmergencyRecovery::create("test_password");
+        let codes = recovery1.get_codes();
+        let salt1 = recovery1.get_recovery_key_salt();
+
+        // Generate a second recovery to get a different salt
+        let recovery2 = EmergencyRecovery::create("test_password");
+        let salt2 = recovery2.get_recovery_key_salt();
+
+        // Recreate codes with same values for first recovery
+        let recovery_codes: Vec<RecoveryCode> = codes
+            .iter()
+            .map(|code_str| {
+                let mut hasher = Sha256::new();
+                hasher.update(code_str.as_bytes());
+                let hash = hex::encode(hasher.finalize());
+                RecoveryCode {
+                    code: code_str.clone(),
+                    hash,
+                }
+            })
+            .collect();
+
+        // Different salts should produce different keys (even with same codes + password)
+        if salt1 != salt2 {
+            let key1 =
+                EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt1)
+                    .expect("Key derivation should succeed");
+            let key2 =
+                EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt2)
+                    .expect("Key derivation should succeed");
+            assert_ne!(key1, key2, "Different salts must produce different keys");
+        }
+    }
+
+    #[test]
+    fn test_recovery_key_is_32_bytes() {
+        let recovery = EmergencyRecovery::create("test_password");
+        let key = recovery.get_recovery_key();
+        assert_eq!(key.len(), 32, "Recovery key must be 32 bytes");
     }
 
     #[test]

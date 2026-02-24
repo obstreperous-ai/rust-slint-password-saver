@@ -136,6 +136,7 @@ fn test_lifecycle_with_recovery_codes() {
     let recovery = EmergencyRecovery::create(MASTER_PASSWORD);
     let hashes = recovery.get_code_hashes();
     let recovery_key = recovery.get_recovery_key();
+    let recovery_key_salt = recovery.get_recovery_key_salt();
 
     let entry = make_entry("RecoveryTest", "admin@example.com", "adminpass", now());
 
@@ -146,6 +147,7 @@ fn test_lifecycle_with_recovery_codes() {
             MASTER_PASSWORD,
             hashes.clone(),
             &recovery_key,
+            recovery_key_salt,
         )
         .expect("Failed to save with recovery data");
 

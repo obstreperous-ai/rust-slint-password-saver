@@ -596,33 +596,14 @@ Failed attempt timestamps are now persisted to `~/.password_saver/rate_limit.jso
 
 ---
 
-### 🔵 Finding 4 (LOW-MEDIUM): Recovery Key Not Derived with Memory-Hard Function
+### ✅ Finding 4 (RESOLVED): Recovery Key Not Derived with Memory-Hard Function
 
 **Location:** `src/recovery.rs` — `derive_recovery_key()` function
 
 **Description:**
-The recovery master key is derived using a plain SHA-256 hash, unlike the main encryption key which uses Argon2id:
+The recovery master key was previously derived using a plain SHA-256 hash, unlike the main encryption key which uses Argon2id. This has been fixed — the recovery key derivation now uses Argon2id with the same parameters as the main key derivation (32 MiB memory, 2 iterations, 4 parallelism), and a random salt is generated per setup and stored in `StorageData`.
 
-```rust
-fn derive_recovery_key(codes: &[RecoveryCode], master_password: &str) -> Vec<u8> {
-    let combined_with_password = format!("{}:{}", combined, master_password);
-    let mut hasher = Sha256::new();
-    hasher.update(combined_with_password.as_bytes());
-    hasher.finalize().to_vec()  // Raw SHA-256 — fast to brute-force
-}
-```
-
-**Impact:**
-- SHA-256 can be computed ~10¹⁰ times/second on a modern GPU
-- Argon2id (used elsewhere) is intentionally limited to ~1 computation per second
-- If the encrypted database is stolen, the recovery key can be brute-forced orders of magnitude faster than the master password
-- Recovery codes have ~77 bits of entropy (16 chars × log₂(30-character alphabet)), which makes raw brute-force impractical even with SHA-256, but the design is inconsistent with the rest of the security architecture
-- Future changes (e.g., shorter recovery codes or reduced entropy) would create a practical vulnerability without any explicit design change
-
-**Severity:** 🔵 LOW-MEDIUM (impractical to exploit with current entropy, but architecturally weak)
-
-**Recommendation:**
-Use Argon2 for recovery key derivation, consistent with the main encryption key derivation. See Issue #25.
+**Resolution:** Replaced SHA-256 with Argon2id in `derive_recovery_key()`. See Issue #25.
 
 ---
 
@@ -3880,7 +3861,7 @@ Failed attempt timestamps are now persisted to `~/.password_saver/rate_limit.jso
 
 **Title:** Replace SHA-256 with Argon2 for recovery key derivation to maintain consistent security posture
 
-**Status:** 🔵 **OPEN** — Identified 2026-02-22
+**Status:** ✅ **RESOLVED** — Identified 2026-02-22, Fixed 2026-02-24
 
 **Description:**
 The recovery master key is derived using plain SHA-256 in `src/recovery.rs::derive_recovery_key()`, inconsistent with the rest of the codebase which uses Argon2id for all key derivation. This design inconsistency means recovery codes can be brute-forced significantly faster than master passwords if an attacker obtains the database file.
@@ -3937,11 +3918,11 @@ Update `EmergencyRecovery::create()` to generate and store a salt for key deriva
 - Performance test: derivation should complete within 3 seconds
 
 **Acceptance Criteria:**
-- [ ] Recovery key derivation uses Argon2id with same parameters as main key derivation
-- [ ] A random salt is generated and stored with recovery data
-- [ ] Existing functionality tests still pass (key may change, but verification still works)
-- [ ] Performance is acceptable (< 3 seconds additional startup time for recovery)
-- [ ] Documentation updated to describe Argon2-based recovery key derivation
+- [x] Recovery key derivation uses Argon2id with same parameters as main key derivation
+- [x] A random salt is generated and stored with recovery data
+- [x] Existing functionality tests still pass (key may change, but verification still works)
+- [x] Performance is acceptable (< 3 seconds additional startup time for recovery)
+- [x] Documentation updated to describe Argon2-based recovery key derivation
 
 **Priority:** 🔵 LOW-MEDIUM
 **Estimated Effort:** 2-3 hours
@@ -4345,7 +4326,7 @@ Always test:
   - **HIGH**: Predictable HMAC key in audit log (hostname-derived) — Issue #22
   - **MEDIUM**: Password validation inconsistency (8-char vs 12-char minimum) — Issue #23
   - **MEDIUM**: Non-persistent rate limiting (bypassed by restart) — Issue #24 ✅ RESOLVED
-  - **LOW-MEDIUM**: Recovery key derivation using SHA-256 instead of Argon2 — Issue #25
+  - **LOW-MEDIUM**: Recovery key derivation using SHA-256 instead of Argon2 — Issue #25 ✅ RESOLVED
   - **LOW**: Master password not zeroized at UI layer — Issue #26
 - Conducted comprehensive code coverage assessment for security features
 - Identified 6 critical test gaps:
