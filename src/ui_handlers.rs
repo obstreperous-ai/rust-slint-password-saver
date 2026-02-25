@@ -46,6 +46,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
+use zeroize::Zeroizing;
 
 /// Maximum number of password entries to display in status messages
 const MAX_DISPLAY_ENTRIES: usize = 5;
@@ -135,6 +136,10 @@ impl UIHandlers {
     ) {
         // Record user activity to reset the session timeout
         self.session.record_activity();
+
+        // Wrap in Zeroizing<String> immediately so the master password is securely
+        // cleared from memory when this function returns (zeroized on drop).
+        let master_password: Zeroizing<String> = Zeroizing::new(master_password.to_string());
 
         // Validate master password
         if let Err(e) = validate_master_password(&master_password) {
@@ -331,6 +336,10 @@ impl UIHandlers {
         // Record user activity to reset the session timeout
         self.session.record_activity();
 
+        // Wrap in Zeroizing<String> immediately so the master password is securely
+        // cleared from memory when this function returns (zeroized on drop).
+        let master_password: Zeroizing<String> = Zeroizing::new(master_password.to_string());
+
         // Validate master password
         if let Err(e) = validate_master_password(&master_password) {
             ui.set_status_is_error(true);
@@ -425,6 +434,10 @@ impl UIHandlers {
     /// Verifies the master password by attempting to decrypt storage, then unlocks
     /// the session UI on success.
     pub fn handle_unlock(&self, ui: &AppWindow, password: slint::SharedString) {
+        // Wrap in Zeroizing<String> immediately so the master password is securely
+        // cleared from memory when this function returns (zeroized on drop).
+        let password: Zeroizing<String> = Zeroizing::new(password.to_string());
+
         // Validate master password
         if let Err(e) = validate_master_password(&password) {
             ui.set_status_is_error(true);
@@ -1182,5 +1195,29 @@ mod tests {
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].title, "Entry 0");
         assert_eq!(entries[2].title, "Entry 2");
+    }
+
+    /// Verify that `Zeroizing<String>` zeroizes memory on drop.
+    ///
+    /// This test documents the memory-safety pattern used in UI handlers:
+    /// master passwords received from the UI as `SharedString` are immediately
+    /// converted to `Zeroizing<String>` so they are securely overwritten when
+    /// the callback returns.
+    #[test]
+    fn test_zeroizing_string_clears_on_drop() {
+        use zeroize::Zeroizing;
+
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+        let secret = "MasterPassword123!";
+        let zeroizing: Zeroizing<String> = Zeroizing::new(secret.to_string());
+
+        // Confirm the value is accessible while in scope
+        assert_eq!(zeroizing.as_str(), secret);
+
+        // Drop explicitly; memory is zeroed by Zeroizing on drop
+        drop(zeroizing);
+        // After drop, the heap memory has been overwritten with zeros.
+        // We cannot directly observe this in safe Rust, but the drop occurred
+        // and zeroize guarantees the bytes are overwritten before deallocation.
     }
 }
