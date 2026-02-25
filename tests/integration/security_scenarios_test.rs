@@ -220,6 +220,7 @@ fn test_recovery_code_round_trip_through_storage() {
     let recovery = EmergencyRecovery::create(MASTER_PASSWORD);
     let hashes = recovery.get_code_hashes();
     let recovery_key = recovery.get_recovery_key();
+    let recovery_key_salt = recovery.get_recovery_key_salt();
 
     storage
         .save_entries_with_recovery(
@@ -227,6 +228,7 @@ fn test_recovery_code_round_trip_through_storage() {
             MASTER_PASSWORD,
             hashes.clone(),
             &recovery_key,
+            recovery_key_salt,
         )
         .expect("Failed to save with recovery data");
 
@@ -236,7 +238,7 @@ fn test_recovery_code_round_trip_through_storage() {
         .expect("Failed to load recovery data")
         .expect("Recovery data should be present");
 
-    let (loaded_hashes, _) = loaded_data;
+    let (loaded_hashes, _, _loaded_salt) = loaded_data;
     assert_eq!(
         loaded_hashes.len(),
         hashes.len(),

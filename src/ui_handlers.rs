@@ -237,6 +237,7 @@ impl UIHandlers {
             let recovery_codes = recovery.get_codes();
             let recovery_hashes = recovery.get_code_hashes();
             let recovery_key = recovery.get_recovery_key();
+            let recovery_key_salt = recovery.get_recovery_key_salt();
 
             // Save entries with recovery data
             match storage.save_entries_with_recovery(
@@ -244,6 +245,7 @@ impl UIHandlers {
                 &master_password,
                 recovery_hashes,
                 &recovery_key,
+                recovery_key_salt,
             ) {
                 Ok(()) => {
                     // Show recovery codes to user
@@ -957,7 +959,7 @@ impl UIHandlers {
 
         // Check if recovery data exists
         match storage.load_recovery_data() {
-            Ok(Some((hashes, _encrypted_key))) => {
+            Ok(Some((hashes, _encrypted_key, _recovery_key_salt))) => {
                 // Hash the provided recovery code
                 let mut hash_computer = Sha256::new();
                 hash_computer.update(recovery_code.as_bytes());
