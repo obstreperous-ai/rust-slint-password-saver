@@ -213,6 +213,25 @@ impl AuditLogger {
         key
     }
 
+    /// Verifies that the HMAC stored in `entry` matches the expected HMAC computed
+    /// from the entry's content and the logger's key.
+    ///
+    /// # Arguments
+    ///
+    /// * `entry` - The audit entry whose HMAC should be verified
+    ///
+    /// # Returns
+    ///
+    /// `true` if the HMAC is valid, `false` if the entry has been tampered with
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if HMAC computation fails (e.g., serialization error)
+    pub fn verify_entry(&self, entry: &AuditEntry) -> Result<bool, String> {
+        let expected = self.compute_hmac(entry)?;
+        Ok(expected == entry.hmac)
+    }
+
     /// Computes HMAC-SHA256 for an audit entry.
     ///
     /// # Arguments
@@ -656,5 +675,45 @@ mod tests {
         let _ = fs::remove_file(log_path);
         let _ = fs::remove_file(key_path1);
         let _ = fs::remove_file(key_path2);
+    }
+
+    /// Verify that a tampered audit log entry (content modified on disk) is
+    /// detected by `verify_entry`.  The stored HMAC will no longer match the
+    /// modified content, so `verify_entry` must return `false`.
+    #[test]
+    fn test_tampered_log_entry_detected() {
+        let tmp = std::env::temp_dir();
+        let log_path = tmp.join("test_tamper_detect_audit.log");
+        let key_path = tmp.join("test_tamper_detect_key.key");
+        let _ = fs::remove_file(&log_path);
+        let _ = fs::remove_file(&key_path);
+
+        // Log a genuine entry.
+        let logger = AuditLogger::new(log_path.clone(), &key_path);
+        let entry = AuditLogger::create_entry(AuditEventType::MasterPasswordCheck, true, None);
+        logger.log_event(&entry).unwrap();
+
+        // Read the entry back and confirm HMAC is valid before tampering.
+        let content = fs::read_to_string(&log_path).unwrap();
+        let logged_entry: AuditEntry = serde_json::from_str(content.trim()).unwrap();
+        assert!(
+            logger.verify_entry(&logged_entry).unwrap(),
+            "HMAC should be valid for an unmodified entry"
+        );
+
+        // Tamper with the entry by flipping the `success` field.
+        let mut tampered = logged_entry.clone();
+        tampered.success = !tampered.success;
+
+        // The HMAC stored in `tampered` was computed for the original content, so
+        // it must not match the tampered content.
+        assert!(
+            !logger.verify_entry(&tampered).unwrap(),
+            "Tampered entry must be detected (HMAC mismatch)"
+        );
+
+        // Clean up
+        let _ = fs::remove_file(log_path);
+        let _ = fs::remove_file(key_path);
     }
 }
