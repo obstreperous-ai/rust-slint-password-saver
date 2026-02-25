@@ -31,7 +31,7 @@ The automated security audit (cargo-audit) is passing. All critical dependency v
 ✅ Transitive dependencies: No critical vulnerabilities
 ⚠️ Warnings: 2 unmaintained dependencies (non-critical)
 🔍 Total dependencies scanned: 618 crates
-🔴 Code-level findings: 5 new issues (1 high, 2 medium, 1 low-medium, 1 low)
+🔴 Code-level findings: 5 new issues (1 high, 2 medium, 1 low-medium, 1 low); 3 resolved
 ```
 
 **Critical Issues:**
@@ -669,7 +669,7 @@ The following tasks are formatted as GitHub issues ready to be picked up by Copi
 2. 🟡 Issue #23: Fix Password Validation Inconsistency (8-char vs 12-char minimum)
 3. ✅ Issue #24: Implement Persistent Rate Limiting — **RESOLVED 2026-02-23**
 4. 🔵 Issue #25: Use Argon2 for Recovery Key Derivation
-5. 🔵 Issue #26: Zeroize Master Password at UI Layer
+5. 🔵 Issue #26: Zeroize Master Password at UI Layer ✅ **RESOLVED 2026-02-25**
 
 ---
 
@@ -3930,11 +3930,11 @@ Update `EmergencyRecovery::create()` to generate and store a salt for key deriva
 
 ---
 
-### Issue 26: 🔵 Zeroize Master Password at UI Layer
+### Issue 26: ✅ Zeroize Master Password at UI Layer
 
 **Title:** Wrap master password strings in Zeroizing<String> in UI callbacks to prevent memory exposure
 
-**Status:** 🔵 **OPEN** — Identified 2026-02-22
+**Status:** ✅ **RESOLVED** — 2026-02-25
 
 **Description:**
 The master password received from the Slint UI is handled as `SharedString` or converted to `String` before being passed to storage operations. Neither `SharedString` nor `String` implements `Zeroize`, so the master password may persist in heap memory after the UI callback returns, until the allocator reuses that memory.
@@ -3986,9 +3986,9 @@ Apply the same pattern in all UI callbacks that receive a master password:
 - Verify that all code paths that receive a master password from UI use `Zeroizing<String>`
 
 **Acceptance Criteria:**
-- [ ] All UI callbacks that receive a master password wrap it in `Zeroizing<String>` immediately
-- [ ] No plain `String` or `.to_string()` calls persist master password beyond the callback scope
-- [ ] Code review confirms consistent pattern throughout `main.rs`
+- [x] All UI callbacks that receive a master password wrap it in `Zeroizing<String>` immediately
+- [x] No plain `String` or `.to_string()` calls persist master password beyond the callback scope
+- [x] Code review confirms consistent pattern throughout `main.rs`
 
 **Priority:** 🔵 LOW
 **Estimated Effort:** 1-2 hours
@@ -4319,6 +4319,13 @@ Always test:
 
 ## Changelog
 
+### 2026-02-25 - Zeroize Master Password at UI Layer (Issue #26)
+
+- Wrapped master password `SharedString` values in `Zeroizing<String>` immediately upon receipt in all UI handler callbacks (`handle_save_password`, `handle_load_passwords`, `handle_unlock`) so the plaintext master password is securely overwritten in memory when each callback returns
+- Added `use zeroize::Zeroizing` import to `src/ui_handlers.rs`
+- Added unit test `test_zeroizing_string_clears_on_drop` documenting the zeroize-on-drop guarantee
+- Updated SECURITY.md: Issue #26 marked ✅ RESOLVED
+
 ### 2026-02-22 - Comprehensive Security Code Audit
 
 - Conducted thorough code-level security audit of all production source files
@@ -4327,7 +4334,7 @@ Always test:
   - **MEDIUM**: Password validation inconsistency (8-char vs 12-char minimum) — Issue #23
   - **MEDIUM**: Non-persistent rate limiting (bypassed by restart) — Issue #24 ✅ RESOLVED
   - **LOW-MEDIUM**: Recovery key derivation using SHA-256 instead of Argon2 — Issue #25 ✅ RESOLVED
-  - **LOW**: Master password not zeroized at UI layer — Issue #26
+  - **LOW**: Master password not zeroized at UI layer — Issue #26 ✅ RESOLVED
 - Conducted comprehensive code coverage assessment for security features
 - Identified 6 critical test gaps:
   - Rate limit persistence, HMAC tamper detection, concurrent auth, recovery workflow, Windows CI, corrupt backup handling
@@ -4372,6 +4379,6 @@ Always test:
 
 ---
 
-**Last Updated:** 2026-02-22  
-**Security Audit Status:** ⚠️ ACTION REQUIRED (5 code-level findings: 1 high, 2 medium, 1 low-medium, 1 low; 0 critical dependency issues; 2 non-critical dependency warnings)  
+**Last Updated:** 2026-02-25  
+**Security Audit Status:** ⚠️ ACTION REQUIRED (2 code-level findings open: 1 high, 1 medium; 3 resolved: #24, #25, #26; 0 critical dependency issues; 2 non-critical dependency warnings)  
 **Next Review Date:** 2026-03-22
