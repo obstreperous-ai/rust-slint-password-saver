@@ -4037,13 +4037,16 @@ Tests added in `tests/rate_limit_test.rs`:
 - `test_persistence_success_clears_state` — successful auth clears the persist file
 - `test_persistence_corrupted_file_handled_gracefully` — corrupted file resets to zero attempts
 
-#### Gap 2: HMAC Tamper Detection (⚠️ Partial)
+#### Gap 2: HMAC Tamper Detection (✅ Resolved)
 
-No test verifies that a tampered audit log entry (with invalid HMAC) is detected during log verification. The HMAC key derivation issue (Finding 1) means tamper detection is broken regardless, but the test infrastructure should be present.
-
-**Required Tests:**
-- `test_tampered_log_entry_detected` — modify a log entry on disk, attempt to read/verify it, expect detection
-- `test_hmac_key_persistence` — verify HMAC key file is created, has 0600 permissions, and is reloaded correctly
+`AuditLogger` now exposes a `verify_entry` method that recomputes the expected HMAC and
+compares it with the stored HMAC.  Tests added in `src/audit_log.rs`:
+- `test_tampered_log_entry_detected` — logs an entry, flips the `success` field in memory,
+  and asserts that `verify_entry` returns `false` for the tampered copy
+- `test_hmac_key_persistence` — verifies HMAC key file is created and reloaded with the same
+  32-byte value across calls (already present)
+- `test_hmac_key_file_permissions` — verifies the key file has 0600 permissions on Unix
+  (already present)
 
 #### Gap 3: Recovery Full-Workflow Database Decryption (⚠️ Partial)
 
@@ -4052,30 +4055,30 @@ Current recovery tests verify code generation and verification but do not test a
 **Required Tests (once full recovery is implemented):**
 - `test_full_recovery_workflow` — save passwords with master password, forget master password, use recovery code, verify stored passwords are accessible
 
-#### Gap 4: Concurrent Authentication (🔴 Missing)
+#### Gap 4: Concurrent Authentication (✅ Resolved)
 
-No tests verify thread-safety of the authentication path under concurrent load.
+`RateLimiter` uses a `Mutex`-protected attempt list, making it safe to call from multiple
+threads.  Test added in `tests/integration/security_scenarios_test.rs`:
+- `test_concurrent_unlock_attempts` — spawns 20 threads that all call
+  `check_and_record_attempt()` simultaneously and asserts that at most 5 are allowed while
+  all subsequent attempts are rejected
 
-**Required Tests:**
-- `test_concurrent_unlock_attempts` — spawn multiple threads attempting authentication simultaneously, verify rate limiting is applied correctly and no data corruption occurs
+#### Gap 5: Windows Platform Coverage (✅ Partial — CI added)
 
-#### Gap 5: Windows Platform Coverage (⚠️ None)
-
-All file permission tests run on Unix only. Windows-specific permission code (`src/windows_permissions.rs`) is not covered by automated tests.
-
-**Required Tests:**
-- Run CI pipeline on Windows (GitHub Actions `windows-latest` runner)
-- `test_windows_file_permissions_restrict_access` — verify file is inaccessible to other users
+`windows-latest` has been added to the CI matrix in `.github/workflows/ci.yml`.
+Windows-specific permission code (`src/windows_permissions.rs`) will now be compiled and
+exercised by `cargo test` on every pull request.  A future follow-up can add a dedicated
+`test_windows_file_permissions_restrict_access` test once the ACL helpers are stable.
 
 ### New Tests Required (Action Items)
 
 | Test | Priority | Issue |
 |---|---|---|
 | ~~Rate limit persistence across restart~~ | ~~🔴 HIGH~~ | ~~#24~~ ✅ Done |
-| HMAC key persistence and tamper detection | 🔴 HIGH | #22 |
-| Concurrent authentication thread safety | 🟡 MEDIUM | New |
+| ~~HMAC key persistence and tamper detection~~ | ~~🔴 HIGH~~ | ~~#22~~ ✅ Done |
+| ~~Concurrent authentication thread safety~~ | ~~🟡 MEDIUM~~ | ✅ Done |
 | Full recovery workflow with DB decryption | 🟡 MEDIUM | #21 followup |
-| Windows file permissions CI | 🔵 LOW | Ongoing |
+| Windows file permissions CI | 🔵 LOW | ✅ CI added; dedicated test pending |
 | Corrupt backup graceful failure | 🔵 LOW | New |
 
 ---

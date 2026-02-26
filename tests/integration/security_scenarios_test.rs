@@ -353,3 +353,49 @@ fn test_storage_operations_produce_audit_entries() {
         "Audit log should grow after storage operations (was {size_before} bytes, now {size_after} bytes)"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Concurrent authentication tests
+// ---------------------------------------------------------------------------
+
+/// Verify that the `RateLimiter` is thread-safe under concurrent load.
+///
+/// Multiple threads attempt to authenticate simultaneously.  The combined
+/// allowed-attempt count must not exceed `MAX_ATTEMPTS` (5) and the limiter
+/// must not exhibit data corruption (e.g. negative counts or panics).
+#[test]
+fn test_concurrent_unlock_attempts() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let limiter = Arc::new(RateLimiter::new());
+    let thread_count = 20;
+    let mut handles = Vec::with_capacity(thread_count);
+
+    for _ in 0..thread_count {
+        let l = Arc::clone(&limiter);
+        handles.push(thread::spawn(move || l.check_and_record_attempt().is_ok()));
+    }
+
+    let allowed: usize = handles
+        .into_iter()
+        .map(|h| h.join().expect("Thread panicked") as usize)
+        .sum();
+
+    // At most MAX_ATTEMPTS (5) threads should have been granted access.
+    // Due to race conditions the actual allowed count may be <= 5.
+    assert!(
+        allowed <= 5,
+        "At most 5 concurrent attempts should be allowed, but {allowed} were"
+    );
+    assert!(
+        allowed >= 1,
+        "At least 1 thread should succeed before rate limiting kicks in"
+    );
+
+    // After exhausting the limit, every new attempt must be rejected.
+    assert!(
+        limiter.check_and_record_attempt().is_err(),
+        "Further attempts must be rate-limited after the limit is exhausted"
+    );
+}
