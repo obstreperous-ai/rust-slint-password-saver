@@ -1034,9 +1034,11 @@ impl PasswordStorage {
             storage_data.recovery_code_hashes,
             storage_data.encrypted_recovery_key,
         ) {
-            (Some(hashes), Some(encrypted_key)) => {
-                Ok(Some((hashes, encrypted_key, storage_data.recovery_key_salt)))
-            }
+            (Some(hashes), Some(encrypted_key)) => Ok(Some((
+                hashes,
+                encrypted_key,
+                storage_data.recovery_key_salt,
+            ))),
             _ => Ok(None),
         }
     }

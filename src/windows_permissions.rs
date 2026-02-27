@@ -13,11 +13,15 @@ use windows::core::PWSTR;
 #[cfg(windows)]
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, PSID};
 #[cfg(windows)]
+use windows::Win32::Security::Authorization::{
+    SetEntriesInAclW, SetSecurityInfo, ACCESS_MODE, EXPLICIT_ACCESS_W, GRANT_ACCESS, INHERITED_ACE,
+    NO_INHERITANCE, SET_ACCESS, SE_FILE_OBJECT, SUB_CONTAINERS_AND_OBJECTS_INHERIT, TRUSTEE_IS_SID,
+    TRUSTEE_W,
+};
+#[cfg(windows)]
 use windows::Win32::Security::{
-    GetTokenInformation, SetEntriesInAclW, SetSecurityInfo, TokenUser, ACCESS_MODE,
-    DACL_SECURITY_INFORMATION, EXPLICIT_ACCESS_W, GRANT_ACCESS, INHERITED_ACE, NO_INHERITANCE,
-    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, SET_ACCESS, SE_FILE_OBJECT,
-    SUB_CONTAINERS_AND_OBJECTS_INHERIT, TOKEN_QUERY, TOKEN_USER, TRUSTEE_IS_SID, TRUSTEE_W,
+    GetTokenInformation, TokenUser, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+    PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{
@@ -54,8 +58,8 @@ use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 /// than using a NULL DACL which would grant everyone access.
 #[cfg(windows)]
 pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Security::{LocalFree, ACL};
+    use windows::Win32::Foundation::{CloseHandle, LocalFree};
+    use windows::Win32::Security::ACL;
 
     // Convert path to wide string for Windows API
     let path_str = path.to_str().ok_or(SecurityError::PermissionDenied)?;

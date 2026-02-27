@@ -379,7 +379,7 @@ fn test_concurrent_unlock_attempts() {
 
     let allowed: usize = handles
         .into_iter()
-        .map(|h| h.join().expect("Thread panicked") as usize)
+        .map(|h| usize::from(h.join().expect("Thread panicked")))
         .sum();
 
     // At most MAX_ATTEMPTS (5) threads should have been granted access.
