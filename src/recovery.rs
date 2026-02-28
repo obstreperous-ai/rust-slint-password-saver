@@ -337,8 +337,8 @@ impl EmergencyRecovery {
 
         // Derive key using Argon2id — same parameters as main key derivation
         // Memory: 32 MiB, Iterations: 2, Parallelism: 4, Output: 32 bytes
-        let params = Params::new(32768, 2, 4, Some(32))
-            .map_err(|_| SecurityError::CryptographicError)?;
+        let params =
+            Params::new(32768, 2, 4, Some(32)).map_err(|_| SecurityError::CryptographicError)?;
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let salt_string =
             SaltString::encode_b64(salt).map_err(|_| SecurityError::CryptographicError)?;
@@ -504,12 +504,10 @@ mod tests {
             })
             .collect();
 
-        let key1 =
-            EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt)
-                .expect("Key derivation should succeed");
-        let key2 =
-            EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt)
-                .expect("Key derivation should succeed");
+        let key1 = EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt)
+            .expect("Key derivation should succeed");
+        let key2 = EmergencyRecovery::derive_recovery_key(&recovery_codes, "test_password", &salt)
+            .expect("Key derivation should succeed");
 
         // Keys should be identical
         assert_eq!(key1, key2);
