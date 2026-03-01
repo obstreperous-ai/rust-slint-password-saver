@@ -50,12 +50,12 @@ The application will **build and run** on Windows but requires the user to compi
 
 #### 🔴 Critical
 
-**1. Console window appears on launch (`main.rs`)**
+**1. Console window appears on launch (`main.rs`)** ✅ Fixed
 
 On Windows, Rust GUI applications compiled without the `#![windows_subsystem = "windows"]` attribute (or equivalent `#[link_args]` / manifest) will always open a black CMD/PowerShell console window behind the main application window. This is the most visible quality issue a Windows user encounters on first launch.
 
 - **File**: `src/main.rs`
-- **Current state**: No `windows_subsystem` attribute present
+- **Current state**: ✅ `#![cfg_attr(windows, windows_subsystem = "windows")]` added; `env_logger` initialised to write to `%LOCALAPPDATA%\PasswordSaver\app.log` on Windows so log output is not lost
 - **Impact**: Every Windows user sees a superfluous console window; looks like developer tooling, not a finished product
 - **Fix**: Add `#![cfg_attr(windows, windows_subsystem = "windows")]` as a crate-level attribute to `main.rs`
 - **Caveat**: This suppresses `stdout`/`stderr` on Windows, so logging strategy must be updated (write to file or Windows Event Log instead of stderr)

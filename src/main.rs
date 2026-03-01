@@ -21,6 +21,9 @@
 //! cargo run --release
 //! ```
 
+// Suppress the console window on Windows; has no effect on other platforms.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use log::warn;
 use rust_slint_password_saver::{
     audit_log::{get_audit_hmac_key_path, get_audit_log_path, AuditEventType, AuditLogger},
@@ -112,6 +115,42 @@ fn get_storage_path() -> Result<PathBuf, errors::SecurityError> {
 
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<(), slint::PlatformError> {
+    // Initialise env_logger.
+    // On Windows, stderr is unavailable after applying `windows_subsystem = "windows"`, so
+    // redirect log output to %LOCALAPPDATA%\PasswordSaver\app.log instead.
+    #[cfg(windows)]
+    {
+        let log_dir = std::env::var("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::var("USERPROFILE").map(PathBuf::from))
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("PasswordSaver");
+        let file_logger_initialised = std::fs::create_dir_all(&log_dir)
+            .ok()
+            .and_then(|_| {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(log_dir.join("app.log"))
+                    .ok()
+            })
+            .map(|file| {
+                env_logger::Builder::new()
+                    .target(env_logger::Target::Pipe(Box::new(file)))
+                    .filter_level(log::LevelFilter::Warn)
+                    .init();
+            })
+            .is_some();
+        if !file_logger_initialised {
+            // Fall back to stderr if the log file could not be opened.
+            env_logger::init();
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        env_logger::init();
+    }
+
     // Initialize audit logging
     let audit_logger = AuditLogger::new(get_audit_log_path(), &get_audit_hmac_key_path());
     let startup_entry = AuditLogger::create_entry(
