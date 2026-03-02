@@ -62,13 +62,13 @@ On Windows, Rust GUI applications compiled without the `#![windows_subsystem = "
 
 ---
 
-**2. No Windows binary in release pipeline (`release.yml`)**
+**2. No Windows binary in release pipeline (`release.yml`)** ✅ Fixed
 
 The release workflow builds Linux x64, macOS Intel, and macOS Apple Silicon binaries. There is no `x86_64-pc-windows-msvc` target. Windows users have no pre-built binary and must install a full Rust toolchain and build from source — a significant barrier.
 
 - **File**: `.github/workflows/release.yml`
-- **Current state**: Three release targets, none for Windows
-- **Impact**: Zero-friction download is impossible for Windows users
+- **Current state**: ✅ `x86_64-pc-windows-msvc` added to release matrix; `rust-slint-password-saver-windows-x86_64.zip` containing `rust-slint-password-saver.exe` is produced and attached to every GitHub release via PowerShell `Compress-Archive`
+- **Impact**: ~~Zero-friction download is impossible for Windows users~~ Windows users can now download a pre-built binary directly from the GitHub releases page
 - **Fix**: Add `x86_64-pc-windows-msvc` to the release matrix; ship a `.zip` archive containing the `.exe`
 
 ---
