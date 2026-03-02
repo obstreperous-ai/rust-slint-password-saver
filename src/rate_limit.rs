@@ -332,6 +332,11 @@ impl RateLimiter {
                 let permissions = fs::Permissions::from_mode(0o600);
                 let _ = fs::set_permissions(path, permissions);
             }
+            #[cfg(windows)]
+            {
+                use crate::windows_permissions::set_windows_secure_permissions;
+                let _ = set_windows_secure_permissions(path);
+            }
         }
     }
 
