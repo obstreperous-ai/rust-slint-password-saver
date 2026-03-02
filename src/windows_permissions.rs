@@ -25,8 +25,8 @@ use windows::Win32::Security::{
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, OPEN_EXISTING,
-    READ_CONTROL, WRITE_DAC,
+    CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ,
+    OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
 };
 #[cfg(windows)]
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
@@ -179,8 +179,11 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
 
 /// Set secure Windows ACL permissions on a directory (equivalent to Unix 0700).
 ///
-/// This function restricts directory access to the current user only.
-/// The implementation is the same as file permissions but applied to a directory.
+/// This function restricts directory access to the current user only by:
+/// 1. Opening the directory handle with `FILE_FLAG_BACKUP_SEMANTICS` (required for directories)
+/// 2. Getting the current user's SID
+/// 3. Creating an explicit DACL with ACE that grants only the current user access
+/// 4. Protecting the DACL from inheritance
 ///
 /// # Arguments
 ///
@@ -193,10 +196,130 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
 /// # Platform
 ///
 /// This function is only available on Windows platforms.
+///
+/// # Security
+///
+/// Opening a directory with `CreateFileW` requires `FILE_FLAG_BACKUP_SEMANTICS` in
+/// `dwFlagsAndAttributes`. Without it, `CreateFileW` returns `INVALID_HANDLE_VALUE`
+/// and the ACL is never applied.
 #[cfg(windows)]
 pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityError> {
-    // Directory permissions use the same ACL mechanism as files
-    set_windows_secure_permissions(path)
+    use windows::Win32::Foundation::{CloseHandle, LocalFree};
+    use windows::Win32::Security::ACL;
+
+    // Convert path to wide string for Windows API
+    let path_str = path.to_str().ok_or(SecurityError::PermissionDenied)?;
+    let mut wide_path: Vec<u16> = path_str.encode_utf16().collect();
+    wide_path.push(0); // Null terminator
+
+    unsafe {
+        // Open directory handle with permissions needed to modify DACL.
+        // FILE_FLAG_BACKUP_SEMANTICS is required to open a directory handle with CreateFileW.
+        let dir_handle = CreateFileW(
+            PWSTR(wide_path.as_mut_ptr()),
+            READ_CONTROL.0 | WRITE_DAC.0,
+            FILE_SHARE_READ,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            HANDLE(0),
+        )
+        .map_err(|_| SecurityError::PermissionDenied)?;
+
+        // Get current process token
+        let mut token_handle = HANDLE(0);
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token_handle).is_err() {
+            let _ = CloseHandle(dir_handle);
+            return Err(SecurityError::PermissionDenied);
+        }
+
+        // Get token user information to retrieve the current user's SID
+        let mut token_user_size = 0u32;
+        let _ = GetTokenInformation(token_handle, TokenUser, None, 0, &mut token_user_size);
+
+        if token_user_size == 0 {
+            let _ = CloseHandle(token_handle);
+            let _ = CloseHandle(dir_handle);
+            return Err(SecurityError::PermissionDenied);
+        }
+
+        // Allocate buffer for token user
+        let mut token_user_buffer = vec![0u8; token_user_size as usize];
+        if !GetTokenInformation(
+            token_handle,
+            TokenUser,
+            Some(token_user_buffer.as_mut_ptr() as *mut _),
+            token_user_size,
+            &mut token_user_size,
+        )
+        .is_ok()
+        {
+            let _ = CloseHandle(token_handle);
+            let _ = CloseHandle(dir_handle);
+            return Err(SecurityError::PermissionDenied);
+        }
+
+        let token_user = &*(token_user_buffer.as_ptr() as *const TOKEN_USER);
+        let user_sid = PSID(token_user.User.Sid.0);
+
+        // Create an explicit access entry for the current user.
+        // Grants the user read and write access with sub-container and object inheritance
+        // so the ACL propagates to nested files and directories (Windows-specific behaviour;
+        // this differs from Unix 0700 which does not propagate permissions to nested items).
+        // Using SET_ACCESS mode to replace all existing permissions.
+        let mut ea = EXPLICIT_ACCESS_W {
+            grfAccessPermissions: (FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0),
+            grfAccessMode: SET_ACCESS,
+            grfInheritance: SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: std::ptr::null_mut(),
+                MultipleTrusteeOperation: Default::default(),
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: Default::default(),
+                ptstrName: PWSTR(user_sid.0 as *mut u16),
+            },
+        };
+
+        // Create a new ACL with the explicit access entry
+        let mut new_acl: *mut ACL = std::ptr::null_mut();
+        let result = SetEntriesInAclW(
+            Some(&[ea]),
+            None, // No existing ACL - create a new one
+            &mut new_acl,
+        );
+
+        if result != ERROR_SUCCESS {
+            let _ = CloseHandle(token_handle);
+            let _ = CloseHandle(dir_handle);
+            return Err(SecurityError::PermissionDenied);
+        }
+
+        // Set the new DACL on the directory with protection from inheritance
+        let set_result = SetSecurityInfo(
+            dir_handle,
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION
+                | DACL_SECURITY_INFORMATION
+                | PROTECTED_DACL_SECURITY_INFORMATION,
+            user_sid,
+            PSID::default(),
+            Some(new_acl),
+            None,
+        );
+
+        // Clean up resources
+        if !new_acl.is_null() {
+            let _ = LocalFree(HANDLE(new_acl as isize));
+        }
+        let _ = CloseHandle(token_handle);
+        let _ = CloseHandle(dir_handle);
+
+        if set_result != ERROR_SUCCESS {
+            return Err(SecurityError::PermissionDenied);
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
