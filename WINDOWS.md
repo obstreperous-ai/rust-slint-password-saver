@@ -132,14 +132,13 @@ The CI matrix includes `windows-latest` but has no Windows-specific setup step (
 
 ---
 
-**8. Directory ACL implementation may not work correctly for directories (`windows_permissions.rs`)**
+**8. ✅ FIXED: Directory ACL implementation now uses `FILE_FLAG_BACKUP_SEMANTICS` (`windows_permissions.rs`)**
 
-`set_windows_directory_permissions()` delegates entirely to `set_windows_secure_permissions()`, which opens the path using `CreateFileW` with `OPEN_EXISTING` and `FILE_SHARE_READ`. Opening a **directory** with `CreateFileW` requires the `FILE_FLAG_BACKUP_SEMANTICS` flag in the `dwFlagsAndAttributes` parameter. Without it, `CreateFileW` will fail on a directory path, causing the ACL function to silently return `Err(SecurityError::PermissionDenied)` — which is then swallowed by the `let _ =` in `main.rs`.
+`set_windows_directory_permissions()` previously delegated entirely to `set_windows_secure_permissions()`, which opens the path using `CreateFileW` with `OPEN_EXISTING` and `FILE_SHARE_READ`. Opening a **directory** with `CreateFileW` requires the `FILE_FLAG_BACKUP_SEMANTICS` flag in the `dwFlagsAndAttributes` parameter. Without it, `CreateFileW` fails on a directory path, causing the ACL function to silently return `Err(SecurityError::PermissionDenied)`.
 
-- **File**: `src/windows_permissions.rs`, lines 197–200
-- **Current state**: Directory delegates to file ACL function; `FILE_FLAG_BACKUP_SEMANTICS` flag missing
-- **Impact**: Storage directory permissions are silently not set on Windows; the security guarantee documented in comments is not met
-- **Fix**: Add `FILE_FLAG_BACKUP_SEMANTICS` to `dwFlagsAndAttributes` when opening a directory, or create a dedicated `set_windows_directory_permissions` implementation
+- **File**: `src/windows_permissions.rs`
+- **Fixed state**: `set_windows_directory_permissions()` has its own dedicated implementation that passes `FILE_FLAG_BACKUP_SEMANTICS` to `CreateFileW`, correctly opening a directory handle and applying the ACL
+- **Impact**: Storage directory permissions are now correctly set on Windows
 
 ---
 
@@ -361,7 +360,7 @@ In `src/audit_log.rs`, after writing the HMAC key file used for audit log integr
 
 ---
 
-### Issue 5: Fix `set_windows_directory_permissions` missing `FILE_FLAG_BACKUP_SEMANTICS`
+### ✅ Issue 5 (RESOLVED): Fix `set_windows_directory_permissions` missing `FILE_FLAG_BACKUP_SEMANTICS`
 
 **Title**: `fix(windows): add FILE_FLAG_BACKUP_SEMANTICS when opening directory for ACL modification`
 
