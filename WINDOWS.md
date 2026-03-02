@@ -91,8 +91,8 @@ In `audit_log.rs`, after generating or loading the HMAC key, Unix file permissio
 `rate_limit.rs` sets Unix `0o600` permissions on the persisted attempt-timestamp JSON file after each write, but again has no `#[cfg(windows)]` counterpart. On Windows, the rate limit state file is left with default ACL.
 
 - **File**: `src/rate_limit.rs`, lines 329–334
-- **Current state**: `#[cfg(unix)]` permission block only
-- **Impact**: A local attacker could delete or modify the rate limit file on Windows to bypass brute-force protection
+- **Current state**: ✅ `#[cfg(windows)]` block added immediately after the `#[cfg(unix)]` block; calls `crate::windows_permissions::set_windows_secure_permissions(path)` so the rate limit persist file is restricted to the current user on Windows
+- **Impact**: ~~A local attacker could delete or modify the rate limit file on Windows to bypass brute-force protection~~ The rate limit persist file is now restricted to the current user on Windows
 - **Fix**: Add `#[cfg(windows)]` block calling `set_windows_secure_permissions()` after the existing Unix block
 
 ---
