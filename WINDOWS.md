@@ -75,13 +75,13 @@ The release workflow builds Linux x64, macOS Intel, and macOS Apple Silicon bina
 
 #### 🟠 High
 
-**3. HMAC key file missing Windows ACL permissions (`audit_log.rs`)**
+**3. HMAC key file missing Windows ACL permissions (`audit_log.rs`)** ✅ Fixed
 
 In `audit_log.rs`, after generating or loading the HMAC key, Unix file permissions (`0o600`) are set on the key file via `#[cfg(unix)]`. There is no corresponding `#[cfg(windows)]` block to call `set_windows_secure_permissions()`. On Windows the HMAC key file is created with default ACL (typically world-readable for local user accounts), degrading audit log integrity protection.
 
 - **File**: `src/audit_log.rs`, lines 200–212
-- **Current state**: `#[cfg(unix)]` permission block only; no `#[cfg(windows)]` equivalent
-- **Impact**: The audit HMAC key file may be readable by other users on multi-user Windows systems
+- **Current state**: ✅ `#[cfg(windows)]` block added immediately after the `#[cfg(unix)]` block; calls `crate::windows_permissions::set_windows_secure_permissions(key_path)` and logs a warning on failure
+- **Impact**: ~~The audit HMAC key file may be readable by other users on multi-user Windows systems~~ The audit HMAC key file is now restricted to the current user on Windows
 - **Fix**: Add `#[cfg(windows)]` block calling `crate::windows_permissions::set_windows_secure_permissions()` immediately after the existing Unix block
 
 ---

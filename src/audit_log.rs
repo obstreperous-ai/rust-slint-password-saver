@@ -210,6 +210,18 @@ impl AuditLogger {
                 );
             }
         }
+        #[cfg(windows)]
+        {
+            use crate::windows_permissions::set_windows_secure_permissions;
+            if let Err(e) = set_windows_secure_permissions(key_path) {
+                log::warn!(
+                    "Failed to set Windows ACL on audit HMAC key {}: {:?}. \
+                     Key file may be accessible to other users.",
+                    key_path.display(),
+                    e
+                );
+            }
+        }
         key
     }
 
