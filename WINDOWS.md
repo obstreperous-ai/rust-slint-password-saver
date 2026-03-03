@@ -35,7 +35,7 @@ The application will **build and run** on Windows but requires the user to compi
 | Area | Status | Notes |
 |------|--------|-------|
 | **Build** | ✅ Compiles | CI runs `windows-latest` matrix; code compiles without errors |
-| **Storage Path** | ✅ Functional | `USERPROFILE` env var fallback in `main.rs`, `audit_log.rs` |
+| **Storage Path** | ✅ Windows-conventional | `%LOCALAPPDATA%\PasswordSaver\` on Windows (falls back to `USERPROFILE\.password_saver\`); `~/.password_saver/` on Unix |
 | **File ACL (storage)** | ✅ Implemented | `windows_permissions.rs` provides `set_windows_secure_permissions()` used by `storage.rs` |
 | **Directory ACL** | ✅ Implemented | `set_windows_directory_permissions()` called from `main.rs` on `~/.password_saver/` |
 | **UI Framework** | ✅ Compatible | Slint supports Windows natively via Direct3D/OpenGL backend |
@@ -97,14 +97,13 @@ In `audit_log.rs`, after generating or loading the HMAC key, Unix file permissio
 
 ---
 
-**5. Storage path uses `~/.password_saver/` not Windows-conventional `%APPDATA%` (`main.rs`)**
+**✅ 5. (RESOLVED) Storage path now uses Windows-conventional `%LOCALAPPDATA%\PasswordSaver\` (`main.rs`, `audit_log.rs`)**
 
-The storage directory is resolved as `$HOME/.password_saver/` (Unix convention) with a `USERPROFILE` fallback. On Windows the conventional path for application data is `%APPDATA%\PasswordSaver\` (roaming) or `%LOCALAPPDATA%\PasswordSaver\` (local, preferred for encrypted data that should not roam). Using the dotfile convention at `USERPROFILE` works but is unusual, unexpected, and invisible to Windows users who look for app data in `AppData\Roaming` or `AppData\Local`.
+The storage directory now uses `%LOCALAPPDATA%\PasswordSaver\` on Windows (with fallback to `USERPROFILE\.password_saver\` if `LOCALAPPDATA` is unset). On Unix the existing `~/.password_saver/` path is unchanged. A one-time migration warning is logged when the legacy path exists but the new path does not.
 
 - **Files**: `src/main.rs` (`get_storage_path()`), `src/audit_log.rs` (`get_audit_log_path()`, `get_audit_hmac_key_path()`)
-- **Current state**: `$HOME/.password_saver/` with `USERPROFILE` fallback
-- **Impact**: Violates Windows application data conventions; confuses users trying to backup or find their data; the `.password_saver` dotfolder does not appear in Windows Explorer by default (hidden)
-- **Fix**: Use `LOCALAPPDATA` env var on Windows (e.g., `%LOCALAPPDATA%\PasswordSaver\`) via `#[cfg(windows)]`; keep `$HOME/.password_saver/` on Unix
+- **Current state**: ✅ `%LOCALAPPDATA%\PasswordSaver\` on Windows; `~/.password_saver/` on Unix
+- **Impact resolved**: Windows users can now find their data via Windows Explorer and it is included in standard backup solutions
 
 ---
 
@@ -436,7 +435,7 @@ In `src/main.rs`, the call to `set_windows_directory_permissions()` uses `let _ 
 
 ---
 
-### Issue 7: Use Windows-conventional `%LOCALAPPDATA%` for storage path on Windows
+### ✅ Issue 7 (RESOLVED): Use Windows-conventional `%LOCALAPPDATA%` for storage path on Windows
 
 **Title**: `feat(windows): use %LOCALAPPDATA%\PasswordSaver\ as storage path on Windows`
 

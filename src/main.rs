@@ -26,7 +26,9 @@
 
 use log::warn;
 use rust_slint_password_saver::{
-    audit_log::{get_audit_hmac_key_path, get_audit_log_path, AuditEventType, AuditLogger},
+    audit_log::{
+        get_audit_hmac_key_path, get_audit_log_path, storage_base_dir, AuditEventType, AuditLogger,
+    },
     errors,
     storage::PasswordStorage,
     ui_handlers::UIHandlers,
@@ -42,7 +44,9 @@ use std::time::Duration;
 /// This function determines the appropriate location for password storage
 /// based on the operating system:
 /// - Unix-like systems (macOS, Linux): `~/.password_saver/passwords.enc`
-/// - Windows: `%USERPROFILE%/.password_saver/passwords.enc`
+/// - Windows: `%LOCALAPPDATA%\PasswordSaver\passwords.enc`
+///   (falls back to `%USERPROFILE%\.password_saver\passwords.enc` if
+///   `LOCALAPPDATA` is not set)
 ///
 /// # Returns
 ///
@@ -58,17 +62,36 @@ use std::time::Duration;
 /// # Platform Support
 ///
 /// Works on macOS, Linux, and other Unix-like systems. Uses `HOME` environment
-/// variable on Unix and `USERPROFILE` on Windows.
+/// variable on Unix and `LOCALAPPDATA` (with `USERPROFILE` fallback) on Windows.
 fn get_storage_path() -> Result<PathBuf, errors::SecurityError> {
-    // Try to get home directory from environment variables
-    // On Unix: $HOME, on Windows: %USERPROFILE%
-    let home_dir = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| String::from("."));
+    // Delegate base-directory resolution to the shared helper in audit_log.
+    let (base_dir, dir_name) = storage_base_dir();
 
-    let mut path = PathBuf::from(home_dir);
-    path.push(".password_saver");
+    let mut path = PathBuf::from(&base_dir);
+    path.push(dir_name);
     path.push("passwords.enc");
+
+    // On Windows: if the new LOCALAPPDATA path doesn't exist yet but the legacy
+    // USERPROFILE\.password_saver\ path does, warn the user to migrate their data.
+    #[cfg(windows)]
+    {
+        if std::env::var("LOCALAPPDATA").is_ok() {
+            let new_parent = path.parent().map(|p| p.to_path_buf());
+            let legacy_dir = std::env::var("USERPROFILE")
+                .map(|p| PathBuf::from(p).join(".password_saver"))
+                .ok();
+            if let (Some(new_dir), Some(old_dir)) = (new_parent, legacy_dir) {
+                if !new_dir.exists() && old_dir.exists() {
+                    log::warn!(
+                        "Legacy password data found at '{old}'. \
+                         Please move your data to the new location: '{new}'.",
+                        old = old_dir.display(),
+                        new = new_dir.display(),
+                    );
+                }
+            }
+        }
+    }
 
     // Create parent directory if it doesn't exist
     // This ensures ~/.password_saver/ exists before we try to write
