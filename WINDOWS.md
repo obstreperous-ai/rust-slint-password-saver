@@ -142,14 +142,13 @@ The CI matrix includes `windows-latest` but has no Windows-specific setup step (
 
 ---
 
-**9. Error from `set_windows_directory_permissions` is silently ignored (`main.rs`)**
+**9. Error from `set_windows_directory_permissions` is silently ignored (`main.rs`)** ✅ Fixed
 
 In `main.rs`, the call to `set_windows_directory_permissions()` uses `let _ = ...`, meaning any ACL failure is silently discarded. Unlike Unix where permissions are verified and the application returns an error if they cannot be set, the Windows path provides no feedback.
 
-- **File**: `src/main.rs`, lines 103–107
-- **Current state**: `let _ = set_windows_directory_permissions(parent);`
-- **Impact**: Users have no indication if the storage directory is not secured; reduces security posture transparency
-- **Fix**: Log a `warn!()` if the ACL call fails, consistent with Unix error handling; optionally treat it as an error
+- **File**: `src/main.rs`
+- **Fixed state**: `if let Err(e) = set_windows_directory_permissions(parent)` now emits a `log::warn!()` including the directory path and error details; application continues to start
+- **Impact**: Users and administrators now see a warning in the log if the storage directory ACL could not be set, improving security posture transparency
 
 ---
 
@@ -217,7 +216,7 @@ A Windows user's first interaction with this application today would likely be:
 6. **High-DPI displays** — on a Surface Pro or 4K monitor, the window may appear blurry if the DPI manifest is absent.
 7. **No uninstaller** — the binary has no Windows installation footprint; uninstalling means manually deleting files with no guidance.
 
-For a Windows developer, the experience is better (they can build from source), but there are no Windows-specific troubleshooting guides, and any ACL issues are silently ignored.
+For a Windows developer, the experience is better (they can build from source), but there are no Windows-specific troubleshooting guides, and ACL failures are now logged as warnings rather than silently discarded.
 
 ### For an Agentic AI Developer
 
@@ -393,7 +392,7 @@ In `src/audit_log.rs`, after writing the HMAC key file used for audit log integr
 
 ---
 
-### Issue 6: Log warning when Windows directory ACL fails instead of silently ignoring
+### Issue 6: Log warning when Windows directory ACL fails instead of silently ignoring ✅ Fixed
 
 **Title**: `fix(windows): log warning when directory ACL cannot be set instead of silent ignore`
 

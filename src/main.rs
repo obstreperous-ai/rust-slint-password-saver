@@ -106,7 +106,14 @@ fn get_storage_path() -> Result<PathBuf, errors::SecurityError> {
         #[cfg(windows)]
         {
             use rust_slint_password_saver::windows_permissions::set_windows_directory_permissions;
-            let _ = set_windows_directory_permissions(parent);
+            if let Err(e) = set_windows_directory_permissions(parent) {
+                log::warn!(
+                    "Failed to set Windows ACL on storage directory {:?}: {:?}. \
+                     Directory may be accessible to other users.",
+                    parent,
+                    e
+                );
+            }
         }
     }
 
