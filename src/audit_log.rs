@@ -460,11 +460,40 @@ impl AuditLogger {
     }
 }
 
+/// Returns the platform-appropriate base directory and subdirectory name for
+/// all storage files (`passwords.enc`, `audit.log`, `audit_hmac.key`).
+///
+/// - **Windows**: `(%LOCALAPPDATA%, "PasswordSaver")`, falling back to
+///   `(%USERPROFILE%, ".password_saver")` when `LOCALAPPDATA` is unset.
+/// - **Unix**: `($HOME, ".password_saver")`, falling back to `(".", ".password_saver")`.
+#[must_use]
+pub fn storage_base_dir() -> (String, &'static str) {
+    #[cfg(windows)]
+    {
+        match std::env::var("LOCALAPPDATA") {
+            Ok(local_app_data) => (local_app_data, "PasswordSaver"),
+            Err(_) => (
+                std::env::var("USERPROFILE").unwrap_or_else(|_| String::from(".")),
+                ".password_saver",
+            ),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        (
+            std::env::var("HOME").unwrap_or_else(|_| String::from(".")),
+            ".password_saver",
+        )
+    }
+}
+
 /// Helper function to get the default audit log path.
 ///
 /// Returns the path to the audit log file in the user's home directory:
 /// - Unix-like systems: `~/.password_saver/audit.log`
-/// - Windows: `%USERPROFILE%/.password_saver/audit.log`
+/// - Windows: `%LOCALAPPDATA%\PasswordSaver\audit.log`
+///   (falls back to `%USERPROFILE%\.password_saver\audit.log` if
+///   `LOCALAPPDATA` is not set)
 ///
 /// # Returns
 ///
@@ -480,12 +509,10 @@ impl AuditLogger {
 /// ```
 #[must_use]
 pub fn get_audit_log_path() -> PathBuf {
-    let home_dir = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| String::from("."));
+    let (base_dir, dir_name) = storage_base_dir();
 
-    let mut path = PathBuf::from(home_dir);
-    path.push(".password_saver");
+    let mut path = PathBuf::from(base_dir);
+    path.push(dir_name);
     path.push("audit.log");
 
     // Create parent directory if it doesn't exist
@@ -500,7 +527,9 @@ pub fn get_audit_log_path() -> PathBuf {
 ///
 /// Returns the path to the persistent HMAC key file used for audit log integrity:
 /// - Unix-like systems: `~/.password_saver/audit_hmac.key`
-/// - Windows: `%USERPROFILE%/.password_saver/audit_hmac.key`
+/// - Windows: `%LOCALAPPDATA%\PasswordSaver\audit_hmac.key`
+///   (falls back to `%USERPROFILE%\.password_saver\audit_hmac.key` if
+///   `LOCALAPPDATA` is not set)
 ///
 /// # Returns
 ///
@@ -516,12 +545,10 @@ pub fn get_audit_log_path() -> PathBuf {
 /// ```
 #[must_use]
 pub fn get_audit_hmac_key_path() -> PathBuf {
-    let home_dir = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| String::from("."));
+    let (base_dir, dir_name) = storage_base_dir();
 
-    let mut path = PathBuf::from(home_dir);
-    path.push(".password_saver");
+    let mut path = PathBuf::from(base_dir);
+    path.push(dir_name);
     path.push("audit_hmac.key");
 
     path
@@ -727,5 +754,40 @@ mod tests {
         // Clean up
         let _ = fs::remove_file(log_path);
         let _ = fs::remove_file(key_path);
+    }
+
+    /// Verify that on non-Windows platforms the path functions use $HOME/.password_saver/.
+    #[cfg(not(windows))]
+    #[test]
+    fn test_get_audit_log_path_unix() {
+        let log_path = get_audit_log_path();
+        let key_path = get_audit_hmac_key_path();
+
+        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("."));
+        let expected_dir = PathBuf::from(&home).join(".password_saver");
+
+        assert_eq!(log_path.parent().unwrap(), expected_dir);
+        assert_eq!(log_path.file_name().unwrap(), "audit.log");
+        assert_eq!(key_path.parent().unwrap(), expected_dir);
+        assert_eq!(key_path.file_name().unwrap(), "audit_hmac.key");
+    }
+
+    /// Verify that when LOCALAPPDATA is set the path functions use
+    /// %LOCALAPPDATA%\PasswordSaver\ on Windows.
+    #[cfg(windows)]
+    #[test]
+    fn test_get_audit_log_path_windows_localappdata() {
+        // This test is meaningful only when LOCALAPPDATA is set, which it
+        // always is in a standard Windows environment.
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let log_path = get_audit_log_path();
+            let key_path = get_audit_hmac_key_path();
+
+            let expected_dir = PathBuf::from(&local_app_data).join("PasswordSaver");
+            assert_eq!(log_path.parent().unwrap(), expected_dir);
+            assert_eq!(log_path.file_name().unwrap(), "audit.log");
+            assert_eq!(key_path.parent().unwrap(), expected_dir);
+            assert_eq!(key_path.file_name().unwrap(), "audit_hmac.key");
+        }
     }
 }
