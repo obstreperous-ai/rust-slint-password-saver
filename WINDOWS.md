@@ -109,14 +109,13 @@ The storage directory now uses `%LOCALAPPDATA%\PasswordSaver\` on Windows (with 
 
 #### 🟡 Medium
 
-**6. No Windows installation documentation in README (`README.md`)**
+**✅ 6. (RESOLVED) Windows installation documentation added to README (`README.md`)**
 
-The README explicitly states the app targets "macOS and Linux systems". The Installation section has subsections for macOS and Linux only. Windows is mentioned only once in the roadmap as a future item, despite the application already building and running on Windows.
+The README now includes Windows in the features list (as experimental), a "Windows" subsection under "Platform-Specific Dependencies" with Visual C++ Build Tools prerequisites, a "Known Windows Limitations" subsection covering the console window, SmartScreen, and storage location, and an updated Storage Location entry for `%LOCALAPPDATA%\PasswordSaver\`. The roadmap entry is updated to reflect that experimental Windows support is now available.
 
 - **File**: `README.md`
-- **Current state**: Zero Windows setup instructions; "Windows Support" listed as future work
-- **Impact**: Windows developers who clone the repo have no guidance on dependencies, build process, or known limitations
-- **Fix**: Add a Windows prerequisites and build section to README; update the features list to include Windows (even as "experimental")
+- **Previous state**: Zero Windows setup instructions; "Windows Support" listed as future work
+- **Current state**: ✅ Windows prerequisites, build steps, storage path, and known limitations documented; feature list updated to include Windows (experimental)
 
 ---
 
