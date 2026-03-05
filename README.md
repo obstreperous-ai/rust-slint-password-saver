@@ -1,6 +1,6 @@
 # 🔐 Rust Slint Password Saver
 
-A cross-platform, secure desktop password manager application built with **Rust** and **Slint UI** framework. This application provides military-grade password storage using industry-standard encryption algorithms, designed for macOS and Linux systems.
+A cross-platform, secure desktop password manager application built with **Rust** and **Slint UI** framework. This application provides military-grade password storage using industry-standard encryption algorithms, with native support for macOS and Linux, and experimental Windows support.
 
 [![CI](https://github.com/obstreperous-ai/rust-slint-password-saver/workflows/CI/badge.svg)](https://github.com/obstreperous-ai/rust-slint-password-saver/actions)
 [![Code Quality](https://github.com/obstreperous-ai/rust-slint-password-saver/workflows/Code%20Quality/badge.svg)](https://github.com/obstreperous-ai/rust-slint-password-saver/actions)
@@ -29,7 +29,7 @@ A cross-platform, secure desktop password manager application built with **Rust*
 
 - **🎨 Modern UI**: Built with [Slint](https://slint.dev/) UI framework for a native look and feel
 - **🔒 Military-Grade Encryption**: Uses Argon2 for password hashing and AES-256-GCM for encryption
-- **💻 Cross-Platform**: Native support for macOS and Linux
+- **💻 Cross-Platform**: Native support for macOS and Linux; experimental Windows support
 - **⚡ Rust-Powered**: Leverages Rust's memory safety and performance guarantees
 - **🛡️ Security-First Design**: Zero-knowledge architecture with local-only storage
 - **🔍 Automated Security Audits**: Daily vulnerability scanning via CI/CD
@@ -76,6 +76,7 @@ This application implements a **zero-knowledge encryption** model where all sens
 
 Encrypted passwords are stored at:
 - **macOS/Linux**: `~/.password_saver/passwords.enc`
+- **Windows**: `%LOCALAPPDATA%\PasswordSaver\passwords.enc` (falls back to `%USERPROFILE%\.password_saver\passwords.enc` if `LOCALAPPDATA` is unset)
 
 ### Master Password Requirements
 
@@ -129,7 +130,7 @@ The application uses the [zxcvbn](https://github.com/dropbox/zxcvbn) password st
 ### Prerequisites
 
 #### System Requirements
-- **Operating System**: macOS 10.15+ or Linux (Ubuntu 20.04+, Fedora 35+, etc.)
+- **Operating System**: macOS 10.15+ or Linux (Ubuntu 20.04+, Fedora 35+, etc.), or Windows 10/11 (experimental)
 - **Rust Toolchain**: 1.70 or later
 
 #### Install Rust
@@ -158,6 +159,12 @@ sudo apt-get install -y cmake libfontconfig1-dev libxcb-shape0-dev libxcb-xfixes
 sudo dnf install cmake fontconfig-devel libxcb-devel
 ```
 
+**Windows**:
+- Visual C++ Build Tools 2019 or later (install via https://visualstudio.microsoft.com/visual-cpp-build-tools/ or `winget install Microsoft.VisualStudio.2022.BuildTools`)
+- No additional system libraries required; Slint uses Direct3D on Windows
+
+> **Note**: Windows support is experimental. See [Known Windows Limitations](#known-windows-limitations) below.
+
 ### Building from Source
 
 1. **Clone the repository**:
@@ -183,6 +190,14 @@ cargo install --path .
 ```
 
 This installs the binary to `~/.cargo/bin/rust-slint-password-saver`.
+
+### Known Windows Limitations
+
+The following limitations apply to the current Windows (experimental) build:
+
+- **Console window**: A console/terminal window may appear alongside the main UI on some Windows configurations. This will be resolved in a future release.
+- **SmartScreen warning**: Windows SmartScreen may show an "Unknown publisher" warning when running a binary built from source, since it is not code-signed. Click "More info" → "Run anyway" to proceed.
+- **Storage location**: Passwords are stored in `%LOCALAPPDATA%\PasswordSaver\` (e.g. `C:\Users\Alice\AppData\Local\PasswordSaver\`). This folder is not hidden, but `AppData` itself is hidden by default in Windows Explorer. To open it, type `%LOCALAPPDATA%` in the Explorer address bar.
 
 ---
 
@@ -618,11 +633,11 @@ This section outlines planned improvements and features. It's designed to be **a
   - **Files to modify**: `src/ui/main.slint` (add theme property)
   - **Complexity**: Low
 
-- [ ] **Windows Support**: Extend platform support to Windows
-  - **Files to modify**: `src/main.rs` (Windows path handling)
-  - **CI changes**: Add Windows to CI matrix
-  - **System dependencies**: Research Windows-specific Slint requirements
-  - **Complexity**: Medium-High
+- [x] **Windows Support**: Experimental Windows support is now available
+  - Windows build and run confirmed; pre-built binaries shipped in release workflow
+  - Storage path uses `%LOCALAPPDATA%\PasswordSaver\` on Windows
+  - See [Known Windows Limitations](#known-windows-limitations) for current caveats
+  - **Remaining**: Code-signing for SmartScreen, DPI manifest, Windows installer
 
 ### Low Priority / Nice to Have
 
