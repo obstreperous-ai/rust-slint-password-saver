@@ -16,6 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # windows-latest runners have MSVC build tools pre-installed; no extra
+        # dependency installation step is required for Windows builds.
         os: [ubuntu-latest, macos-latest, windows-latest]
     
     steps:
@@ -31,6 +33,13 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install cmake
+    
+    - name: Verify MSVC toolchain (Windows)
+      if: runner.os == 'Windows'
+      # GitHub-hosted windows-latest runners ship with MSVC build tools pre-installed.
+      # This step explicitly documents that fact and surfaces the active toolchain for
+      # easier debugging.  No additional packages need to be installed here.
+      run: rustup show
     
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable

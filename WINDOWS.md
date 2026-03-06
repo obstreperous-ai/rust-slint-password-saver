@@ -120,14 +120,13 @@ The README now includes Windows in the features list (as experimental), a "Windo
 
 ---
 
-**7. No Windows-specific system dependency installation step in CI (`ci.yml`)**
+**7. ✅ FIXED: No Windows-specific system dependency installation step in CI (`ci.yml`)**
 
-The CI matrix includes `windows-latest` but has no Windows-specific setup step (unlike the Ubuntu `apt-get` and macOS `brew` steps). On Windows, Slint may require the Visual C++ Redistributable or specific MSVC build tools. The CI may work purely because GitHub-hosted `windows-latest` runners have MSVC pre-installed, but this is not documented or explicit.
+The CI matrix includes `windows-latest` but had no Windows-specific setup step (unlike the Ubuntu `apt-get` and macOS `brew` steps). The CI worked because GitHub-hosted `windows-latest` runners have MSVC pre-installed, but this was not documented or explicit.
 
 - **File**: `.github/workflows/ci.yml`
-- **Current state**: No `if: runner.os == 'Windows'` step
-- **Impact**: CI passes by coincidence; developers setting up Windows locally have no guidance
-- **Fix**: Add explicit Windows setup step (document required Visual C++ Build Tools, note that no additional packages are needed via winget/choco, or add a step to verify MSVC toolchain)
+- **Fixed state**: A `Verify MSVC toolchain (Windows)` step (`if: runner.os == 'Windows'`, runs `rustup show`) explicitly documents the pre-installed MSVC toolchain. A comment above the matrix entry explains that no extra installation is needed. README "Local Development" section now documents Visual C++ Build Tools as the Windows prerequisite.
+- **Impact**: CI passes on all three platforms; developers setting up Windows locally have clear guidance
 
 ---
 
@@ -522,7 +521,7 @@ On Windows HiDPI displays (Surface Pro, 4K monitors), applications without a DPI
 
 ---
 
-### Issue 10: Add Windows-specific CI setup step documentation and verification
+### ✅ Issue 10 (RESOLVED): Add Windows-specific CI setup step documentation and verification
 
 **Title**: `docs(ci): document and verify Windows CI prerequisites in ci.yml`
 

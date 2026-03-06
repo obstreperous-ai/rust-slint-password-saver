@@ -372,6 +372,15 @@ See [.devcontainer/README.md](.devcontainer/README.md) for detailed documentatio
 
 1. **Install Prerequisites** (see [Installation](#-installation) section)
 
+   > **Windows users**: Before building locally you must have the **Visual C++ Build Tools** installed.  
+   > Download from <https://visualstudio.microsoft.com/visual-cpp-build-tools/> or run:
+   > ```powershell
+   > winget install Microsoft.VisualStudio.2022.BuildTools
+   > ```
+   > No additional system libraries are required — Slint uses Direct3D on Windows.  
+   > GitHub-hosted `windows-latest` runners ship with MSVC pre-installed, so no extra
+   > setup step is needed in CI.
+
 2. **Install Development Tools**:
 ```bash
 # Code formatting
@@ -461,9 +470,9 @@ The project uses GitHub Actions for continuous integration and deployment.
 
 #### 1. **CI Workflow** (`.github/workflows/ci.yml`)
 - **Trigger**: Push to `main`, Pull Requests
-- **Platforms**: Ubuntu (Linux), macOS
+- **Platforms**: Ubuntu (Linux), macOS, Windows
 - **Steps**:
-  - Install system dependencies
+  - Install system dependencies (Linux/macOS); verify MSVC toolchain (Windows — pre-installed on runner)
   - Cache cargo registry and build artifacts
   - Build project
   - Run test suite
