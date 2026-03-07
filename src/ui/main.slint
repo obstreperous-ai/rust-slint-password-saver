@@ -1,4 +1,4 @@
-import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox, CheckBox, Slider } from "std-widgets.slint";
+import { Button, VerticalBox, HorizontalBox, LineEdit, TextEdit, ScrollView, GroupBox, CheckBox, Slider, AboutSlint } from "std-widgets.slint";
 
 // Password entry structure for UI display
 export struct PasswordEntryData {
@@ -444,6 +444,8 @@ export component AppWindow inherits Window {
     callback use-generated-password(string);
     callback search-passwords(string);
     callback sort-passwords(int);
+    in-out property <bool> show-about-slint: false;
+
     callback check-for-updates();
     callback open-release-page();
     callback show-recovery();
@@ -1039,6 +1041,26 @@ export component AppWindow inherits Window {
             }
         }
         
+        // Footer with About Slint attribution (required by Slint Royalty-Free License 2.0)
+        HorizontalBox {
+            alignment: end;
+            
+            TouchArea {
+                height: 24px;
+                width: about-slint-text.preferred-width + Spacing.md * 2;
+                
+                clicked => { root.show-about-slint = true; }
+                
+                about-slint-text := Text {
+                    text: "Built with Slint";
+                    font-size: Typography.small-size;
+                    color: Theme.warm-grey;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        
         if status-message != "" : Rectangle {
             background: status-is-error ? Theme.error-bg : Theme.success-bg;
             border-radius: 4px;
@@ -1517,6 +1539,46 @@ export component AppWindow inherits Window {
                     font-size: Typography.small-size;
                     font-weight: Typography.small-weight;
                     color: Theme.warm-grey;
+                }
+            }
+        }
+    }
+    
+    // About Slint dialog (required attribution for Slint Royalty-Free License 2.0)
+    if root.show-about-slint : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        
+        FocusScope {
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.show-about-slint = false;
+                    return accept;
+                }
+                return reject;
+            }
+        }
+        
+        Rectangle {
+            width: 400px;
+            background: Theme.cream;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.whisper-grey;
+            drop-shadow-blur: 40px;
+            drop-shadow-color: rgba(0, 0, 0, 0.2);
+            
+            VerticalBox {
+                padding: Spacing.xl;
+                spacing: Spacing.lg;
+                alignment: center;
+                
+                AboutSlint { }
+                
+                SecondaryButton {
+                    text: "Close (Esc)";
+                    clicked => { root.show-about-slint = false; }
                 }
             }
         }

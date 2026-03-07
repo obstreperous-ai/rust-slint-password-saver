@@ -1201,3 +1201,112 @@ References:
   - GPL-3.0 text: https://www.gnu.org/licenses/gpl-3.0.html
   - OSI approved licenses: https://opensource.org/licenses
   - SPDX license list: https://spdx.org/licenses/
+
+
+================================================================================
+                    ADDENDUM — FOLLOW-UP LICENSING AUDIT
+              Compliance Actions Taken — 2026-03-07
+================================================================================
+
+Addendum Date:  2026-03-07
+Auditor:        Licensing Expert (automated audit)
+Ref:            Original audit above — Section 9.1 RECOMMENDED APPROACH
+
+--------------------------------------------------------------------------------
+A. ACTIONS TAKEN
+--------------------------------------------------------------------------------
+
+The following changes were made to bring the project into full compliance with
+the recommendations of Section 9.1 of the original audit above.
+
+A.1  SLINT LICENSE SELECTION
+     The project explicitly adopts the Slint Royalty-Free Desktop, Mobile, and
+     Web Applications License, Version 2.0 for all Slint framework components.
+     The GPL-3.0 license option for Slint is NOT used. This preserves the
+     project's MIT license for its own source code and eliminates the copyleft
+     incompatibility identified in the original audit.
+
+     Status: RESOLVED — Risk level reduced from HIGH to NONE.
+
+A.2  SLINT ATTRIBUTION REQUIREMENT SATISFIED — OPTION 3(a)
+     The Slint Royalty-Free License 2.0 requires a visible attribution to the
+     Slint project. This obligation has been satisfied by embedding the
+     official AboutSlint widget directly within the application's UI.
+
+     Implementation details:
+       - File:    src/ui/main.slint
+       - Change:  `AboutSlint` imported from "std-widgets.slint" and rendered
+                  inside a dismissible dialog overlay.
+       - Trigger: A "Built with Slint" link is permanently visible in the
+                  footer of the main application window. Clicking it opens the
+                  AboutSlint dialog, which displays the official Slint logo,
+                  name, version, and licensing information.
+
+     This satisfies option 3(a) of Section 9.1: "Adding the AboutSlint widget
+     to the application's UI."
+
+     Status: RESOLVED.
+
+A.3  LICENSE CLARIFICATION ADDED TO README
+     A dedicated "Third-Party Framework — Slint UI" sub-section was added to
+     the README.md License section (previously a single MIT paragraph).
+
+     The README now states:
+       (i)  The project's own source code is MIT-licensed.
+       (ii) Slint framework components are used under the Slint Royalty-Free
+            Desktop, Mobile, and Web Applications License, Version 2.0.
+       (iii) A direct link to the Slint Royalty-Free License 2.0 text is
+            provided.
+       (iv) All other dependencies are permissively licensed and compatible.
+       (v)  A reference to this LICENSING_AUDIT.txt for the full inventory.
+
+     Status: RESOLVED.
+
+A.4  MIT LICENSE RETAINED FOR PROJECT SOURCE CODE
+     No changes were made to the LICENSE file. The project's own source code
+     remains under the MIT License (Copyright (c) 2026 obstreperous-ai), which
+     is fully compatible with the Slint Royalty-Free License 2.0.
+
+     Status: CONFIRMED — No action required.
+
+--------------------------------------------------------------------------------
+B. COMPLIANCE SUMMARY AFTER CHANGES
+--------------------------------------------------------------------------------
+
++-----------------------------------+------------------+-------------------------+
+| Compliance Item                   | Before           | After                   |
++-----------------------------------+------------------+-------------------------+
+| Slint license option selected     | Unresolved       | Royalty-Free 2.0        |
+| GPL-3.0 copyleft conflict         | HIGH RISK        | Eliminated              |
+| Slint attribution requirement     | Not satisfied    | Satisfied (AboutSlint)  |
+| README license clarification      | Missing          | Added                   |
+| Project MIT license               | Retained         | Retained (unchanged)    |
+| Other dependencies (711 crates)   | Compatible       | Compatible (unchanged)  |
++-----------------------------------+------------------+-------------------------+
+
+Overall Risk Level:  HIGH  →  NONE
+
+The project is now in full compliance with the Slint Royalty-Free License 2.0
+attribution requirement and with the MIT license for its own source code.
+
+--------------------------------------------------------------------------------
+C. NO CHANGES TO DEPENDENCY TREE
+--------------------------------------------------------------------------------
+
+No dependencies were added, removed, or version-bumped as part of this
+compliance work. The full dependency inventory in Section 10 of the original
+audit above remains current and accurate.
+
+--------------------------------------------------------------------------------
+D. REFERENCES
+--------------------------------------------------------------------------------
+
+  - Slint Royalty-Free License 2.0:
+    https://github.com/slint-ui/slint/blob/master/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md
+  - AboutSlint widget documentation:
+    https://releases.slint.dev/1.14.0/docs/slint/src/language/widgets/aboutslint.html
+  - Original audit: This document, Sections 1–10 above.
+
+================================================================================
+END OF ADDENDUM
+================================================================================
