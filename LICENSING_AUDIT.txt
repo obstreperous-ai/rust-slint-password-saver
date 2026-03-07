@@ -467,6 +467,11 @@ KEY:
   [T] = Transitive dependency
   [S] = Self (the project)
 
+ABBREVIATIONS (used for space constraints in the table below):
+  Slint-RF-2.0  = LicenseRef-Slint-Royalty-free-2.0
+  Slint-SW-3.0  = LicenseRef-Slint-Software-3.0
+  See Section 6 for full details on these Slint license identifiers.
+
   Crate                                  Version        License
   ---------------------------------------- ------------ ----------------------------------
   ab_glyph                                0.2.32       Apache-2.0
