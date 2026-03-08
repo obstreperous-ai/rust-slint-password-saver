@@ -689,7 +689,9 @@ When working on new features:
 
 ## 📄 License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+### Project Source Code
+
+This project's own source code is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
 ```
 MIT License
@@ -710,6 +712,19 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 ```
+
+### Third-Party Framework — Slint UI
+
+The [Slint](https://slint.dev/) UI framework components used in this application are licensed under the
+**[Slint Royalty-Free Desktop, Mobile, and Web Applications License, Version 2.0](https://github.com/slint-ui/slint/blob/master/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md)**.
+
+This license permits use in non-commercial and qualifying commercial applications at no cost,
+subject to the attribution requirement satisfied by the **"Built with Slint"** notice displayed
+within the application (accessible via the footer link).
+
+All other dependencies are permissively licensed (MIT, Apache-2.0, or BSD-3-Clause) and are
+fully compatible with this project's MIT license. See [LICENSING_AUDIT.txt](LICENSING_AUDIT.txt)
+for a full dependency license inventory.
 
 ---
 
