@@ -1,6 +1,6 @@
 # 🪟 Windows Code Review & User Experience Analysis
 
-> **Review Date**: February 2026  
+> **Review Date**: March 2026 (updated from February 2026 initial audit)  
 > **Reviewer**: AI Agent (Windows Expert Persona)  
 > **Scope**: Full codebase evaluation from the perspective of a Windows end-user and developer  
 > **Audience**: Agentic AI systems performing hands-off development
@@ -15,16 +15,18 @@
    - [Issues & Gaps](#issues--gaps)
 3. [User Experience Reflection](#user-experience-reflection)
 4. [Actionable Improvements](#actionable-improvements)
+5. [Windows Compatibility Matrix](#windows-compatibility-matrix)
+6. [Automated Improvements for Next Agent Run](#automated-improvements-for-next-agent-run)
 
 ---
 
 ## Executive Summary
 
-The codebase shows a **partially complete Windows port**. Foundational work exists (Windows ACL permissions, `USERPROFILE` path fallback, `windows-latest` CI runner), but several gaps prevent a polished, first-class Windows experience. The most impactful missing piece is a **console window that appears when launching the app** (no `windows_subsystem` attribute), combined with the absence of **pre-built Windows binaries** in the release pipeline, which together create a very poor out-of-box experience for Windows users.
+Since the initial February 2026 audit, significant Windows improvements have been merged. The previously reported critical issues — console window on launch, missing Windows release binary, missing ACL protections on the HMAC key file and rate-limit persist file, the `FILE_FLAG_BACKUP_SEMANTICS` directory-ACL bug, and the non-Windows-conventional storage path — are all resolved. The application now ships a pre-built Windows binary in every GitHub release, logs to `%LOCALAPPDATA%\PasswordSaver\app.log` (since stderr is suppressed by `windows_subsystem`), uses `%LOCALAPPDATA%\PasswordSaver\` for data storage, and renders crisply on HiDPI displays.
 
-The application will **build and run** on Windows but requires the user to compile from source, shows a developer-style console terminal, and has no Windows-native installation story. README documentation entirely omits Windows, and several security features (HMAC key file ACL, rate limit file ACL) are silently skipped on Windows due to missing `#[cfg(windows)]` counterparts.
+Remaining gaps are predominantly in the **distribution and packaging** tier: no installer, no code signing, no Winget/Chocolatey package, and no `.gitattributes` to guard against CRLF contamination in the source repository. Three minor code-quality issues were also found in this audit: unused imports in `windows_permissions.rs`, a stale doc comment in `main.rs`, and the lack of long-path awareness in the application manifest.
 
-**Overall Windows Readiness: 4/10** — builds and functions, but is not ready for Windows end-users.
+**Overall Windows Readiness: 7/10** — builds, tests, and pre-built binary available; core security features (ACL, DPI manifest, subsystem flag) implemented. Installer, code-signing, and package-manager distribution still missing.
 
 ---
 
@@ -37,13 +39,20 @@ The application will **build and run** on Windows but requires the user to compi
 | **Build** | ✅ Compiles | CI runs `windows-latest` matrix; code compiles without errors |
 | **Storage Path** | ✅ Windows-conventional | `%LOCALAPPDATA%\PasswordSaver\` on Windows (falls back to `USERPROFILE\.password_saver\`); `~/.password_saver/` on Unix |
 | **File ACL (storage)** | ✅ Implemented | `windows_permissions.rs` provides `set_windows_secure_permissions()` used by `storage.rs` |
-| **Directory ACL** | ✅ Implemented | `set_windows_directory_permissions()` called from `main.rs` on `~/.password_saver/` |
+| **Directory ACL** | ✅ Implemented | `set_windows_directory_permissions()` with `FILE_FLAG_BACKUP_SEMANTICS` called from `main.rs`; failures logged as warnings |
+| **HMAC key file ACL** | ✅ Implemented | `#[cfg(windows)]` block in `audit_log.rs` calls `set_windows_secure_permissions()` after key file creation |
+| **Rate-limit file ACL** | ✅ Implemented | `#[cfg(windows)]` block in `rate_limit.rs` calls `set_windows_secure_permissions()` after each persist write |
+| **Console window** | ✅ Suppressed | `#![cfg_attr(windows, windows_subsystem = "windows")]` added to `main.rs` |
+| **Log output** | ✅ File-based on Windows | `env_logger` writes to `%LOCALAPPDATA%\PasswordSaver\app.log` when stderr is unavailable |
+| **Release binary** | ✅ Shipped | `x86_64-pc-windows-msvc` in release matrix; `.zip` artifact attached to every GitHub release |
 | **UI Framework** | ✅ Compatible | Slint supports Windows natively via Direct3D/OpenGL backend |
 | **HiDPI / DPI awareness** | ✅ Implemented | `app.manifest` embedded via `embed-manifest` crate declares PerMonitorV2 DPI awareness |
 | **Clipboard** | ✅ Compatible | `arboard` crate has Windows backend |
 | **Browser Launch** | ✅ Compatible | `webbrowser` crate supports Windows |
 | **Update Checker** | ✅ Compatible | `reqwest` blocking client works on Windows |
 | **Encryption** | ✅ Platform-agnostic | All cryptographic code (Argon2, AES-GCM) is fully cross-platform |
+| **CI documentation** | ✅ Explicit | `Verify MSVC toolchain (Windows)` step in `ci.yml` documents pre-installed toolchain |
+| **README documentation** | ✅ Added | Windows prerequisites, build steps, storage path, and known limitations in README |
 
 ---
 
@@ -206,13 +215,13 @@ The `.devcontainer` configuration spins up a Linux container. Windows developers
 
 A Windows user's first interaction with this application today would likely be:
 
-1. **Discover the repository** on GitHub — the README says "macOS and Linux" so they may already feel unwelcome.
-2. **No release binary available for Windows** — they are told to `cargo build --release`, which requires installing Rust, Visual C++ Build Tools, and 15+ minutes of compilation time. Many non-developer users will stop here.
-3. **Launch the `.exe`** — a black console window pops up alongside the main window. This immediately signals "developer tool", not "polished application".
-4. **File storage at `C:\Users\Alice\.password_saver\`** — Windows Explorer hides dotfolders by default. The user cannot easily find their data for backup.
-5. **Windows Defender / SmartScreen** — if the user runs the binary directly (not built from source), SmartScreen may block it as an "unknown publisher" executable.
-6. **High-DPI displays** — ✅ Fixed: `app.manifest` embedded via `embed-manifest` declares PerMonitorV2 DPI awareness; the window now renders crisply on Surface Pro and 4K monitors at any scaling factor.
-7. **No uninstaller** — the binary has no Windows installation footprint; uninstalling means manually deleting files with no guidance.
+1. **Discover the repository** on GitHub — the README now includes Windows in the features list (experimental) and a "Known Windows Limitations" section.
+2. **Download a pre-built binary** from the GitHub releases page (`rust-slint-password-saver-windows-x86_64.zip`). ✅ Fixed — no longer requires Rust + MSVC toolchain.
+3. **SmartScreen warning on first launch** — unsigned executables from unknown publishers trigger Windows SmartScreen / Defender. User must click "More info → Run anyway". Unresolved; requires code signing.
+4. **No console window** ✅ Fixed — `windows_subsystem = "windows"` suppresses the terminal; the app opens directly to the GUI.
+5. **File storage at `%LOCALAPPDATA%\PasswordSaver\`** ✅ Fixed — visible in Windows Explorer, included in standard backups; legacy dotfolder users see a migration warning in the log.
+6. **High-DPI displays** ✅ Fixed — `app.manifest` embedded via `embed-manifest` declares PerMonitorV2 DPI awareness; the window renders crisply on Surface Pro and 4K monitors.
+7. **No uninstaller** — the binary has no Windows installation footprint; uninstalling means manually deleting files with no guidance. Unresolved; requires installer.
 
 For a Windows developer, the experience is better (they can build from source), but there are no Windows-specific troubleshooting guides, and ACL failures are now logged as warnings rather than silently discarded.
 
@@ -232,7 +241,7 @@ Each item below is formatted as a standalone GitHub issue suitable for hands-off
 
 ---
 
-### Issue 1: Add `windows_subsystem` attribute to suppress console window on Windows
+### ✅ Issue 1 (RESOLVED): Add `windows_subsystem` attribute to suppress console window on Windows
 
 **Title**: `fix(windows): suppress console window on launch with windows_subsystem attribute`
 
@@ -257,7 +266,7 @@ When the application is launched on Windows, a black console/terminal window app
 
 ---
 
-### Issue 2: Add Windows (`x86_64-pc-windows-msvc`) release binary to CI/CD pipeline
+### ✅ Issue 2 (RESOLVED): Add Windows (`x86_64-pc-windows-msvc`) release binary to CI/CD pipeline
 
 **Title**: `feat(ci): add Windows x86_64 release binary to release workflow`
 
@@ -288,7 +297,7 @@ The release workflow (`.github/workflows/release.yml`) builds binaries for Linux
 
 ---
 
-### Issue 3: Fix Windows ACL not applied to HMAC key file in audit log module
+### ✅ Issue 3 (RESOLVED): Fix Windows ACL not applied to HMAC key file in audit log module
 
 **Title**: `fix(security): apply Windows ACL to audit HMAC key file on Windows`
 
@@ -326,7 +335,7 @@ In `src/audit_log.rs`, after writing the HMAC key file used for audit log integr
 
 ---
 
-### Issue 4: Fix Windows ACL not applied to rate limit persist file
+### ✅ Issue 4 (RESOLVED): Fix Windows ACL not applied to rate limit persist file
 
 **Title**: `fix(security): apply Windows ACL to rate limit persist file on Windows`
 
@@ -390,7 +399,7 @@ In `src/audit_log.rs`, after writing the HMAC key file used for audit log integr
 
 ---
 
-### Issue 6: Log warning when Windows directory ACL fails instead of silently ignoring ✅ Fixed
+### ✅ Issue 6 (RESOLVED): Log warning when Windows directory ACL fails instead of silently ignoring
 
 **Title**: `fix(windows): log warning when directory ACL cannot be set instead of silent ignore`
 
@@ -469,7 +478,7 @@ On Windows, application data should be stored in `%LOCALAPPDATA%\<AppName>\` (fo
 
 ---
 
-### Issue 8: Add Windows installation documentation to README
+### ✅ Issue 8 (RESOLVED): Add Windows installation documentation to README
 
 **Title**: `docs: add Windows installation and build instructions to README`
 
@@ -547,6 +556,205 @@ The CI matrix runs on `windows-latest` but has no Windows-specific setup step, u
 3. In README, add a note under "Local Development" that Windows requires "Visual C++ Build Tools" and link to the Microsoft download
 
 **Files to modify**: `.github/workflows/ci.yml`, `README.md`
+
+---
+
+### New Finding A: Unused imports in `windows_permissions.rs`
+
+**Title**: `chore(windows): remove unused GRANT_ACCESS, INHERITED_ACE imports from windows_permissions.rs`
+
+**Labels**: `chore`, `windows`, `code-quality`
+
+**Description**:
+
+The `#[cfg(windows)]` import block at the top of `src/windows_permissions.rs` (line 17) includes `GRANT_ACCESS` and `INHERITED_ACE` from `windows::Win32::Security::Authorization`. Neither constant is referenced in any function body — only `SET_ACCESS`, `NO_INHERITANCE`, and `SUB_CONTAINERS_AND_OBJECTS_INHERIT` are actually used. On a Windows build with `cargo clippy`, these unused imports will generate `unused_imports` lint warnings. `ACCESS_MODE` is kept because it is the declared type of the `grfAccessMode` field in `EXPLICIT_ACCESS_W` struct literals; the Rust compiler resolves the type from the import and it is therefore not unused.
+
+- **File**: `src/windows_permissions.rs`, line 17
+- **Current state**: `GRANT_ACCESS` and `INHERITED_ACE` appear in the import list but are not used
+- **Fix**: Remove `GRANT_ACCESS` and `INHERITED_ACE` from the import list; leave `ACCESS_MODE`, `SET_ACCESS`, `NO_INHERITANCE`, `SUB_CONTAINERS_AND_OBJECTS_INHERIT`, `SE_FILE_OBJECT`, `EXPLICIT_ACCESS_W`, `SetEntriesInAclW`, `SetSecurityInfo`, `TRUSTEE_IS_SID`, `TRUSTEE_W`
+
+**Files to modify**: `src/windows_permissions.rs`
+
+---
+
+### New Finding B: No `.gitattributes` — CRLF line-ending risk on Windows clones
+
+**Title**: `chore: add .gitattributes to enforce LF line endings for source and data files`
+
+**Labels**: `chore`, `windows`, `cross-platform`
+
+**Description**:
+
+The repository has no `.gitattributes` file. On Windows, Git defaults to `core.autocrlf=true`, which converts LF to CRLF on checkout. This can silently corrupt files whose content is parsed as text but must maintain exact byte sequences (e.g., `app.manifest` XML and any raw test fixtures), produce noisy diffs, and cause subtle issues when file content is compared byte-for-byte in tests. The `app.manifest` XML file in particular should remain LF to ensure the manifest parser in `embed-manifest` receives the expected bytes.
+
+- **Current state**: No `.gitattributes`; Windows developers cloning with default Git settings get CRLF in all text files
+- **Impact**: Potential byte-level mismatches in tests; dirty working tree after switching platforms; manifest XML parser may produce unexpected output
+- **Fix**: Create `.gitattributes` with:
+  ```gitattributes
+  * text=auto eol=lf
+  *.rs    text eol=lf
+  *.toml  text eol=lf
+  *.md    text eol=lf
+  *.yml   text eol=lf
+  *.slint text eol=lf
+  *.manifest text eol=lf
+  *.json  text eol=lf
+  *.exe   binary
+  *.enc   binary
+  ```
+
+**Files to create**: `.gitattributes`
+
+---
+
+### New Finding C: Application manifest missing `longPathAware` declaration
+
+**Title**: `feat(windows): add longPathAware to app.manifest to support paths > 260 characters`
+
+**Labels**: `enhancement`, `windows`
+
+**Description**:
+
+Windows 10 version 1607 introduced native long-path support (> 260 characters / `MAX_PATH`). Applications must opt in by declaring `<longPathAware>true</longPathAware>` in their application manifest AND the system must have the corresponding Group Policy or registry key enabled (`HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`). Without this declaration, `CreateFileW` and related APIs silently fail on paths longer than 260 characters, which can happen when `%LOCALAPPDATA%` itself is unusually deep (e.g., on enterprise machines with domain-joined user accounts and deep folder trees).
+
+- **File**: `app.manifest`
+- **Current state**: `longPathAware` not declared; application will silently fail on paths > 260 characters on Windows 10 1607+ even with the system policy enabled
+- **Fix**: Add inside `<asmv3:windowsSettings>`:
+  ```xml
+  <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+  ```
+
+**Files to modify**: `app.manifest`
+
+---
+
+### New Finding D: No code-signing — SmartScreen blocks unsigned release binaries
+
+**Title**: `feat(release): sign Windows release binary to avoid SmartScreen false positive`
+
+**Labels**: `enhancement`, `windows`, `security`, `ux`
+
+**Description**:
+
+All unsigned Windows executables from unknown publishers trigger Windows SmartScreen and may also trigger Windows Defender heuristic scanning. Users who download `rust-slint-password-saver-windows-x86_64.zip` and extract the `.exe` will see "Windows protected your PC" and must click "More info → Run anyway" — a step that many users will not take, treating it as a sign of malware. This is particularly damaging for a security-focused password manager application.
+
+- **Current state**: No Authenticode code-signing in the release workflow
+- **Options**:
+  - **Minimum**: Add a note to README explaining SmartScreen and how to bypass it for source-built binaries
+  - **Better**: Obtain an EV Code Signing Certificate and add a signing step to `release.yml` using `signtool.exe` or a GitHub Actions signing action (e.g., `azure/trusted-signing-action`)
+  - **Best**: Use Microsoft Trusted Signing (previously Azure Code Signing) via GitHub Actions for per-commit signing
+- **Impact**: Unsigned binaries erode trust for a password manager; SmartScreen reputation builds slowly via download count
+
+**Files to modify**: `.github/workflows/release.yml`, `README.md`
+
+---
+
+### New Finding E: `main.rs` module doc comment omits Windows
+
+**Title**: `docs: update main.rs module doc comment to include Windows in supported platforms`
+
+**Labels**: `documentation`, `windows`
+
+**Description**:
+
+The module-level Rustdoc comment in `src/main.rs` (line 14) states:
+```
+/// - Cross-platform support (macOS, Linux)
+```
+Windows is not mentioned despite the application building and running on Windows with full ACL support and a published release binary.
+
+- **File**: `src/main.rs`, line 14
+- **Fix**: Update to `/// - Cross-platform support (macOS, Linux, Windows (experimental))`
+
+**Files to modify**: `src/main.rs`
+
+---
+
+### New Finding F: No Windows installer (existing gap)
+
+**Title**: `feat(windows): create Windows installer using WiX or Inno Setup`
+
+**Labels**: `enhancement`, `windows`, `ux`
+
+**Description**:
+
+There is no mechanism to package the application as a Windows installer. Windows users expect either a `.msi`/`.exe` installer or a package manager entry (Winget, Chocolatey, Scoop). A raw `.exe` in a `.zip` provides no Start Menu entry, no `Add/Remove Programs` uninstaller, and no file association. Combining an installer with code signing (Finding D) would eliminate SmartScreen warnings on first run.
+
+- **Current state**: Pre-built `.zip` in GitHub releases; no installer; no package manager manifests
+- **Recommended approach**:
+  1. **Short-term**: Submit a Winget package manifest to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) for `winget install` support
+  2. **Medium-term**: Create a Scoop manifest for developer-friendly installation
+  3. **Long-term**: Create a WiX 4 or Inno Setup installer producing a signed `.msi`/`.exe`
+
+**Files to create/modify**: `.github/workflows/release.yml`, new installer definition files
+
+---
+
+## Windows Compatibility Matrix
+
+This table summarises the verified compatibility status of each codebase area across the primary target Windows versions and environments as of March 2026.
+
+| Feature / Area | Win 10 (21H2+) | Win 11 | Server 2022 | WSL2 | Notes |
+|---|---|---|---|---|---|
+| **Build (cargo build)** | ✅ | ✅ | ✅ | ✅ (Linux binary) | MSVC toolchain required on native Windows; WSL2 produces Linux ELF |
+| **CI (windows-latest runner)** | ✅ | ✅ | ✅ | N/A | GitHub Actions `windows-latest` = Server 2022 + MSVC |
+| **Release binary (.exe)** | ✅ | ✅ | ✅ | N/A | `x86_64-pc-windows-msvc` in release matrix |
+| **Storage path (`%LOCALAPPDATA%`)** | ✅ | ✅ | ✅ | ⚠️ | `LOCALAPPDATA` is set by Windows; WSL2 does not set it — app uses `HOME` under WSL2 |
+| **File ACL (`set_windows_secure_permissions`)** | ✅ | ✅ | ✅ | N/A | Win32 API; only applies to native Windows build |
+| **Directory ACL (`FILE_FLAG_BACKUP_SEMANTICS`)** | ✅ | ✅ | ✅ | N/A | Win32 API; only applies to native Windows build |
+| **HMAC key file ACL** | ✅ | ✅ | ✅ | N/A | `audit_log.rs` `#[cfg(windows)]` block applies ACL |
+| **Rate-limit file ACL** | ✅ | ✅ | ✅ | N/A | `rate_limit.rs` `#[cfg(windows)]` block applies ACL |
+| **Console suppression (`windows_subsystem`)** | ✅ | ✅ | ✅ | N/A | `cfg_attr(windows, …)` — no effect on Unix/WSL2 |
+| **Log to file (`app.log`)** | ✅ | ✅ | ✅ | N/A | Only active when `windows_subsystem` suppresses stderr |
+| **DPI awareness (PerMonitorV2)** | ✅ | ✅ | ⚠️ | N/A | Server 2022 has limited HiDPI support; manifest is embedded but GPU display may vary |
+| **HiDPI rendering (Slint)** | ✅ | ✅ | ⚠️ | N/A | Slint uses Direct3D backend; Server Core has no GPU — rendering may fail |
+| **Clipboard (`arboard`)** | ✅ | ✅ | ⚠️ | ⚠️ | Server Core and WSL2 may lack clipboard integration |
+| **Browser launch (`webbrowser`)** | ✅ | ✅ | ⚠️ | ⚠️ | Server Core may have no default browser; WSL2 needs `BROWSER` env var |
+| **Update checker (`reqwest`)** | ✅ | ✅ | ✅ | ✅ | TLS via native Windows SSPI or OpenSSL in WSL2 |
+| **Encryption (Argon2/AES-GCM)** | ✅ | ✅ | ✅ | ✅ | Pure Rust; fully platform-agnostic |
+| **Long-path support (> 260 chars)** | ⚠️ | ⚠️ | ⚠️ | N/A | `longPathAware` not declared in `app.manifest`; paths > 260 chars may fail silently |
+| **Code signing (SmartScreen)** | ❌ | ❌ | ❌ | N/A | Unsigned binary; SmartScreen warns on first launch |
+| **Installer / uninstaller** | ❌ | ❌ | ❌ | N/A | No installer; manual file deletion required |
+| **Winget / Chocolatey / Scoop** | ❌ | ❌ | ❌ | N/A | No package manager manifests |
+| **Line-ending hygiene (`.gitattributes`)** | ⚠️ | ⚠️ | ⚠️ | ⚠️ | No `.gitattributes`; CRLF risk on Windows clones |
+
+**Legend**: ✅ Verified working · ⚠️ Works with caveats / not fully tested · ❌ Not implemented
+
+---
+
+## Automated Improvements for Next Agent Run
+
+The following is a clean, numbered list of concrete GitHub issues for the next hands-off agent. Each item is single, scoped, and actionable with acceptance criteria.
+
+1. **Remove unused imports `GRANT_ACCESS` and `INHERITED_ACE` from `windows_permissions.rs`**
+   Remove these two identifiers from the `#[cfg(windows)]` import block at line 17 of `src/windows_permissions.rs`. **Acceptance criteria**: `cargo clippy --target x86_64-pc-windows-msvc -- -D warnings` passes with no `unused_imports` lint on a `windows-latest` runner; existing `test_windows_file_permissions_secure` and `test_windows_directory_permissions_secure` tests continue to pass.
+
+2. **Add `.gitattributes` to enforce LF line endings**
+   Create a `.gitattributes` file at the repository root that sets `* text=auto eol=lf` and adds explicit `eol=lf` overrides for `*.rs`, `*.toml`, `*.yml`, `*.slint`, `*.manifest`, `*.json`, `*.md`, and marks `*.exe` and `*.enc` as binary. **Acceptance criteria**: `git ls-files --eol` shows `i/lf` for all text files; existing tests pass on `windows-latest` CI runner; manifest XML round-trips identically.
+
+3. **Add `longPathAware` declaration to `app.manifest`**
+   Inside the existing `<asmv3:windowsSettings>` block in `app.manifest`, add `<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>`. **Acceptance criteria**: The manifest compiles and embeds without error; `cargo build --release --target x86_64-pc-windows-msvc` succeeds; the application can create/open files at paths > 260 characters on a Windows 10 1607+ machine with `LongPathsEnabled = 1`.
+
+4. **Fix `main.rs` module doc comment to include Windows in supported platforms**
+   Update line 14 of `src/main.rs` from `/// - Cross-platform support (macOS, Linux)` to `/// - Cross-platform support (macOS, Linux, Windows (experimental))`. **Acceptance criteria**: `cargo doc` builds without warnings; the generated documentation lists Windows as a supported platform.
+
+5. **Add Windows SmartScreen bypass instructions to README**
+   Add a `### Running on Windows — SmartScreen Warning` subsection to `README.md` explaining that unsigned executables from GitHub releases trigger Windows SmartScreen, provide the step-by-step bypass ("More info → Run anyway"), and note that source-built binaries from `cargo build --release` are not affected. **Acceptance criteria**: The README clearly guides a Windows user through the SmartScreen bypass; no existing documentation is removed.
+
+6. **Submit a Winget package manifest for `rust-slint-password-saver`**
+   Create a Winget manifest (YAML) for `obstreperous-ai.RustSlintPasswordSaver` and open a PR to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs). **Acceptance criteria**: Manifest validates with `winget validate`; a PR is opened to winget-pkgs; the README's Installation section is updated with `winget install obstreperous-ai.RustSlintPasswordSaver`.
+
+7. **Add a Scoop bucket manifest for developer-friendly installation**
+   Create a Scoop manifest JSON at `scoop/rust-slint-password-saver.json` pointing to the GitHub release `.zip`. **Acceptance criteria**: `scoop install <manifest path>` installs the application; the README Installation section includes Scoop instructions.
+
+8. **Document Windows clipboard auto-clear behaviour difference in UI**
+   `arboard` on Windows uses the OS clipboard ownership model: the clipboard data is lost when the application loses focus. Add a Windows-specific note in the clipboard-clear tooltip or help text explaining this difference from the 45-second auto-clear timer available on macOS/Linux. **Acceptance criteria**: Windows build includes UI text or a log warning that reflects the clipboard ownership limitation; no behaviour change to other platforms.
+
+9. **Create a WiX 4 installer for the Windows release**
+   Author a WiX 4 `.wxs` source file that installs the `.exe` to `%ProgramFiles%\PasswordSaver\`, creates a Start Menu shortcut, and registers an uninstaller entry in `Add/Remove Programs`. Integrate `.msi` build into `.github/workflows/release.yml` as a separate artifact. **Acceptance criteria**: `.msi` installer produced; application installed silently via `msiexec /i rust-slint-password-saver.msi /quiet`; uninstall via `msiexec /x` removes all files and shortcuts.
+
+10. **Investigate and document Authenticode code-signing options for CI**
+    Research and document (in `WINDOWS.md`) the cost and process for obtaining an Authenticode EV Code Signing Certificate or using Microsoft Trusted Signing (Azure Code Signing). Add a placeholder signing step to `release.yml` (commented out, with a `TODO` comment referencing the documentation). **Acceptance criteria**: `WINDOWS.md` contains a `### Code Signing` subsection with provider options, estimated cost/time, and the GitHub Actions steps required; `release.yml` has a commented placeholder signing step.
 
 ---
 
