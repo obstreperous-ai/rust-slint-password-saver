@@ -559,7 +559,7 @@ The CI matrix runs on `windows-latest` but has no Windows-specific setup step, u
 
 ---
 
-### New Finding A: Unused imports in `windows_permissions.rs`
+### Finding A: Unused imports in `windows_permissions.rs` ✅ Implemented
 
 **Title**: `chore(windows): remove unused GRANT_ACCESS, INHERITED_ACE imports from windows_permissions.rs`
 
@@ -567,13 +567,14 @@ The CI matrix runs on `windows-latest` but has no Windows-specific setup step, u
 
 **Description**:
 
-The `#[cfg(windows)]` import block at the top of `src/windows_permissions.rs` (line 17) includes `GRANT_ACCESS` and `INHERITED_ACE` from `windows::Win32::Security::Authorization`. Neither constant is referenced in any function body — only `SET_ACCESS`, `NO_INHERITANCE`, and `SUB_CONTAINERS_AND_OBJECTS_INHERIT` are actually used. On a Windows build with `cargo clippy`, these unused imports will generate `unused_imports` lint warnings. `ACCESS_MODE` is kept because it is the declared type of the `grfAccessMode` field in `EXPLICIT_ACCESS_W` struct literals; the Rust compiler resolves the type from the import and it is therefore not unused.
+The `#[cfg(windows)]` import block at the top of `src/windows_permissions.rs` (line 17) included `GRANT_ACCESS` and `INHERITED_ACE` from `windows::Win32::Security::Authorization`. Neither constant was referenced in any function body — only `SET_ACCESS`, `NO_INHERITANCE`, and `SUB_CONTAINERS_AND_OBJECTS_INHERIT` are actually used. On a Windows build with `cargo clippy`, these unused imports would generate `unused_imports` lint warnings. `ACCESS_MODE` is kept because it is the declared type of the `grfAccessMode` field in `EXPLICIT_ACCESS_W` struct literals; the Rust compiler resolves the type from the import and it is therefore not unused.
 
 - **File**: `src/windows_permissions.rs`, line 17
-- **Current state**: `GRANT_ACCESS` and `INHERITED_ACE` appear in the import list but are not used
-- **Fix**: Remove `GRANT_ACCESS` and `INHERITED_ACE` from the import list; leave `ACCESS_MODE`, `SET_ACCESS`, `NO_INHERITANCE`, `SUB_CONTAINERS_AND_OBJECTS_INHERIT`, `SE_FILE_OBJECT`, `EXPLICIT_ACCESS_W`, `SetEntriesInAclW`, `SetSecurityInfo`, `TRUSTEE_IS_SID`, `TRUSTEE_W`
+- **Previous state**: `GRANT_ACCESS` and `INHERITED_ACE` appeared in the import list but were not used
+- **Fix applied**: Removed `GRANT_ACCESS` and `INHERITED_ACE` from the import list; retained `ACCESS_MODE`, `SET_ACCESS`, `NO_INHERITANCE`, `SUB_CONTAINERS_AND_OBJECTS_INHERIT`, `SE_FILE_OBJECT`, `EXPLICIT_ACCESS_W`, `SetEntriesInAclW`, `SetSecurityInfo`, `TRUSTEE_IS_SID`, `TRUSTEE_W`
+- **Status**: ✅ Implemented
 
-**Files to modify**: `src/windows_permissions.rs`
+**Files modified**: `src/windows_permissions.rs`
 
 ---
 
@@ -726,8 +727,8 @@ This table summarises the verified compatibility status of each codebase area ac
 
 The following is a clean, numbered list of concrete GitHub issues for the next hands-off agent. Each item is single, scoped, and actionable with acceptance criteria.
 
-1. **Remove unused imports `GRANT_ACCESS` and `INHERITED_ACE` from `windows_permissions.rs`**
-   Remove these two identifiers from the `#[cfg(windows)]` import block at line 17 of `src/windows_permissions.rs`. **Acceptance criteria**: `cargo clippy --target x86_64-pc-windows-msvc -- -D warnings` passes with no `unused_imports` lint on a `windows-latest` runner; existing `test_windows_file_permissions_secure` and `test_windows_directory_permissions_secure` tests continue to pass.
+1. ~~**Remove unused imports `GRANT_ACCESS` and `INHERITED_ACE` from `windows_permissions.rs`**~~
+   ✅ **Implemented** — Removed `GRANT_ACCESS` and `INHERITED_ACE` from the `#[cfg(windows)]` import block in `src/windows_permissions.rs`.
 
 2. **Add `.gitattributes` to enforce LF line endings**
    Create a `.gitattributes` file at the repository root that sets `* text=auto eol=lf` and adds explicit `eol=lf` overrides for `*.rs`, `*.toml`, `*.yml`, `*.slint`, `*.manifest`, `*.json`, `*.md`, and marks `*.exe` and `*.enc` as binary. **Acceptance criteria**: `git ls-files --eol` shows `i/lf` for all text files; existing tests pass on `windows-latest` CI runner; manifest XML round-trips identically.

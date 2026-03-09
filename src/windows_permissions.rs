@@ -14,9 +14,8 @@ use windows::core::PWSTR;
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, PSID};
 #[cfg(windows)]
 use windows::Win32::Security::Authorization::{
-    SetEntriesInAclW, SetSecurityInfo, ACCESS_MODE, EXPLICIT_ACCESS_W, GRANT_ACCESS, INHERITED_ACE,
-    NO_INHERITANCE, SET_ACCESS, SE_FILE_OBJECT, SUB_CONTAINERS_AND_OBJECTS_INHERIT, TRUSTEE_IS_SID,
-    TRUSTEE_W,
+    SetEntriesInAclW, SetSecurityInfo, ACCESS_MODE, EXPLICIT_ACCESS_W, NO_INHERITANCE, SET_ACCESS,
+    SE_FILE_OBJECT, SUB_CONTAINERS_AND_OBJECTS_INHERIT, TRUSTEE_IS_SID, TRUSTEE_W,
 };
 #[cfg(windows)]
 use windows::Win32::Security::{
