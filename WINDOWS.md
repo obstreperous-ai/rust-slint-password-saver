@@ -772,7 +772,7 @@ provides the strongest SmartScreen signal but requires a hardware USB token (FID
 
 ---
 
-### New Finding E: `main.rs` module doc comment omits Windows
+### ✅ New Finding E (RESOLVED): `main.rs` module doc comment omits Windows
 
 **Title**: `docs: update main.rs module doc comment to include Windows in supported platforms`
 
@@ -780,16 +780,18 @@ provides the strongest SmartScreen signal but requires a hardware USB token (FID
 
 **Description**:
 
-The module-level Rustdoc comment in `src/main.rs` (line 14) states:
+The module-level Rustdoc comment in `src/main.rs` (line 14) stated:
 ```
-/// - Cross-platform support (macOS, Linux)
+//! - Cross-platform support (macOS, Linux)
 ```
-Windows is not mentioned despite the application building and running on Windows with full ACL support and a published release binary.
+Windows was not mentioned despite the application building and running on Windows with full ACL support and a published release binary.
 
 - **File**: `src/main.rs`, line 14
-- **Fix**: Update to `/// - Cross-platform support (macOS, Linux, Windows (experimental))`
+- **Previous state**: `//! - Cross-platform support (macOS, Linux)`
 
-**Files to modify**: `src/main.rs`
+**Resolution**:
+- Updated to `//! - Cross-platform support (macOS, Linux, Windows (experimental))`
+- 3 TDD tests added in `tests/main_doc_test.rs` verifying that the doc comment mentions Windows, contains the exact cross-platform string, and still includes macOS and Linux
 
 ---
 
@@ -858,8 +860,8 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 3. ~~**Add `longPathAware` declaration to `app.manifest`**~~
    ✅ **Implemented** — Added `<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>` inside the existing `<asmv3:windowsSettings>` block in `app.manifest`. Added 11 TDD tests in `tests/app_manifest_test.rs` covering manifest existence, `longPathAware` presence, correct value, correct namespace, correct nesting, preservation of DPI-awareness declarations, and structural integrity.
 
-4. **Fix `main.rs` module doc comment to include Windows in supported platforms**
-   Update line 14 of `src/main.rs` from `/// - Cross-platform support (macOS, Linux)` to `/// - Cross-platform support (macOS, Linux, Windows (experimental))`. **Acceptance criteria**: `cargo doc` builds without warnings; the generated documentation lists Windows as a supported platform.
+4. ~~**Fix `main.rs` module doc comment to include Windows in supported platforms**~~
+   ✅ **Implemented** — Updated line 14 of `src/main.rs` from `//! - Cross-platform support (macOS, Linux)` to `//! - Cross-platform support (macOS, Linux, Windows (experimental))`. Added 3 TDD tests in `tests/main_doc_test.rs` verifying Windows is mentioned in the doc comment, the exact cross-platform string is present, and macOS/Linux are preserved.
 
 5. ~~**Add Windows SmartScreen bypass instructions to README**~~
    ✅ **Implemented** — Added `### Running on Windows — SmartScreen Warning` subsection to `README.md` with step-by-step "More info → Run anyway" bypass instructions, explanation that the binary is unsigned, and a note that source-built binaries bypass SmartScreen entirely. Updated the existing bullet in "Known Windows Limitations" to link to the new section. 15 TDD tests added in `tests/code_signing_test.rs`.
