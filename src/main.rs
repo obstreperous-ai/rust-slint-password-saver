@@ -11,7 +11,7 @@
 //! - Load and view stored passwords
 //! - All data encrypted with master password
 //! - Rate limiting to prevent brute-force attacks
-//! - Cross-platform support (macOS, Linux)
+//! - Cross-platform support (macOS, Linux, Windows (experimental))
 //! - Security audit logging for all operations
 //!
 //! ## Usage
