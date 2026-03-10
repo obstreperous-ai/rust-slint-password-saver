@@ -191,6 +191,55 @@ cargo install --path .
 
 This installs the binary to `~/.cargo/bin/rust-slint-password-saver`.
 
+### Windows Package Managers
+
+The following package manager options are available for Windows users. Manifest files are included in this repository under `winget/` and `scoop/`.
+
+#### Winget
+
+```powershell
+winget install obstreperous-ai.RustSlintPasswordSaver
+```
+
+> **Note**: The Winget manifest is available in the repository under
+> `winget/manifests/o/obstreperous-ai/RustSlintPasswordSaver/0.1.0/`. Submission to
+> [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) is pending. Until the manifest
+> is accepted into the community repository, you can install locally with:
+> ```powershell
+> winget install --manifest winget/manifests/o/obstreperous-ai/RustSlintPasswordSaver/0.1.0/
+> ```
+
+#### Scoop
+
+```powershell
+# Install from the local manifest (one-time)
+scoop install scoop/rust-slint-password-saver.json
+```
+
+The Scoop manifest (`scoop/rust-slint-password-saver.json`) points to the GitHub release `.zip`
+and supports `scoop update` via the `autoupdate` block.
+
+#### MSI Installer
+
+A Windows `.msi` installer built with [WiX 4](https://wixtoolset.org/) is attached to every
+GitHub release as `rust-slint-password-saver-windows-x86_64.msi`. It:
+
+- Installs `rust-slint-password-saver.exe` to `%ProgramFiles%\PasswordSaver\`
+- Creates a **Start Menu** shortcut
+- Registers an **Add/Remove Programs** entry for clean uninstallation
+
+```powershell
+# Silent install
+msiexec /i rust-slint-password-saver-windows-x86_64.msi /quiet
+
+# Silent uninstall
+msiexec /x rust-slint-password-saver-windows-x86_64.msi /quiet
+```
+
+See [WINDOWS.md](WINDOWS.md) for full Windows packaging details.
+
+---
+
 ### Known Windows Limitations
 
 The following limitations apply to the current Windows (experimental) build:

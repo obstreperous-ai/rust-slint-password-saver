@@ -795,7 +795,7 @@ Windows was not mentioned despite the application building and running on Window
 
 ---
 
-### New Finding F: No Windows installer (existing gap)
+### ✅ New Finding F (RESOLVED): No Windows installer
 
 **Title**: `feat(windows): create Windows installer using WiX or Inno Setup`
 
@@ -805,13 +805,32 @@ Windows was not mentioned despite the application building and running on Window
 
 There is no mechanism to package the application as a Windows installer. Windows users expect either a `.msi`/`.exe` installer or a package manager entry (Winget, Chocolatey, Scoop). A raw `.exe` in a `.zip` provides no Start Menu entry, no `Add/Remove Programs` uninstaller, and no file association. Combining an installer with code signing (Finding D) would eliminate SmartScreen warnings on first run.
 
-- **Current state**: Pre-built `.zip` in GitHub releases; no installer; no package manager manifests
-- **Recommended approach**:
-  1. **Short-term**: Submit a Winget package manifest to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) for `winget install` support
-  2. **Medium-term**: Create a Scoop manifest for developer-friendly installation
-  3. **Long-term**: Create a WiX 4 or Inno Setup installer producing a signed `.msi`/`.exe`
+- **Previous state**: Pre-built `.zip` in GitHub releases; no installer; no package manager manifests
+- **Resolution**:
+  1. **Short-term — Winget manifest** ✅ Implemented: Winget manifest (3-file multi-manifest) created at
+     `winget/manifests/o/obstreperous-ai/RustSlintPasswordSaver/0.1.0/`. Supports
+     `winget install obstreperous-ai.RustSlintPasswordSaver`. Submission to
+     [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) pending.
+  2. **Medium-term — Scoop manifest** ✅ Implemented: Scoop manifest JSON created at
+     `scoop/rust-slint-password-saver.json` pointing to the GitHub release `.zip` with
+     `autoupdate` support for `scoop update`.
+  3. **Long-term — WiX 4 MSI installer** ✅ Implemented: WiX 4 installer definition created at
+     `installer/windows/main.wxs`. Installs to `%ProgramFiles%\PasswordSaver\`, creates a
+     Start Menu shortcut, and registers an uninstaller in Add/Remove Programs.
+     `.github/workflows/release.yml` updated to build and publish the `.msi` artifact on every
+     tagged release using `dotnet tool install --global wix`.
 
-**Files to create/modify**: `.github/workflows/release.yml`, new installer definition files
+**Silent install**: `msiexec /i rust-slint-password-saver-windows-x86_64.msi /quiet`  
+**Silent uninstall**: `msiexec /x rust-slint-password-saver-windows-x86_64.msi /quiet`
+
+**Files created/modified**:
+- `installer/windows/main.wxs` — WiX 4 installer definition
+- `winget/manifests/o/obstreperous-ai/RustSlintPasswordSaver/0.1.0/` — 3-file Winget manifest
+- `scoop/rust-slint-password-saver.json` — Scoop manifest
+- `.github/workflows/release.yml` — WiX build step + MSI artifact upload
+- `README.md` — Windows package manager installation instructions
+
+**TDD tests added**: 29 tests in `tests/windows_installer_test.rs` covering all acceptance criteria.
 
 ---
 
@@ -839,8 +858,8 @@ This table summarises the verified compatibility status of each codebase area ac
 | **Encryption (Argon2/AES-GCM)** | ✅ | ✅ | ✅ | ✅ | Pure Rust; fully platform-agnostic |
 | **Long-path support (> 260 chars)** | ✅ | ✅ | ✅ | N/A | `longPathAware` declared in `app.manifest`; requires `LongPathsEnabled = 1` registry key on host |
 | **Code signing (SmartScreen)** | ❌ | ❌ | ❌ | N/A | Unsigned binary; SmartScreen warns on first launch. README documents bypass steps; `release.yml` has a commented placeholder for Authenticode signing (see Finding D / Code Signing subsection) |
-| **Installer / uninstaller** | ❌ | ❌ | ❌ | N/A | No installer; manual file deletion required |
-| **Winget / Chocolatey / Scoop** | ❌ | ❌ | ❌ | N/A | No package manager manifests |
+| **Installer / uninstaller** | ✅ | ✅ | ✅ | N/A | WiX 4 `.msi` installer built in `release.yml`; installs to `%ProgramFiles%\PasswordSaver\`; Start Menu shortcut created; Add/Remove Programs entry registered. Silent install/uninstall via `msiexec /i|/x ... /quiet`. |
+| **Winget / Chocolatey / Scoop** | ✅ | ✅ | ✅ | N/A | Winget multi-manifest at `winget/manifests/o/obstreperous-ai/RustSlintPasswordSaver/0.1.0/`; Scoop manifest at `scoop/rust-slint-password-saver.json`; submission to winget-pkgs pending. |
 | **Line-ending hygiene (`.gitattributes`)** | ✅ | ✅ | ✅ | ✅ | `.gitattributes` added; LF enforced for all source/data files; binaries marked binary |
 
 **Legend**: ✅ Verified working · ⚠️ Works with caveats / not fully tested · ❌ Not implemented
@@ -866,17 +885,29 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 5. ~~**Add Windows SmartScreen bypass instructions to README**~~
    ✅ **Implemented** — Added `### Running on Windows — SmartScreen Warning` subsection to `README.md` with step-by-step "More info → Run anyway" bypass instructions, explanation that the binary is unsigned, and a note that source-built binaries bypass SmartScreen entirely. Updated the existing bullet in "Known Windows Limitations" to link to the new section. 15 TDD tests added in `tests/code_signing_test.rs`.
 
-6. **Submit a Winget package manifest for `rust-slint-password-saver`**
-   Create a Winget manifest (YAML) for `obstreperous-ai.RustSlintPasswordSaver` and open a PR to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs). **Acceptance criteria**: Manifest validates with `winget validate`; a PR is opened to winget-pkgs; the README's Installation section is updated with `winget install obstreperous-ai.RustSlintPasswordSaver`.
+6. ~~**Submit a Winget package manifest for `rust-slint-password-saver`**~~
+   ✅ **Implemented** — Winget multi-manifest (version, installer, locale) created at
+   `winget/manifests/o/obstreperous-ai/RustSlintPasswordSaver/0.1.0/`. Supports
+   `winget install obstreperous-ai.RustSlintPasswordSaver` and local testing via
+   `winget install --manifest winget/manifests/...`. README Installation section updated.
+   29 TDD tests added in `tests/windows_installer_test.rs`.
 
-7. **Add a Scoop bucket manifest for developer-friendly installation**
-   Create a Scoop manifest JSON at `scoop/rust-slint-password-saver.json` pointing to the GitHub release `.zip`. **Acceptance criteria**: `scoop install <manifest path>` installs the application; the README Installation section includes Scoop instructions.
+7. ~~**Add a Scoop bucket manifest for developer-friendly installation**~~
+   ✅ **Implemented** — Scoop manifest JSON created at `scoop/rust-slint-password-saver.json`
+   pointing to the GitHub release `.zip` with `autoupdate` support. README Installation section
+   updated with Scoop instructions. Tests included in `tests/windows_installer_test.rs`.
 
 8. **Document Windows clipboard auto-clear behaviour difference in UI**
    `arboard` on Windows uses the OS clipboard ownership model: the clipboard data is lost when the application loses focus. Add a Windows-specific note in the clipboard-clear tooltip or help text explaining this difference from the 45-second auto-clear timer available on macOS/Linux. **Acceptance criteria**: Windows build includes UI text or a log warning that reflects the clipboard ownership limitation; no behaviour change to other platforms.
 
-9. **Create a WiX 4 installer for the Windows release**
-   Author a WiX 4 `.wxs` source file that installs the `.exe` to `%ProgramFiles%\PasswordSaver\`, creates a Start Menu shortcut, and registers an uninstaller entry in `Add/Remove Programs`. Integrate `.msi` build into `.github/workflows/release.yml` as a separate artifact. **Acceptance criteria**: `.msi` installer produced; application installed silently via `msiexec /i rust-slint-password-saver.msi /quiet`; uninstall via `msiexec /x` removes all files and shortcuts.
+9. ~~**Create a WiX 4 installer for the Windows release**~~
+   ✅ **Implemented** — WiX 4 installer definition created at `installer/windows/main.wxs`.
+   Installs to `%ProgramFiles%\PasswordSaver\`, creates a Start Menu shortcut, registers an
+   uninstaller entry in Add/Remove Programs. `.github/workflows/release.yml` updated to build
+   the `.msi` using `dotnet tool install --global wix` and publish it as a separate release
+   artifact. **Silent install**: `msiexec /i rust-slint-password-saver-windows-x86_64.msi /quiet`;
+   **silent uninstall**: `msiexec /x rust-slint-password-saver-windows-x86_64.msi /quiet`.
+   Tests included in `tests/windows_installer_test.rs`.
 
 10. ~~**Investigate and document Authenticode code-signing options for CI**~~
     ✅ **Implemented** — `WINDOWS.md` now contains a `### Code Signing` subsection (under Finding D) documenting both Microsoft Trusted Signing and EV certificate options with provider details, estimated costs, required GitHub Actions secrets, and complete workflow snippets. `release.yml` has a commented-out placeholder signing step with `TODO` comment referencing this documentation. 15 TDD tests added in `tests/code_signing_test.rs` verifying all acceptance criteria.
