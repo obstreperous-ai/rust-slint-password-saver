@@ -79,6 +79,43 @@ jobs:
       run: |
         Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" `
           -DestinationPath "${{ matrix.asset_name }}.zip"
+
+    # TODO: Add Authenticode code-signing for the Windows binary to prevent SmartScreen from
+    # blocking the executable on first launch (Finding D in WINDOWS.md).
+    #
+    # Option A — Microsoft Trusted Signing (recommended, no hardware token required):
+    #   - name: Sign Windows binary (Microsoft Trusted Signing)
+    #     if: runner.os == 'Windows'
+    #     uses: azure/trusted-signing-action@v0
+    #     with:
+    #       azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    #       azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    #       azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+    #       endpoint: https://eus.codesigning.azure.net/
+    #       trusted-signing-account-name: <account-name>
+    #       certificate-profile-name: <profile-name>
+    #       files-folder: target/${{ matrix.target }}/release
+    #       files-folder-filter: exe
+    #       file-digest: SHA256
+    #       timestamp-rfc3161: http://timestamp.acs.microsoft.com
+    #       timestamp-digest: SHA256
+    #
+    # Option B — EV certificate via signtool.exe (requires PFX secret):
+    #   - name: Sign Windows binary (signtool / EV certificate)
+    #     if: runner.os == 'Windows'
+    #     shell: pwsh
+    #     run: |
+    #       $pfxBytes = [Convert]::FromBase64String("${{ secrets.CODE_SIGNING_CERT_PFX_BASE64 }}")
+    #       $pfxPath  = "$env:RUNNER_TEMP\codesign.pfx"
+    #       [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+    #       signtool sign /fd SHA256 /p "${{ secrets.CODE_SIGNING_CERT_PASSWORD }}" `
+    #         /f "$pfxPath" `
+    #         /t http://timestamp.digicert.com `
+    #         "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
+    #       Remove-Item -Force "$pfxPath"
+    #
+    # See WINDOWS.md "Code Signing" subsection for provider options, estimated costs,
+    # and required GitHub Actions secrets.
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
