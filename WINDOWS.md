@@ -634,24 +634,141 @@ Windows 10 version 1607 introduced native long-path support (> 260 characters / 
 
 ---
 
-### New Finding D: No code-signing — SmartScreen blocks unsigned release binaries
+### ✅ New Finding D (DOCUMENTED): No code-signing — SmartScreen blocks unsigned release binaries
 
 **Title**: `feat(release): sign Windows release binary to avoid SmartScreen false positive`
 
 **Labels**: `enhancement`, `windows`, `security`, `ux`
 
+**Status**: 🟡 **Partially implemented** — SmartScreen bypass instructions added to `README.md`; commented
+placeholder signing step added to `release.yml`; full Authenticode signing requires a certificate or
+Microsoft Trusted Signing subscription (see [Code Signing](#code-signing) subsection below).
+
 **Description**:
 
 All unsigned Windows executables from unknown publishers trigger Windows SmartScreen and may also trigger Windows Defender heuristic scanning. Users who download `rust-slint-password-saver-windows-x86_64.zip` and extract the `.exe` will see "Windows protected your PC" and must click "More info → Run anyway" — a step that many users will not take, treating it as a sign of malware. This is particularly damaging for a security-focused password manager application.
 
-- **Current state**: No Authenticode code-signing in the release workflow
-- **Options**:
-  - **Minimum**: Add a note to README explaining SmartScreen and how to bypass it for source-built binaries
-  - **Better**: Obtain an EV Code Signing Certificate and add a signing step to `release.yml` using `signtool.exe` or a GitHub Actions signing action (e.g., `azure/trusted-signing-action`)
-  - **Best**: Use Microsoft Trusted Signing (previously Azure Code Signing) via GitHub Actions for per-commit signing
+- **Previous state**: No Authenticode code-signing in the release workflow; no user guidance in README
+- **Changes applied**:
+  - **`README.md`**: Added a dedicated `### Running on Windows — SmartScreen Warning` subsection with:
+    - Step-by-step "More info → Run anyway" bypass instructions
+    - Explanation that the binary is unsigned (unknown publisher)
+    - Note that source-built binaries (`cargo build --release`) bypass SmartScreen entirely
+  - **`.github/workflows/release.yml`**: Added a clearly marked, commented-out placeholder signing step
+    with two complete options (Microsoft Trusted Signing and EV certificate via `signtool.exe`) and a
+    reference to this `WINDOWS.md` Code Signing subsection
+- **Options (for full implementation)**:
+  - **Minimum** ✅ Done: README guidance added; bypass instructions documented
+  - **Better**: Obtain an EV Code Signing Certificate and uncomment the `signtool.exe` option in `release.yml`
+  - **Best**: Set up Microsoft Trusted Signing (previously Azure Code Signing) and uncomment the
+    `azure/trusted-signing-action` option in `release.yml`
 - **Impact**: Unsigned binaries erode trust for a password manager; SmartScreen reputation builds slowly via download count
+- **TDD tests**: 15 tests added in `tests/code_signing_test.rs` covering README content, `release.yml`
+  placeholder, and `WINDOWS.md` documentation
 
-**Files to modify**: `.github/workflows/release.yml`, `README.md`
+**Files modified**: `.github/workflows/release.yml`, `README.md`, `WINDOWS.md`  
+**Files created**: `tests/code_signing_test.rs`
+
+---
+
+### Code Signing
+
+This subsection documents the available options for Authenticode code-signing the Windows release
+binary, eliminating the Windows SmartScreen "Windows protected your PC" dialog on first launch.
+
+#### Why code-signing matters
+
+Windows SmartScreen evaluates two signals for downloaded executables:
+1. **Authenticode signature** — is the binary signed by a trusted certificate authority?
+2. **Download reputation** — has this exact hash been seen often enough by Microsoft's telemetry?
+
+An unsigned binary from an unknown publisher must accumulate significant download volume before
+SmartScreen stops blocking it. For a security-focused password manager, asking users to click
+"More info → Run anyway" undermines trust. An Authenticode certificate eliminates the reputation
+requirement immediately.
+
+#### Option A — Microsoft Trusted Signing (recommended)
+
+[Microsoft Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/) (formerly
+Azure Code Signing) is a cloud-based signing service that does **not** require a hardware USB token.
+
+| Attribute | Detail |
+|-----------|--------|
+| **Provider** | Microsoft Azure |
+| **Certificate type** | Managed identity certificate (renewed automatically) |
+| **Hardware token** | Not required |
+| **Cost** | ~$9.99/month (Basic SKU, as of early 2026) |
+| **SmartScreen** | Full Authenticode trust on day one |
+| **Setup time** | 1–3 business days (identity verification) |
+| **GitHub Actions action** | `azure/trusted-signing-action@v0` |
+
+**Required GitHub repository secrets**:
+- `AZURE_TENANT_ID`
+- `AZURE_CLIENT_ID`
+- `AZURE_CLIENT_SECRET`
+
+**GitHub Actions snippet** (already present as a comment in `release.yml`):
+```yaml
+- name: Sign Windows binary (Microsoft Trusted Signing)
+  if: runner.os == 'Windows'
+  uses: azure/trusted-signing-action@v0
+  with:
+    azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+    endpoint: https://eus.codesigning.azure.net/
+    trusted-signing-account-name: <account-name>
+    certificate-profile-name: <profile-name>
+    files-folder: target/x86_64-pc-windows-msvc/release
+    files-folder-filter: exe
+    file-digest: SHA256
+    timestamp-rfc3161: http://timestamp.acs.microsoft.com
+    timestamp-digest: SHA256
+```
+
+#### Option B — EV Code Signing Certificate
+
+An Extended Validation (EV) certificate from a traditional CA (e.g., DigiCert, Sectigo, GlobalSign)
+provides the strongest SmartScreen signal but requires a hardware USB token (FIDO2 or HSM).
+
+| Attribute | Detail |
+|-----------|--------|
+| **Provider** | DigiCert, Sectigo, GlobalSign, etc. |
+| **Certificate type** | EV (Extended Validation) |
+| **Hardware token** | Required (USB token shipped by the CA) |
+| **Cost** | ~$300–$500/year |
+| **SmartScreen** | Full Authenticode trust on day one; highest reputation tier |
+| **Setup time** | 3–10 business days (identity + business verification) |
+| **GitHub Actions** | `signtool.exe` with PFX exported from token |
+
+**Required GitHub repository secrets**:
+- `CODE_SIGNING_CERT_PFX_BASE64` — Base64-encoded `.pfx` certificate file
+- `CODE_SIGNING_CERT_PASSWORD` — Password protecting the `.pfx`
+
+**GitHub Actions snippet** (already present as a comment in `release.yml`):
+```yaml
+- name: Sign Windows binary (signtool / EV certificate)
+  if: runner.os == 'Windows'
+  shell: pwsh
+  run: |
+    $pfxBytes = [Convert]::FromBase64String("${{ secrets.CODE_SIGNING_CERT_PFX_BASE64 }}")
+    $pfxPath  = "$env:RUNNER_TEMP\codesign.pfx"
+    [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+    signtool sign /fd SHA256 /p "${{ secrets.CODE_SIGNING_CERT_PASSWORD }}" `
+      /f "$pfxPath" `
+      /t http://timestamp.digicert.com `
+      "target/x86_64-pc-windows-msvc/release/rust-slint-password-saver.exe"
+    Remove-Item -Force "$pfxPath"
+```
+
+#### Activation steps
+
+1. Choose Option A (Microsoft Trusted Signing) or Option B (EV certificate).
+2. Obtain the certificate / set up the Azure account per the provider's onboarding guide.
+3. Add the required secrets to the GitHub repository (`Settings → Secrets and variables → Actions`).
+4. Uncomment the relevant signing step in `.github/workflows/release.yml` (the placeholder is already
+   present — remove the leading `#` from each line of the chosen option).
+5. Push a new version tag (`v*.*.*`) to trigger the release workflow and verify the signed binary.
 
 ---
 
@@ -719,7 +836,7 @@ This table summarises the verified compatibility status of each codebase area ac
 | **Update checker (`reqwest`)** | ✅ | ✅ | ✅ | ✅ | TLS via native Windows SSPI or OpenSSL in WSL2 |
 | **Encryption (Argon2/AES-GCM)** | ✅ | ✅ | ✅ | ✅ | Pure Rust; fully platform-agnostic |
 | **Long-path support (> 260 chars)** | ✅ | ✅ | ✅ | N/A | `longPathAware` declared in `app.manifest`; requires `LongPathsEnabled = 1` registry key on host |
-| **Code signing (SmartScreen)** | ❌ | ❌ | ❌ | N/A | Unsigned binary; SmartScreen warns on first launch |
+| **Code signing (SmartScreen)** | ❌ | ❌ | ❌ | N/A | Unsigned binary; SmartScreen warns on first launch. README documents bypass steps; `release.yml` has a commented placeholder for Authenticode signing (see Finding D / Code Signing subsection) |
 | **Installer / uninstaller** | ❌ | ❌ | ❌ | N/A | No installer; manual file deletion required |
 | **Winget / Chocolatey / Scoop** | ❌ | ❌ | ❌ | N/A | No package manager manifests |
 | **Line-ending hygiene (`.gitattributes`)** | ✅ | ✅ | ✅ | ✅ | `.gitattributes` added; LF enforced for all source/data files; binaries marked binary |
@@ -744,8 +861,8 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 4. **Fix `main.rs` module doc comment to include Windows in supported platforms**
    Update line 14 of `src/main.rs` from `/// - Cross-platform support (macOS, Linux)` to `/// - Cross-platform support (macOS, Linux, Windows (experimental))`. **Acceptance criteria**: `cargo doc` builds without warnings; the generated documentation lists Windows as a supported platform.
 
-5. **Add Windows SmartScreen bypass instructions to README**
-   Add a `### Running on Windows — SmartScreen Warning` subsection to `README.md` explaining that unsigned executables from GitHub releases trigger Windows SmartScreen, provide the step-by-step bypass ("More info → Run anyway"), and note that source-built binaries from `cargo build --release` are not affected. **Acceptance criteria**: The README clearly guides a Windows user through the SmartScreen bypass; no existing documentation is removed.
+5. ~~**Add Windows SmartScreen bypass instructions to README**~~
+   ✅ **Implemented** — Added `### Running on Windows — SmartScreen Warning` subsection to `README.md` with step-by-step "More info → Run anyway" bypass instructions, explanation that the binary is unsigned, and a note that source-built binaries bypass SmartScreen entirely. Updated the existing bullet in "Known Windows Limitations" to link to the new section. 15 TDD tests added in `tests/code_signing_test.rs`.
 
 6. **Submit a Winget package manifest for `rust-slint-password-saver`**
    Create a Winget manifest (YAML) for `obstreperous-ai.RustSlintPasswordSaver` and open a PR to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs). **Acceptance criteria**: Manifest validates with `winget validate`; a PR is opened to winget-pkgs; the README's Installation section is updated with `winget install obstreperous-ai.RustSlintPasswordSaver`.
@@ -759,8 +876,8 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 9. **Create a WiX 4 installer for the Windows release**
    Author a WiX 4 `.wxs` source file that installs the `.exe` to `%ProgramFiles%\PasswordSaver\`, creates a Start Menu shortcut, and registers an uninstaller entry in `Add/Remove Programs`. Integrate `.msi` build into `.github/workflows/release.yml` as a separate artifact. **Acceptance criteria**: `.msi` installer produced; application installed silently via `msiexec /i rust-slint-password-saver.msi /quiet`; uninstall via `msiexec /x` removes all files and shortcuts.
 
-10. **Investigate and document Authenticode code-signing options for CI**
-    Research and document (in `WINDOWS.md`) the cost and process for obtaining an Authenticode EV Code Signing Certificate or using Microsoft Trusted Signing (Azure Code Signing). Add a placeholder signing step to `release.yml` (commented out, with a `TODO` comment referencing the documentation). **Acceptance criteria**: `WINDOWS.md` contains a `### Code Signing` subsection with provider options, estimated cost/time, and the GitHub Actions steps required; `release.yml` has a commented placeholder signing step.
+10. ~~**Investigate and document Authenticode code-signing options for CI**~~
+    ✅ **Implemented** — `WINDOWS.md` now contains a `### Code Signing` subsection (under Finding D) documenting both Microsoft Trusted Signing and EV certificate options with provider details, estimated costs, required GitHub Actions secrets, and complete workflow snippets. `release.yml` has a commented-out placeholder signing step with `TODO` comment referencing this documentation. 15 TDD tests added in `tests/code_signing_test.rs` verifying all acceptance criteria.
 
 ---
 

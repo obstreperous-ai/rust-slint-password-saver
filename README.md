@@ -196,8 +196,26 @@ This installs the binary to `~/.cargo/bin/rust-slint-password-saver`.
 The following limitations apply to the current Windows (experimental) build:
 
 - **Console window**: A console/terminal window may appear alongside the main UI on some Windows configurations. This will be resolved in a future release.
-- **SmartScreen warning**: Windows SmartScreen may show an "Unknown publisher" warning when running a binary built from source, since it is not code-signed. Click "More info" → "Run anyway" to proceed.
+- **SmartScreen warning**: Windows SmartScreen may show an "Unknown publisher" warning when running the pre-built binary from GitHub Releases, because the executable is unsigned. See the [Running on Windows — SmartScreen Warning](#running-on-windows--smartscreen-warning) section below for step-by-step bypass instructions.
 - **Storage location**: Passwords are stored in `%LOCALAPPDATA%\PasswordSaver\` (e.g. `C:\Users\Alice\AppData\Local\PasswordSaver\`). This folder is not hidden, but `AppData` itself is hidden by default in Windows Explorer. To open it, type `%LOCALAPPDATA%` in the Explorer address bar.
+
+---
+
+### Running on Windows — SmartScreen Warning
+
+When you download `rust-slint-password-saver-windows-x86_64.zip` from the GitHub Releases page and run the extracted `.exe`, Windows SmartScreen will show a blue dialog reading **"Windows protected your PC"**. This happens because the release binary is currently **unsigned** (no Authenticode certificate), so Windows marks it as coming from an unknown publisher.
+
+**This is a known limitation and does not indicate malware.** Follow the steps below to run the application:
+
+1. In the SmartScreen dialog, click **"More info"**.
+2. A **"Run anyway"** button will appear at the bottom of the dialog.
+3. Click **"Run anyway"** to launch the application.
+
+> **Why does SmartScreen trigger?**  
+> Windows SmartScreen blocks unsigned executables from unknown publishers by default. The release binary is built by GitHub Actions and is not yet signed with an Authenticode certificate. Code-signing is planned for a future release (see [WINDOWS.md](WINDOWS.md) Finding D for details).
+
+> **Building from source bypasses this warning.**  
+> Binaries compiled locally with `cargo build --release` are not downloaded from the internet and therefore do not accumulate a SmartScreen download reputation score — they run without any SmartScreen prompt.
 
 ---
 
