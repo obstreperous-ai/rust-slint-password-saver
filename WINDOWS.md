@@ -830,7 +830,7 @@ There is no mechanism to package the application as a Windows installer. Windows
 - `.github/workflows/release.yml` — WiX build step + MSI artifact upload
 - `README.md` — Windows package manager installation instructions
 
-**TDD tests added**: 29 tests in `tests/windows_installer_test.rs` covering all acceptance criteria.
+**TDD tests added**: 32 tests in `tests/windows_installer_test.rs` covering all acceptance criteria.
 
 ---
 
@@ -890,7 +890,7 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
    `winget/manifests/o/obstreperous-ai/RustSlintPasswordSaver/0.1.0/`. Supports
    `winget install obstreperous-ai.RustSlintPasswordSaver` and local testing via
    `winget install --manifest winget/manifests/...`. README Installation section updated.
-   29 TDD tests added in `tests/windows_installer_test.rs`.
+   32 TDD tests added in `tests/windows_installer_test.rs`.
 
 7. ~~**Add a Scoop bucket manifest for developer-friendly installation**~~
    ✅ **Implemented** — Scoop manifest JSON created at `scoop/rust-slint-password-saver.json`

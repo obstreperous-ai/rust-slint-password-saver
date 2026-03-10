@@ -290,8 +290,8 @@ fn winget_installer_manifest_specifies_msi_type() {
     )
     .expect("Failed to read Winget installer manifest");
     assert!(
-        content.contains("InstallerType: msi") || content.contains("InstallerType: zip"),
-        "Winget installer manifest must specify InstallerType"
+        content.contains("InstallerType: msi"),
+        "Winget installer manifest must specify InstallerType: msi"
     );
 }
 
