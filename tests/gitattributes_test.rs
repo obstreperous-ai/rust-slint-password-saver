@@ -61,12 +61,19 @@ fn gitattributes_has_global_eol_lf_rule() {
 // ---------------------------------------------------------------------------
 
 /// Helper: assert that a pattern with `eol=lf` is present for the given glob.
+///
+/// Accepts any amount of whitespace (spaces or tabs) between the pattern and
+/// the attributes, so both `*.rs text eol=lf` and `*.rs    text eol=lf` match.
 fn assert_eol_lf_rule(content: &str, extension: &str) {
-    // Accept both "*.ext  text eol=lf" and "*.ext text eol=lf" (varying whitespace).
-    let needle = format!("*{} ", extension);
+    let pattern = format!("*{extension}");
     let has_rule = content.lines().any(|line| {
-        let trimmed = line.trim();
-        trimmed.starts_with(&needle) && trimmed.contains("eol=lf")
+        // Split on whitespace; first token must be the glob pattern, and the
+        // remaining tokens must include "eol=lf".
+        let mut tokens = line.split_whitespace();
+        match tokens.next() {
+            Some(glob) => glob == pattern && tokens.any(|t| t == "eol=lf"),
+            None => false,
+        }
     });
     assert!(
         has_rule,
@@ -128,11 +135,17 @@ fn gitattributes_enforces_lf_for_json() {
 // ---------------------------------------------------------------------------
 
 /// Helper: assert that a pattern is marked as `binary`.
+///
+/// Accepts any amount of whitespace (spaces or tabs) between the pattern and
+/// the attributes, so both `*.exe binary` and `*.exe    binary` match.
 fn assert_binary_rule(content: &str, extension: &str) {
-    let needle = format!("*{} ", extension);
+    let pattern = format!("*{extension}");
     let has_rule = content.lines().any(|line| {
-        let trimmed = line.trim();
-        trimmed.starts_with(&needle) && trimmed.contains("binary")
+        let mut tokens = line.split_whitespace();
+        match tokens.next() {
+            Some(glob) => glob == pattern && tokens.any(|t| t == "binary"),
+            None => false,
+        }
     });
     assert!(
         has_rule,
@@ -159,10 +172,15 @@ fn gitattributes_marks_enc_as_binary() {
 // ---------------------------------------------------------------------------
 
 /// Read a file as raw bytes and return `true` if it contains a CRLF sequence.
+///
+/// Returns `false` for unreadable files (e.g., permission-denied) because the
+/// CRLF check is a best-effort hygiene assertion; failures of the underlying
+/// `fs::read` are already surfaced by the dedicated existence/content tests
+/// above.  If you suspect a permission issue, inspect the file independently.
 fn has_crlf(path: &Path) -> bool {
     match fs::read(path) {
         Ok(bytes) => bytes.windows(2).any(|w| w == b"\r\n"),
-        Err(_) => false, // Unreadable files are not our concern here
+        Err(_) => false,
     }
 }
 
