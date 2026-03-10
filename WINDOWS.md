@@ -615,7 +615,7 @@ The repository had no `.gitattributes` file. On Windows, Git defaults to `core.a
 
 ---
 
-### New Finding C: Application manifest missing `longPathAware` declaration
+### ✅ New Finding C (RESOLVED): Application manifest missing `longPathAware` declaration
 
 **Title**: `feat(windows): add longPathAware to app.manifest to support paths > 260 characters`
 
@@ -626,13 +626,11 @@ The repository had no `.gitattributes` file. On Windows, Git defaults to `core.a
 Windows 10 version 1607 introduced native long-path support (> 260 characters / `MAX_PATH`). Applications must opt in by declaring `<longPathAware>true</longPathAware>` in their application manifest AND the system must have the corresponding Group Policy or registry key enabled (`HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`). Without this declaration, `CreateFileW` and related APIs silently fail on paths longer than 260 characters, which can happen when `%LOCALAPPDATA%` itself is unusually deep (e.g., on enterprise machines with domain-joined user accounts and deep folder trees).
 
 - **File**: `app.manifest`
-- **Current state**: `longPathAware` not declared; application will silently fail on paths > 260 characters on Windows 10 1607+ even with the system policy enabled
-- **Fix**: Add inside `<asmv3:windowsSettings>`:
-  ```xml
-  <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
-  ```
+- **Previous state**: `longPathAware` not declared; application would silently fail on paths > 260 characters on Windows 10 1607+ even with the system policy enabled
 
-**Files to modify**: `app.manifest`
+**Resolution**:
+- `<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>` added inside the existing `<asmv3:windowsSettings>` block in `app.manifest`
+- 11 TDD tests added in `tests/app_manifest_test.rs` covering manifest existence, `longPathAware` presence, correct value (`true`), correct namespace, correct nesting inside `<asmv3:windowsSettings>`, preservation of existing DPI-awareness declarations, and structural integrity checks
 
 ---
 
@@ -720,7 +718,7 @@ This table summarises the verified compatibility status of each codebase area ac
 | **Browser launch (`webbrowser`)** | ✅ | ✅ | ⚠️ | ⚠️ | Server Core may have no default browser; WSL2 needs `BROWSER` env var |
 | **Update checker (`reqwest`)** | ✅ | ✅ | ✅ | ✅ | TLS via native Windows SSPI or OpenSSL in WSL2 |
 | **Encryption (Argon2/AES-GCM)** | ✅ | ✅ | ✅ | ✅ | Pure Rust; fully platform-agnostic |
-| **Long-path support (> 260 chars)** | ⚠️ | ⚠️ | ⚠️ | N/A | `longPathAware` not declared in `app.manifest`; paths > 260 chars may fail silently |
+| **Long-path support (> 260 chars)** | ✅ | ✅ | ✅ | N/A | `longPathAware` declared in `app.manifest`; requires `LongPathsEnabled = 1` registry key on host |
 | **Code signing (SmartScreen)** | ❌ | ❌ | ❌ | N/A | Unsigned binary; SmartScreen warns on first launch |
 | **Installer / uninstaller** | ❌ | ❌ | ❌ | N/A | No installer; manual file deletion required |
 | **Winget / Chocolatey / Scoop** | ❌ | ❌ | ❌ | N/A | No package manager manifests |
@@ -740,8 +738,8 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 2. ~~**Add `.gitattributes` to enforce LF line endings**~~
    ✅ **Implemented** — Created `.gitattributes` at the repository root with `* text=auto eol=lf` and explicit `eol=lf` overrides for `*.rs`, `*.toml`, `*.yml`, `*.yaml`, `*.slint`, `*.manifest`, `*.json`, `*.md`, `*.txt`, `*.sh`; marked `*.exe` and `*.enc` (and `*.png`, `*.ico`) as binary. Added 17 TDD tests in `tests/gitattributes_test.rs` covering file existence, all per-extension rules, binary rules, and CRLF absence checks.
 
-3. **Add `longPathAware` declaration to `app.manifest`**
-   Inside the existing `<asmv3:windowsSettings>` block in `app.manifest`, add `<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>`. **Acceptance criteria**: The manifest compiles and embeds without error; `cargo build --release --target x86_64-pc-windows-msvc` succeeds; the application can create/open files at paths > 260 characters on a Windows 10 1607+ machine with `LongPathsEnabled = 1`.
+3. ~~**Add `longPathAware` declaration to `app.manifest`**~~
+   ✅ **Implemented** — Added `<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>` inside the existing `<asmv3:windowsSettings>` block in `app.manifest`. Added 11 TDD tests in `tests/app_manifest_test.rs` covering manifest existence, `longPathAware` presence, correct value, correct namespace, correct nesting, preservation of DPI-awareness declarations, and structural integrity.
 
 4. **Fix `main.rs` module doc comment to include Windows in supported platforms**
    Update line 14 of `src/main.rs` from `/// - Cross-platform support (macOS, Linux)` to `/// - Cross-platform support (macOS, Linux, Windows (experimental))`. **Acceptance criteria**: `cargo doc` builds without warnings; the generated documentation lists Windows as a supported platform.

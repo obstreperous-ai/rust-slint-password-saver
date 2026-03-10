@@ -13,6 +13,9 @@
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>
       <!-- Modern PerMonitorV2 DPI awareness for Windows 10 1703+ -->
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+      <!-- Long-path support: opt in to paths > 260 characters (MAX_PATH) on Windows 10 1607+.
+           Requires HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1. -->
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
     </asmv3:windowsSettings>
   </asmv3:application>
 
