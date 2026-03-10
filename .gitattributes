@@ -1,0 +1,22 @@
+# Enforce LF line endings for all text files to prevent CRLF corruption on Windows clones.
+# Windows Git defaults to core.autocrlf=true which would otherwise convert LF→CRLF on checkout,
+# causing byte-level mismatches in tests and potential issues with the app.manifest XML parser.
+* text=auto eol=lf
+
+# Source and configuration files — always LF
+*.rs       text eol=lf
+*.toml     text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.slint    text eol=lf
+*.manifest text eol=lf
+*.json     text eol=lf
+*.txt      text eol=lf
+*.sh       text eol=lf
+
+# Binary files — no line-ending conversion
+*.exe      binary
+*.enc      binary
+*.png      binary
+*.ico      binary

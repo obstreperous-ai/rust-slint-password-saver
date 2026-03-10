@@ -24,8 +24,8 @@ use windows::Win32::Security::{
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ,
-    OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
+    CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+    FILE_SHARE_READ, OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
 };
 #[cfg(windows)]
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};

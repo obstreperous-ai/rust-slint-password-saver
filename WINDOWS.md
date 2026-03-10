@@ -578,33 +578,40 @@ The `#[cfg(windows)]` import block at the top of `src/windows_permissions.rs` (l
 
 ---
 
-### New Finding B: No `.gitattributes` — CRLF line-ending risk on Windows clones
+### ~~New Finding B: No `.gitattributes` — CRLF line-ending risk on Windows clones~~ ✅ Resolved
 
 **Title**: `chore: add .gitattributes to enforce LF line endings for source and data files`
 
 **Labels**: `chore`, `windows`, `cross-platform`
 
+**Status**: ✅ **Implemented** — `.gitattributes` created with global `* text=auto eol=lf` rule and per-extension `eol=lf` overrides for all source/data files; binary files marked with `binary` attribute. 17 TDD tests added in `tests/gitattributes_test.rs`.
+
 **Description**:
 
-The repository has no `.gitattributes` file. On Windows, Git defaults to `core.autocrlf=true`, which converts LF to CRLF on checkout. This can silently corrupt files whose content is parsed as text but must maintain exact byte sequences (e.g., `app.manifest` XML and any raw test fixtures), produce noisy diffs, and cause subtle issues when file content is compared byte-for-byte in tests. The `app.manifest` XML file in particular should remain LF to ensure the manifest parser in `embed-manifest` receives the expected bytes.
+The repository had no `.gitattributes` file. On Windows, Git defaults to `core.autocrlf=true`, which converts LF to CRLF on checkout. This can silently corrupt files whose content is parsed as text but must maintain exact byte sequences (e.g., `app.manifest` XML and any raw test fixtures), produce noisy diffs, and cause subtle issues when file content is compared byte-for-byte in tests. The `app.manifest` XML file in particular should remain LF to ensure the manifest parser in `embed-manifest` receives the expected bytes.
 
-- **Current state**: No `.gitattributes`; Windows developers cloning with default Git settings get CRLF in all text files
+- **Previous state**: No `.gitattributes`; Windows developers cloning with default Git settings get CRLF in all text files
 - **Impact**: Potential byte-level mismatches in tests; dirty working tree after switching platforms; manifest XML parser may produce unexpected output
-- **Fix**: Create `.gitattributes` with:
+- **Fix applied**: Created `.gitattributes` with:
   ```gitattributes
   * text=auto eol=lf
-  *.rs    text eol=lf
-  *.toml  text eol=lf
-  *.md    text eol=lf
-  *.yml   text eol=lf
-  *.slint text eol=lf
+  *.rs       text eol=lf
+  *.toml     text eol=lf
+  *.md       text eol=lf
+  *.yml      text eol=lf
+  *.yaml     text eol=lf
+  *.slint    text eol=lf
   *.manifest text eol=lf
-  *.json  text eol=lf
-  *.exe   binary
-  *.enc   binary
+  *.json     text eol=lf
+  *.txt      text eol=lf
+  *.sh       text eol=lf
+  *.exe      binary
+  *.enc      binary
+  *.png      binary
+  *.ico      binary
   ```
 
-**Files to create**: `.gitattributes`
+**Files created**: `.gitattributes`, `tests/gitattributes_test.rs`
 
 ---
 
@@ -717,7 +724,7 @@ This table summarises the verified compatibility status of each codebase area ac
 | **Code signing (SmartScreen)** | ❌ | ❌ | ❌ | N/A | Unsigned binary; SmartScreen warns on first launch |
 | **Installer / uninstaller** | ❌ | ❌ | ❌ | N/A | No installer; manual file deletion required |
 | **Winget / Chocolatey / Scoop** | ❌ | ❌ | ❌ | N/A | No package manager manifests |
-| **Line-ending hygiene (`.gitattributes`)** | ⚠️ | ⚠️ | ⚠️ | ⚠️ | No `.gitattributes`; CRLF risk on Windows clones |
+| **Line-ending hygiene (`.gitattributes`)** | ✅ | ✅ | ✅ | ✅ | `.gitattributes` added; LF enforced for all source/data files; binaries marked binary |
 
 **Legend**: ✅ Verified working · ⚠️ Works with caveats / not fully tested · ❌ Not implemented
 
@@ -730,8 +737,8 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 1. ~~**Remove unused imports `GRANT_ACCESS` and `INHERITED_ACE` from `windows_permissions.rs`**~~
    ✅ **Implemented** — Removed `GRANT_ACCESS` and `INHERITED_ACE` from the `#[cfg(windows)]` import block in `src/windows_permissions.rs`.
 
-2. **Add `.gitattributes` to enforce LF line endings**
-   Create a `.gitattributes` file at the repository root that sets `* text=auto eol=lf` and adds explicit `eol=lf` overrides for `*.rs`, `*.toml`, `*.yml`, `*.slint`, `*.manifest`, `*.json`, `*.md`, and marks `*.exe` and `*.enc` as binary. **Acceptance criteria**: `git ls-files --eol` shows `i/lf` for all text files; existing tests pass on `windows-latest` CI runner; manifest XML round-trips identically.
+2. ~~**Add `.gitattributes` to enforce LF line endings**~~
+   ✅ **Implemented** — Created `.gitattributes` at the repository root with `* text=auto eol=lf` and explicit `eol=lf` overrides for `*.rs`, `*.toml`, `*.yml`, `*.yaml`, `*.slint`, `*.manifest`, `*.json`, `*.md`, `*.txt`, `*.sh`; marked `*.exe` and `*.enc` (and `*.png`, `*.ico`) as binary. Added 17 TDD tests in `tests/gitattributes_test.rs` covering file existence, all per-extension rules, binary rules, and CRLF absence checks.
 
 3. **Add `longPathAware` declaration to `app.manifest`**
    Inside the existing `<asmv3:windowsSettings>` block in `app.manifest`, add `<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>`. **Acceptance criteria**: The manifest compiles and embeds without error; `cargo build --release --target x86_64-pc-windows-msvc` succeeds; the application can create/open files at paths > 260 characters on a Windows 10 1607+ machine with `LongPathsEnabled = 1`.
