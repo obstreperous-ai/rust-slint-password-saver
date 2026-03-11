@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX 4 installer for rust-slint-password-saver.
+
+  PREREQUISITES
+  =============
+  Install the WiX 4 toolset as a .NET global tool (requires .NET 6+):
+    dotnet tool install --global wix
+    wix extension add --global WixToolset.UI.wixext
+
+  BUILD
+  =====
+  Pass the compiled .exe via the ExeSource preprocessor variable:
+    wix build \
+      -d "ExeSource=target/x86_64-pc-windows-msvc/release/rust-slint-password-saver.exe" \
+      -ext WixToolset.UI.wixext \
+      -o rust-slint-password-saver.msi \
+      installer/windows/main.wxs
+
+  INSTALL (silent)
+  ================
+    msiexec /i rust-slint-password-saver.msi /quiet
+
+  UNINSTALL (silent)
+  ==================
+    msiexec /x rust-slint-password-saver.msi /quiet
+
+  WHAT THE INSTALLER DOES
+  =======================
+  * Copies rust-slint-password-saver.exe to %ProgramFiles%\PasswordSaver\
+  * Creates a "Password Saver" shortcut in the Start Menu
+  * Registers an uninstaller entry in Add/Remove Programs (automatic with MSI)
+  * On uninstall: removes all installed files and the Start Menu shortcut
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package
+    Name="Password Saver"
+    Manufacturer="obstreperous-ai"
+    Version="0.1.0"
+    UpgradeCode="F3D2A1B0-C4E5-4F6A-7B8C-9D0E1F2A3B4C"
+    Language="1033"
+    Codepage="1252"
+    InstallerVersion="500">
+
+    <!-- Prevent downgrades; allow in-place upgrades via major-upgrade scheduling -->
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of Password Saver is already installed. Please uninstall it before installing an older version." />
+
+    <!-- Embed all cabinet files into the .msi for a single-file installer -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Add/Remove Programs metadata -->
+    <Property Id="ARPCOMMENTS"
+              Value="A secure cross-platform desktop password manager built with Rust and Slint." />
+    <Property Id="ARPHELPLINK"
+              Value="https://github.com/obstreperous-ai/rust-slint-password-saver" />
+    <Property Id="ARPURLINFOABOUT"
+              Value="https://github.com/obstreperous-ai/rust-slint-password-saver" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <!-- Feature tree: single top-level feature installs everything -->
+    <Feature Id="MainFeature" Title="Password Saver" Level="1">
+      <ComponentGroupRef Id="ApplicationBinaries" />
+      <ComponentRef Id="StartMenuShortcuts" />
+    </Feature>
+
+  </Package>
+
+  <!-- -----------------------------------------------------------------------
+       Directory structure
+       ----------------------------------------------------------------------- -->
+  <Fragment>
+    <!-- %ProgramFiles%\PasswordSaver\ -->
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="PasswordSaver" />
+    </StandardDirectory>
+
+    <!-- Start Menu -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuFolder" Name="Password Saver" />
+    </StandardDirectory>
+  </Fragment>
+
+  <!-- -----------------------------------------------------------------------
+       Application binaries
+       ----------------------------------------------------------------------- -->
+  <Fragment>
+    <ComponentGroup Id="ApplicationBinaries" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+        <!--
+          ExeSource is supplied at build time via:
+            wix build -d "ExeSource=<path-to-exe>"
+        -->
+        <File Id="PasswordSaverExe"
+              Source="$(var.ExeSource)"
+              Name="rust-slint-password-saver.exe"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Start Menu shortcut component.
+         The RegistryValue acts as the KeyPath so the shortcut is tracked correctly. -->
+    <Component Id="StartMenuShortcuts"
+               Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901"
+               Directory="AppMenuFolder">
+
+      <Shortcut Id="AppShortcut"
+                Name="Password Saver"
+                Description="A secure cross-platform desktop password manager"
+                Target="[INSTALLFOLDER]rust-slint-password-saver.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+
+      <!-- Remove the Start Menu folder on uninstall -->
+      <RemoveFolder Id="AppMenuFolderRemove"
+                    Directory="AppMenuFolder"
+                    On="uninstall" />
+
+      <!-- KeyPath for this component — tracks whether shortcut is installed -->
+      <RegistryValue Root="HKCU"
+                     Key="Software\obstreperous-ai\PasswordSaver"
+                     Name="ShortcutsInstalled"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+</Wix>

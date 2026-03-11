@@ -80,6 +80,27 @@ jobs:
         Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" `
           -DestinationPath "${{ matrix.asset_name }}.zip"
 
+    - name: Build WiX installer (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        # Install the WiX 4 .NET global tool and UI extension
+        dotnet tool install --global wix
+        wix extension add --global WixToolset.UI.wixext
+        # Build the .msi installer; ExeSource points to the compiled release binary
+        wix build `
+          -d "ExeSource=target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" `
+          -ext WixToolset.UI.wixext `
+          -o "${{ matrix.asset_name }}.msi" `
+          installer/windows/main.wxs
+
+    - name: Upload MSI artifact (Windows)
+      if: runner.os == 'Windows'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}-installer
+        path: ${{ matrix.asset_name }}.msi
+
     # TODO: Add Authenticode code-signing for the Windows binary to prevent SmartScreen from
     # blocking the executable on first launch (Finding D in WINDOWS.md).
     #
@@ -146,6 +167,7 @@ jobs:
         files: |
           ./artifacts/**/*.tar.gz
           ./artifacts/**/*.zip
+          ./artifacts/**/*.msi
         draft: false
         prerelease: false
         generate_release_notes: true
