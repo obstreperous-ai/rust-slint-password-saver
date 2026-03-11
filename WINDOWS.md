@@ -36,7 +36,7 @@ Remaining gaps are predominantly in the **distribution and packaging** tier: no 
 
 | Area | Status | Notes |
 |------|--------|-------|
-| **Build** | ✅ Compiles | CI runs `windows-latest` matrix; code compiles without errors |
+| **Build** | ✅ Compiles | CI runs `windows-latest` matrix; code compiles without errors (API mismatch with `windows` v0.52 fixed March 2026) |
 | **Storage Path** | ✅ Windows-conventional | `%LOCALAPPDATA%\PasswordSaver\` on Windows (falls back to `USERPROFILE\.password_saver\`); `~/.password_saver/` on Unix |
 | **File ACL (storage)** | ✅ Implemented | `windows_permissions.rs` provides `set_windows_secure_permissions()` used by `storage.rs` |
 | **Directory ACL** | ✅ Implemented | `set_windows_directory_permissions()` with `FILE_FLAG_BACKUP_SEMANTICS` called from `main.rs`; failures logged as warnings |
@@ -577,6 +577,30 @@ The `#[cfg(windows)]` import block at the top of `src/windows_permissions.rs` (l
 **Files modified**: `src/windows_permissions.rs`
 
 ---
+
+### Finding B (March 2026): Windows CI build failure — `windows` v0.52 API mismatch ✅ Fixed
+
+**Title**: `fix(windows): resolve windows v0.52 API incompatibilities in windows_permissions.rs`
+
+**Labels**: `bug`, `windows`, `build`
+
+**Description**:
+
+The Windows CI leg failed to compile due to two incompatibilities with `windows` crate v0.52:
+
+1. **Unresolved imports** (`E0432`): `NO_INHERITANCE` and `SUB_CONTAINERS_AND_OBJECTS_INHERIT` are not exported by `windows::Win32::Security::Authorization` in this crate version. These were removed from the import block and replaced with local `const` definitions using their documented Win32 values from `WinNT.h`.
+
+2. **Mismatched return types** (`E0308`): `SetEntriesInAclW` and `SetSecurityInfo` return `windows_core::Result<()>` in v0.52, not `WIN32_ERROR`. All four comparisons of the form `if result != ERROR_SUCCESS` were replaced with `if result.is_err()`. `ERROR_SUCCESS` was removed from the import list.
+
+- **File**: `src/windows_permissions.rs`
+- **Root cause**: `windows` crate v0.52 changed the return type of ACL functions to `Result`-style and does not re-export certain ACE inheritance flags at the Authorization module path.
+- **Fix applied**:
+  - Removed `NO_INHERITANCE`, `SUB_CONTAINERS_AND_OBJECTS_INHERIT` from imports; added local `const NO_INHERITANCE: u32 = 0x0` and `const SUB_CONTAINERS_AND_OBJECTS_INHERIT: u32 = 0x3`
+  - Removed `ERROR_SUCCESS` from imports
+  - Replaced all four `!= ERROR_SUCCESS` checks with `.is_err()` in both `set_windows_secure_permissions` and `set_windows_directory_permissions`
+- **Status**: ✅ Fixed
+
+**Files modified**: `src/windows_permissions.rs`, `WINDOWS.md`
 
 ### ~~New Finding B: No `.gitattributes` — CRLF line-ending risk on Windows clones~~ ✅ Resolved
 
