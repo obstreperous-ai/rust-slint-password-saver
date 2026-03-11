@@ -11,12 +11,21 @@ use std::path::Path;
 #[cfg(windows)]
 use windows::core::PWSTR;
 #[cfg(windows)]
-use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, PSID};
+use windows::Win32::Foundation::{HANDLE, PSID};
 #[cfg(windows)]
 use windows::Win32::Security::Authorization::{
-    SetEntriesInAclW, SetSecurityInfo, ACCESS_MODE, EXPLICIT_ACCESS_W, NO_INHERITANCE, SET_ACCESS,
-    SE_FILE_OBJECT, SUB_CONTAINERS_AND_OBJECTS_INHERIT, TRUSTEE_IS_SID, TRUSTEE_W,
+    SetEntriesInAclW, SetSecurityInfo, ACCESS_MODE, EXPLICIT_ACCESS_W, SET_ACCESS, SE_FILE_OBJECT,
+    TRUSTEE_IS_SID, TRUSTEE_W,
 };
+
+// ACE inheritance flags — these constants are not re-exported by the `windows` v0.52 crate
+// under `windows::Win32::Security::Authorization`, so they are defined locally using the
+// documented Win32 values from the Microsoft WinNT.h header.
+#[cfg(windows)]
+const NO_INHERITANCE: u32 = 0x0;
+// OBJECT_INHERIT_ACE (0x1) | CONTAINER_INHERIT_ACE (0x2)
+#[cfg(windows)]
+const SUB_CONTAINERS_AND_OBJECTS_INHERIT: u32 = 0x3;
 #[cfg(windows)]
 use windows::Win32::Security::{
     GetTokenInformation, TokenUser, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
@@ -142,7 +151,7 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
             &mut new_acl,
         );
 
-        if result != ERROR_SUCCESS {
+        if result.is_err() {
             let _ = CloseHandle(token_handle);
             let _ = CloseHandle(file_handle);
             return Err(SecurityError::PermissionDenied);
@@ -168,7 +177,7 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
         let _ = CloseHandle(token_handle);
         let _ = CloseHandle(file_handle);
 
-        if set_result != ERROR_SUCCESS {
+        if set_result.is_err() {
             return Err(SecurityError::PermissionDenied);
         }
 
@@ -287,7 +296,7 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
             &mut new_acl,
         );
 
-        if result != ERROR_SUCCESS {
+        if result.is_err() {
             let _ = CloseHandle(token_handle);
             let _ = CloseHandle(dir_handle);
             return Err(SecurityError::PermissionDenied);
@@ -313,7 +322,7 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
         let _ = CloseHandle(token_handle);
         let _ = CloseHandle(dir_handle);
 
-        if set_result != ERROR_SUCCESS {
+        if set_result.is_err() {
             return Err(SecurityError::PermissionDenied);
         }
 
