@@ -936,6 +936,9 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 10. ~~**Investigate and document Authenticode code-signing options for CI**~~
     ✅ **Implemented** — `WINDOWS.md` now contains a `### Code Signing` subsection (under Finding D) documenting both Microsoft Trusted Signing and EV certificate options with provider details, estimated costs, required GitHub Actions secrets, and complete workflow snippets. `release.yml` has a commented-out placeholder signing step with `TODO` comment referencing this documentation. 15 TDD tests added in `tests/code_signing_test.rs` verifying all acceptance criteria.
 
+11. ~~**Fix doc comment formatting to wrap bare environment variable paths in backticks**~~
+    ✅ **Implemented** — Wrapped bare `$HOME/.password_saver` path references in backticks in doc comments (`src/audit_log.rs` test function, `tests/windows_installer_test.rs` module-level doc). Resolves `clippy::doc_markdown` lint errors that were failing the Code Quality workflow.
+
 ---
 
 *This review was produced by Agentic AI in the Windows Expert persona. Each actionable item is self-contained and designed for autonomous AI-driven implementation without human intervention.*

@@ -756,7 +756,7 @@ mod tests {
         let _ = fs::remove_file(key_path);
     }
 
-    /// Verify that on non-Windows platforms the path functions use $HOME/.password_saver/.
+    /// Verify that on non-Windows platforms the path functions use `$HOME/.password_saver/`.
     #[cfg(not(windows))]
     #[test]
     fn test_get_audit_log_path_unix() {

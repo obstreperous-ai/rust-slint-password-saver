@@ -1,11 +1,11 @@
 //! Tests for Finding F in WINDOWS.md — Windows installer infrastructure.
 //!
 //! These tests verify that:
-//! 1. The WiX 4 installer definition (`installer/windows/main.wxs`) exists and is structurally valid.
+//! 1. The `WiX` 4 installer definition (`installer/windows/main.wxs`) exists and is structurally valid.
 //! 2. The Winget package manifest files exist and contain required fields.
 //! 3. The Scoop manifest (`scoop/rust-slint-password-saver.json`) exists, is valid JSON, and contains
 //!    required fields.
-//! 4. `.github/workflows/release.yml` includes the WiX installer build step.
+//! 4. `.github/workflows/release.yml` includes the `WiX` installer build step.
 //! 5. `README.md` documents `winget install` and Scoop installation.
 //! 6. `WINDOWS.md` marks Finding F as resolved.
 
