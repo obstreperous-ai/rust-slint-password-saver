@@ -9,12 +9,12 @@ use crate::errors::SecurityError;
 #[cfg(windows)]
 use std::path::Path;
 #[cfg(windows)]
-use windows::core::PWSTR;
+use windows::core::{PCWSTR, PWSTR};
 #[cfg(windows)]
-use windows::Win32::Foundation::{HANDLE, PSID};
+use windows::Win32::Foundation::{HANDLE, HLOCAL, PSID};
 #[cfg(windows)]
 use windows::Win32::Security::Authorization::{
-    SetEntriesInAclW, SetSecurityInfo, ACCESS_MODE, EXPLICIT_ACCESS_W, SET_ACCESS, SE_FILE_OBJECT,
+    SetEntriesInAclW, SetSecurityInfo, EXPLICIT_ACCESS_W, SET_ACCESS, SE_FILE_OBJECT,
     TRUSTEE_IS_SID, TRUSTEE_W,
 };
 
@@ -78,7 +78,7 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
         // Open file handle with permissions needed to modify DACL
         // Using READ_CONTROL and WRITE_DAC instead of FILE_ALL_ACCESS (principle of least privilege)
         let file_handle = CreateFileW(
-            PWSTR(wide_path.as_mut_ptr()),
+            PCWSTR(wide_path.as_ptr()),
             READ_CONTROL.0 | WRITE_DAC.0,
             FILE_SHARE_READ,
             None,
@@ -172,7 +172,7 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
 
         // Clean up resources
         if !new_acl.is_null() {
-            let _ = LocalFree(HANDLE(new_acl as isize));
+            let _ = LocalFree(HLOCAL(new_acl as isize));
         }
         let _ = CloseHandle(token_handle);
         let _ = CloseHandle(file_handle);
@@ -224,7 +224,7 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
         // Open directory handle with permissions needed to modify DACL.
         // FILE_FLAG_BACKUP_SEMANTICS is required to open a directory handle with CreateFileW.
         let dir_handle = CreateFileW(
-            PWSTR(wide_path.as_mut_ptr()),
+            PCWSTR(wide_path.as_ptr()),
             READ_CONTROL.0 | WRITE_DAC.0,
             FILE_SHARE_READ,
             None,
@@ -317,7 +317,7 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
 
         // Clean up resources
         if !new_acl.is_null() {
-            let _ = LocalFree(HANDLE(new_acl as isize));
+            let _ = LocalFree(HLOCAL(new_acl as isize));
         }
         let _ = CloseHandle(token_handle);
         let _ = CloseHandle(dir_handle);
