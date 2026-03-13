@@ -586,18 +586,25 @@ The `#[cfg(windows)]` import block at the top of `src/windows_permissions.rs` (l
 
 **Description**:
 
-The Windows CI leg failed to compile due to two incompatibilities with `windows` crate v0.52:
+The Windows CI leg failed to compile due to four incompatibilities with `windows` crate v0.52:
 
 1. **Unresolved imports** (`E0432`): `NO_INHERITANCE` and `SUB_CONTAINERS_AND_OBJECTS_INHERIT` are not exported by `windows::Win32::Security::Authorization` in this crate version. These were removed from the import block and replaced with local `const` definitions using their documented Win32 values from `WinNT.h`.
 
 2. **Mismatched return types** (`E0308`): `SetEntriesInAclW` and `SetSecurityInfo` return `windows_core::Result<()>` in v0.52, not `WIN32_ERROR`. All four comparisons of the form `if result != ERROR_SUCCESS` were replaced with `if result.is_err()`. `ERROR_SUCCESS` was removed from the import list.
 
+3. **Wrong pointer type** (`E0277`): `CreateFileW` requires a `PCWSTR` (`*const u16`) parameter, but `PWSTR` (`*mut u16`) was passed. Fixed by using `PCWSTR(wide_path.as_ptr())` instead of `PWSTR(wide_path.as_mut_ptr())` in both `set_windows_secure_permissions` and `set_windows_directory_permissions`.
+
+4. **Wrong handle type** (`E0277`): `LocalFree` requires an `HLOCAL` parameter, but `HANDLE` was passed. Fixed by using `HLOCAL(new_acl as isize)` instead of `HANDLE(new_acl as isize)`. Added `HLOCAL` to the `windows::Win32::Foundation` import. Also removed the unused `ACCESS_MODE` import to eliminate the unused-import warning (which becomes a hard error under `-D warnings`).
+
 - **File**: `src/windows_permissions.rs`
-- **Root cause**: `windows` crate v0.52 changed the return type of ACL functions to `Result`-style and does not re-export certain ACE inheritance flags at the Authorization module path.
+- **Root cause**: `windows` crate v0.52 changed the return type of ACL functions to `Result`-style, does not re-export certain ACE inheritance flags at the Authorization module path, and uses distinct handle types (`HLOCAL`, `PCWSTR`) that do not implement `IntoParam` for each other.
 - **Fix applied**:
   - Removed `NO_INHERITANCE`, `SUB_CONTAINERS_AND_OBJECTS_INHERIT` from imports; added local `const NO_INHERITANCE: u32 = 0x0` and `const SUB_CONTAINERS_AND_OBJECTS_INHERIT: u32 = 0x3`
-  - Removed `ERROR_SUCCESS` from imports
-  - Replaced all four `!= ERROR_SUCCESS` checks with `.is_err()` in both `set_windows_secure_permissions` and `set_windows_directory_permissions`
+  - Removed `ERROR_SUCCESS` and `ACCESS_MODE` from imports
+  - Replaced all four `!= ERROR_SUCCESS` checks with `.is_err()` in both functions
+  - Changed `PWSTR(wide_path.as_mut_ptr())` → `PCWSTR(wide_path.as_ptr())` for `CreateFileW` in both functions
+  - Changed `HANDLE(new_acl as isize)` → `HLOCAL(new_acl as isize)` for `LocalFree` in both functions
+  - Added `PCWSTR` to `windows::core` imports; added `HLOCAL` to `windows::Win32::Foundation` imports
 - **Status**: ✅ Fixed
 
 **Files modified**: `src/windows_permissions.rs`, `WINDOWS.md`
