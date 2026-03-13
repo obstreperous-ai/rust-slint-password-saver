@@ -28,8 +28,8 @@ const NO_INHERITANCE: u32 = 0x0;
 const SUB_CONTAINERS_AND_OBJECTS_INHERIT: u32 = 0x3;
 #[cfg(windows)]
 use windows::Win32::Security::{
-    GetTokenInformation, TokenUser, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
-    PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
+    ACE_FLAGS, GetTokenInformation, TokenUser, DACL_SECURITY_INFORMATION,
+    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{
@@ -133,7 +133,7 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
         let mut ea = EXPLICIT_ACCESS_W {
             grfAccessPermissions: (FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0),
             grfAccessMode: SET_ACCESS,
-            grfInheritance: NO_INHERITANCE,
+            grfInheritance: ACE_FLAGS(NO_INHERITANCE),
             Trustee: TRUSTEE_W {
                 pMultipleTrustee: std::ptr::null_mut(),
                 MultipleTrusteeOperation: Default::default(),
@@ -172,7 +172,7 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
 
         // Clean up resources
         if !new_acl.is_null() {
-            let _ = LocalFree(HLOCAL(new_acl as isize));
+            let _ = LocalFree(HLOCAL(new_acl.cast()));
         }
         let _ = CloseHandle(token_handle);
         let _ = CloseHandle(file_handle);
@@ -278,7 +278,7 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
         let mut ea = EXPLICIT_ACCESS_W {
             grfAccessPermissions: (FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0),
             grfAccessMode: SET_ACCESS,
-            grfInheritance: SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+            grfInheritance: ACE_FLAGS(SUB_CONTAINERS_AND_OBJECTS_INHERIT),
             Trustee: TRUSTEE_W {
                 pMultipleTrustee: std::ptr::null_mut(),
                 MultipleTrusteeOperation: Default::default(),
@@ -317,7 +317,7 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
 
         // Clean up resources
         if !new_acl.is_null() {
-            let _ = LocalFree(HLOCAL(new_acl as isize));
+            let _ = LocalFree(HLOCAL(new_acl.cast()));
         }
         let _ = CloseHandle(token_handle);
         let _ = CloseHandle(dir_handle);
