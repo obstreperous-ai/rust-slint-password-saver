@@ -29,7 +29,7 @@ const SUB_CONTAINERS_AND_OBJECTS_INHERIT: u32 = 0x3;
 #[cfg(windows)]
 use windows::Win32::Security::{
     GetTokenInformation, TokenUser, ACE_FLAGS, DACL_SECURITY_INFORMATION,
-    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
+    PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{
@@ -157,14 +157,16 @@ pub fn set_windows_secure_permissions(path: &Path) -> Result<(), SecurityError> 
             return Err(SecurityError::PermissionDenied);
         }
 
-        // Set the new DACL on the file with protection from inheritance
+        // Set the new DACL on the file with protection from inheritance.
+        // OWNER_SECURITY_INFORMATION is intentionally omitted: setting the owner requires
+        // WRITE_OWNER access (or SE_TAKE_OWNERSHIP_NAME privilege) which is not available
+        // to standard users on CI runners. The file owner does not need to be changed
+        // because the file was just created by the current user.
         let set_result = SetSecurityInfo(
             file_handle,
             SE_FILE_OBJECT,
-            OWNER_SECURITY_INFORMATION
-                | DACL_SECURITY_INFORMATION
-                | PROTECTED_DACL_SECURITY_INFORMATION,
-            user_sid,
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            PSID::default(),
             PSID::default(),
             Some(new_acl),
             None,
@@ -302,14 +304,16 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
             return Err(SecurityError::PermissionDenied);
         }
 
-        // Set the new DACL on the directory with protection from inheritance
+        // Set the new DACL on the directory with protection from inheritance.
+        // OWNER_SECURITY_INFORMATION is intentionally omitted: setting the owner requires
+        // WRITE_OWNER access (or SE_TAKE_OWNERSHIP_NAME privilege) which is not available
+        // to standard users on CI runners. The directory owner does not need to be changed
+        // because the directory was just created by the current user.
         let set_result = SetSecurityInfo(
             dir_handle,
             SE_FILE_OBJECT,
-            OWNER_SECURITY_INFORMATION
-                | DACL_SECURITY_INFORMATION
-                | PROTECTED_DACL_SECURITY_INFORMATION,
-            user_sid,
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            PSID::default(),
             PSID::default(),
             Some(new_acl),
             None,

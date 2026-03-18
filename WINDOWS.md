@@ -24,6 +24,8 @@
 
 Since the initial February 2026 audit, significant Windows improvements have been merged. The previously reported critical issues — console window on launch, missing Windows release binary, missing ACL protections on the HMAC key file and rate-limit persist file, the `FILE_FLAG_BACKUP_SEMANTICS` directory-ACL bug, and the non-Windows-conventional storage path — are all resolved. The application now ships a pre-built Windows binary in every GitHub release, logs to `%LOCALAPPDATA%\PasswordSaver\app.log` (since stderr is suppressed by `windows_subsystem`), uses `%LOCALAPPDATA%\PasswordSaver\` for data storage, and renders crisply on HiDPI displays.
 
+A subsequent CI investigation (March 2026) identified two additional issues that were causing the `windows-latest` CI matrix to fail: a `rustfmt` import-ordering diff in `windows_permissions.rs`, and a `PermissionDenied` error in `SetSecurityInfo` caused by passing `OWNER_SECURITY_INFORMATION` without the required `WRITE_OWNER` access right. Both issues have been resolved.
+
 Remaining gaps are predominantly in the **distribution and packaging** tier: no installer, no code signing, no Winget/Chocolatey package, and no `.gitattributes` to guard against CRLF contamination in the source repository. Three minor code-quality issues were also found in this audit: unused imports in `windows_permissions.rs`, a stale doc comment in `main.rs`, and the lack of long-path awareness in the application manifest.
 
 **Overall Windows Readiness: 7/10** — builds, tests, and pre-built binary available; core security features (ACL, DPI manifest, subsystem flag) implemented. Installer, code-signing, and package-manager distribution still missing.
@@ -946,6 +948,12 @@ The following is a clean, numbered list of concrete GitHub issues for the next h
 11. ~~**Fix doc comment formatting to wrap bare environment variable paths in backticks**~~
     ✅ **Implemented** — Wrapped bare `$HOME/.password_saver` path references in backticks in doc comments (`src/audit_log.rs` test function, `tests/windows_installer_test.rs` module-level doc). Resolves `clippy::doc_markdown` lint errors that were failing the Code Quality workflow.
 
+12. ~~**Fix CI failures: `rustfmt` import ordering and `SetSecurityInfo` `PermissionDenied` on Windows runners**~~
+    ✅ **Implemented** — Two issues were causing the `windows-latest` CI matrix to fail:
+    1. `cargo fmt -- --check` reported a diff in `windows_permissions.rs` because the identifiers inside the `use windows::Win32::Security::{…}` group were not in the order expected by rustfmt (`reorder_imports = true`). Fixed by running `cargo fmt`.
+    2. Seven tests were failing with `PermissionDenied` because `SetSecurityInfo` was called with `OWNER_SECURITY_INFORMATION`, which requires `WRITE_OWNER` access on the file/directory handle. The handle was opened with only `READ_CONTROL | WRITE_DAC`, making the call fail on standard-user CI runners. Fixed by removing `OWNER_SECURITY_INFORMATION` from both `set_windows_secure_permissions()` and `set_windows_directory_permissions()`. Setting the owner is unnecessary — the files are created by the current user who is already the owner; only the DACL needs to be modified.
+
 ---
+
 
 *This review was produced by Agentic AI in the Windows Expert persona. Each actionable item is self-contained and designed for autonomous AI-driven implementation without human intervention.*
