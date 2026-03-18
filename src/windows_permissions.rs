@@ -28,7 +28,7 @@ const NO_INHERITANCE: u32 = 0x0;
 const SUB_CONTAINERS_AND_OBJECTS_INHERIT: u32 = 0x3;
 #[cfg(windows)]
 use windows::Win32::Security::{
-    ACE_FLAGS, GetTokenInformation, TokenUser, DACL_SECURITY_INFORMATION,
+    GetTokenInformation, TokenUser, ACE_FLAGS, DACL_SECURITY_INFORMATION,
     OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
 };
 #[cfg(windows)]
