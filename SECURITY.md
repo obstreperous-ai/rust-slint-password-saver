@@ -4411,7 +4411,7 @@ The repository has 4 GitHub Actions workflows:
 #### 2. `security.yml` — Cargo Audit
 - **Trigger:** Push/PR to `main` on `Cargo.toml`/`Cargo.lock` changes + daily schedule ✅
 - **Permissions:** `contents: read` ✅ (least privilege)
-- **Toolchain:** `dtolnay/rust-toolchain@master` — ⚠️ Uses `@master` instead of `@stable`; prefer pinned version
+- **Toolchain:** `dtolnay/rust-toolchain@master` — ⚠️ Uses `@master` instead of `@stable`; prefer `@stable` for consistency with other workflows
 - ✅ Daily scheduled security scan is excellent practice
 
 #### 3. `quality.yml` — Format + Clippy
@@ -4575,7 +4575,7 @@ The following is a numbered list of concrete, well-scoped, immediately actionabl
    - _Acceptance criteria:_ A new `THREAT_MODEL.md` file exists at the repository root. It documents: (a) in-scope threat actors (local unprivileged user, offline attacker with DB copy, malicious clipboard-sniffing app, forensic investigator), (b) out-of-scope threats (kernel-level rootkits, hardware keyloggers), (c) a mapping of each security control to the threat it mitigates, and (d) known limitations (single-factor auth, clipboard manager history, SSD secure deletion limits).
 
 6. **Increase Argon2id memory parameter from 32 MiB to 64 MiB (OWASP recommendation)**
-   - _Acceptance criteria:_ `src/storage.rs` `derive_key()` uses `Params::new(64 * 1024, ...)` (64 MiB). The `test_key_derivation_time` test threshold is updated accordingly. Performance is measured and documented (expected ≤3 seconds on modern hardware). A migration note is added explaining that databases encrypted with 32 MiB parameters are incompatible.
+   - _Acceptance criteria:_ `src/storage.rs` `derive_key()` uses `Params::new(64 * 1024, ...)` (64 MiB). The `test_key_derivation_time` test threshold is updated accordingly. Performance is measured and documented (expected ≤3 seconds on modern hardware). A backward-compatible migration strategy is implemented: `load_entries()` first attempts decryption with 64 MiB parameters, and if that fails, retries with the old 32 MiB parameters. On success with old parameters, the user is prompted to re-encrypt with the new parameters. A migration note is added in documentation.
 
 7. **Generate SBOM (Software Bill of Materials) in CI**
    - _Acceptance criteria:_ The release workflow generates an SPDX or CycloneDX SBOM file using `cargo-sbom` or equivalent tool and uploads it as a release asset. The SBOM lists all direct and transitive dependencies with versions.
