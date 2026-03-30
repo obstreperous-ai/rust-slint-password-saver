@@ -48,8 +48,8 @@ A comprehensive production-grade security audit was conducted on 2026-03-20, cov
 **Resolved Critical Issues:**
 - ~~`bytes` 1.11.0 - Integer overflow in `BytesMut::reserve` (RUSTSEC-2026-0007)~~ ✅ **FIXED** - Updated to bytes 1.11.1
 
-**Remaining Open Item:**
-- 🔴 Issue #22: Predictable HMAC key in audit log — `derive_hmac_key()` still exists alongside the new `load_or_create_hmac_key()`. The new secure path is used by default, but the old function should be fully removed. See [Finding 1](#-finding-1-high-predictable-hmac-key-in-audit-log) for details.
+**Resolved Security Issues:**
+- ~~🔴 Issue #22: Predictable HMAC key in audit log~~ ✅ **FIXED** — Legacy `derive_hmac_key()` removed; all call sites now use cryptographically random persistent key via `load_or_create_hmac_key()`. See [Finding 1](#-finding-1-high-predictable-hmac-key-in-audit-log) for details.
 
 **Warnings (Non-Critical):**
 - `bincode` 2.0.1 - Unmaintained (RUSTSEC-2025-0141) - Transitive dependency via Slint, monitoring for updates
@@ -526,15 +526,15 @@ These annotations inform CodeQL that:
 
 A thorough code-level security audit was conducted on 2026-02-22, reviewing all production source files. Four new weaknesses were identified that require action.
 
-### 🔴 Finding 1 (HIGH): Predictable HMAC Key in Audit Log
+### ✅ Finding 1 (HIGH): Predictable HMAC Key in Audit Log — **FIXED**
 
-**Location:** `src/audit_log.rs` — `derive_hmac_key()` function
+**Location:** `src/audit_log.rs` — previously `derive_hmac_key()` function (now removed)
 
 **Description:**
-The HMAC key used to protect audit log integrity is derived deterministically from the machine's hostname and a static string:
+The HMAC key used to protect audit log integrity was previously derived deterministically from the machine's hostname and a static string. This has been replaced with a cryptographically random persistent key.
 
 ```rust
-// Current insecure implementation
+// Old insecure implementation (REMOVED)
 fn derive_hmac_key() -> [u8; 32] {
     let hostname = hostname::get()...;
     hasher.update(hostname.as_bytes());
@@ -543,17 +543,16 @@ fn derive_hmac_key() -> [u8; 32] {
 }
 ```
 
-**Impact:**
+**Impact (prior to fix):**
 - The hostname is publicly known information on any multi-user system
-- Any user on the same machine can compute the exact same HMAC key
-- This allows a local attacker to **forge or tamper with audit log entries** without detection
-- The integrity guarantee of the audit log is effectively broken for insider threats
-- An attacker who compromises the system could cover their tracks by rewriting the log
+- Any user on the same machine could compute the exact same HMAC key
+- This allowed a local attacker to **forge or tamper with audit log entries** without detection
+- The integrity guarantee of the audit log was effectively broken for insider threats
 
 **Severity:** 🔴 HIGH
 
-**Recommendation:**
-Generate a cryptographically random HMAC key once and persist it securely (encrypted with the master password or stored in the system keyring). See Issue #22.
+**Resolution:**
+The hostname-derived `derive_hmac_key()` function has been fully removed and replaced with `load_or_create_hmac_key()`, which generates a 32-byte cryptographically random key using `OsRng` on first launch. The key is persisted to `~/.password_saver/audit_hmac.key` with 0600 permissions (Unix) or restricted Windows ACLs, and loaded on subsequent launches. See Issue #22.
 
 ---
 
@@ -679,7 +678,7 @@ The following tasks are formatted as GitHub issues ready to be picked up by Copi
 21. ✅ Implement Emergency Access and Account Recovery
 
 **New Action Items (🔵 To Be Implemented):**
-1. 🔴 Issue #22: Fix Predictable HMAC Key in Audit Log — **PARTIALLY RESOLVED** (new secure `load_or_create_hmac_key()` in use, but legacy `derive_hmac_key()` not yet removed)
+1. ✅ Issue #22: Fix Predictable HMAC Key in Audit Log — **RESOLVED 2026-03-30** (legacy `derive_hmac_key()` fully removed; `load_or_create_hmac_key()` with OsRng in use)
 2. ✅ Issue #23: Fix Password Validation Inconsistency — **RESOLVED 2026-02-22**
 3. ✅ Issue #24: Implement Persistent Rate Limiting — **RESOLVED 2026-02-23**
 4. ✅ Issue #25: Use Argon2 for Recovery Key Derivation — **RESOLVED 2026-02-24**
@@ -3676,11 +3675,11 @@ The current implementation provides identity verification through recovery codes
 
 ---
 
-### Issue 22: 🔴 Fix Predictable HMAC Key in Audit Log
+### Issue 22: ✅ Fix Predictable HMAC Key in Audit Log
 
 **Title:** Replace hostname-derived HMAC key with cryptographically random persistent key
 
-**Status:** 🔴 **OPEN** — Identified 2026-02-22
+**Status:** ✅ **FIXED** — Resolved 2026-03-30
 
 **Description:**
 The HMAC key used to protect audit log integrity (`src/audit_log.rs::derive_hmac_key()`) is derived deterministically from the machine's hostname and a static string. Because the hostname is publicly known on any multi-user system, any local user can compute the same HMAC key and forge or modify audit log entries without detection.
@@ -3765,12 +3764,12 @@ impl AuditLogger {
 - Test graceful degradation when key file is missing
 
 **Acceptance Criteria:**
-- [ ] HMAC key is cryptographically random (32 bytes from `OsRng`)
-- [ ] Key is persisted to `~/.password_saver/audit_hmac.key` with 0600 permissions
-- [ ] Same key is loaded on subsequent app launches
-- [ ] Audit entries created before key change fail HMAC verification
-- [ ] Tests verify key persistence and tamper detection
-- [ ] `derive_hmac_key()` is removed
+- [x] HMAC key is cryptographically random (32 bytes from `OsRng`)
+- [x] Key is persisted to `~/.password_saver/audit_hmac.key` with 0600 permissions
+- [x] Same key is loaded on subsequent app launches
+- [x] Audit entries created before key change fail HMAC verification
+- [x] Tests verify key persistence and tamper detection
+- [x] `derive_hmac_key()` is removed
 
 **Priority:** 🔴 HIGH
 **Estimated Effort:** 2-3 hours
@@ -4559,8 +4558,7 @@ Both warnings are for unmaintained (not vulnerable) transitive dependencies pull
 
 The following is a numbered list of concrete, well-scoped, immediately actionable tasks for the next hands-off agent to pick up. Each item should be turned into a standalone GitHub issue.
 
-1. **Remove legacy `derive_hmac_key()` function from `src/audit_log.rs`**
-   - _Acceptance criteria:_ The hostname-based `derive_hmac_key()` function is fully deleted. All call sites use `load_or_create_hmac_key()`. The `hostname` crate import (if any) is removed. All existing tests pass. `cargo clippy` reports no warnings.
+1. ~~**Remove legacy `derive_hmac_key()` function from `src/audit_log.rs`**~~ ✅ **DONE** — The hostname-based `derive_hmac_key()` has been fully deleted. All call sites use `load_or_create_hmac_key()`. The `hostname` crate import has been removed. All tests pass. `cargo clippy` reports no warnings.
 
 2. **Add explicit `permissions: contents: read` to `ci.yml` and `quality.yml` workflows**
    - _Acceptance criteria:_ Both `.github/workflows/ci.yml` and `.github/workflows/quality.yml` have a top-level `permissions: contents: read` block. The `security.yml` already has this. Verify all workflows still pass.
