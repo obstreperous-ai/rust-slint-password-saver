@@ -4,9 +4,10 @@
 //! using industry-standard encryption algorithms:
 //!
 //! - **Argon2id**: Password hashing and key derivation with strengthened parameters
-//!   - Memory: 32 MiB (balances strong security with reasonable performance)
+//!   - Memory: 64 MiB (OWASP recommended minimum for password managers)
 //!   - Iterations: 2 (provides good security while maintaining usability)
 //!   - Parallelism: 4 threads (balances security with performance)
+//!   - Backward-compatible: falls back to 32 MiB for files encrypted with earlier versions
 //! - **AES-256-GCM**: Authenticated encryption with associated data (AEAD)
 //!
 //! # Security Properties
@@ -191,6 +192,13 @@ fn add_timing_jitter() {
     thread::sleep(Duration::from_millis(jitter_ms));
 }
 
+/// Argon2id memory cost in KiB — 64 MiB (OWASP recommended minimum for password managers).
+const ARGON2_MEMORY_KIB: u32 = 65536;
+
+/// Legacy Argon2id memory cost in KiB — 32 MiB, used for backward-compatible decryption
+/// of files encrypted before the 64 MiB upgrade.
+const ARGON2_MEMORY_KIB_LEGACY: u32 = 32768;
+
 #[allow(dead_code)]
 impl PasswordStorage {
     /// Creates a new password storage instance.
@@ -225,15 +233,15 @@ impl PasswordStorage {
     ///
     /// # Security Parameters
     ///
-    /// This implementation uses strengthened parameters optimized for password managers:
+    /// This implementation uses OWASP-recommended parameters for password managers:
     /// - **Algorithm**: Argon2id (hybrid mode - combines data-dependent and data-independent passes)
-    /// - **Memory**: 32 MiB (32768 KiB) - balances strong security with reasonable performance
+    /// - **Memory**: 64 MiB (65536 KiB) - OWASP recommended minimum for password managers
     /// - **Iterations**: 2 - provides good security while maintaining usability
     /// - **Parallelism**: 4 threads - balances security with reasonable derivation time
     /// - **Output**: 32 bytes (256 bits) - matches AES-256 key size
     ///
-    /// These parameters provide a good balance between security and usability, with typical
-    /// key derivation time of 100ms-2000ms depending on hardware (measured ~869ms on GitHub Actions CI).
+    /// These parameters meet OWASP recommendations for password managers, with typical
+    /// key derivation time of 200ms-5000ms depending on hardware.
     ///
     /// # Arguments
     ///
@@ -262,13 +270,33 @@ impl PasswordStorage {
     /// assert_eq!(key.len(), 32);
     /// ```
     pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<[u8; 32], SecurityError> {
-        // Configure Argon2id with stronger parameters optimized for password managers
-        // Memory: 32 MiB, Iterations: 2, Parallelism: 4, Output: 32 bytes
+        Self::derive_key_with_memory_cost(master_password, salt, ARGON2_MEMORY_KIB)
+    }
+
+    /// Derives an encryption key using the legacy 32 MiB Argon2id parameters.
+    ///
+    /// Used exclusively for backward-compatible decryption of files that were encrypted
+    /// before the upgrade to 64 MiB. New files are always written with 64 MiB parameters.
+    fn derive_key_legacy(master_password: &str, salt: &[u8]) -> Result<[u8; 32], SecurityError> {
+        Self::derive_key_with_memory_cost(master_password, salt, ARGON2_MEMORY_KIB_LEGACY)
+    }
+
+    /// Internal helper: derives an Argon2id key with a configurable memory cost.
+    ///
+    /// # Parameters
+    /// - `memory_kib` — memory cost in KiB (use `ARGON2_MEMORY_KIB` or `ARGON2_MEMORY_KIB_LEGACY`)
+    fn derive_key_with_memory_cost(
+        master_password: &str,
+        salt: &[u8],
+        memory_kib: u32,
+    ) -> Result<[u8; 32], SecurityError> {
+        // Configure Argon2id with parameters optimized for password managers
+        // Iterations: 2, Parallelism: 4, Output: 32 bytes
         let params = Params::new(
-            32768,    // 32 MiB memory cost (in KiB) - balances security with performance
-            2,        // 2 iterations - provides good security while maintaining usability
-            4,        // 4 parallel threads - balances security with performance
-            Some(32), // 32 byte output length - matches AES-256 key size
+            memory_kib, // memory cost (in KiB)
+            2,          // 2 iterations - provides good security while maintaining usability
+            4,          // 4 parallel threads - balances security with performance
+            Some(32),   // 32 byte output length - matches AES-256 key size
         )
         .map_err(|_| SecurityError::CryptographicError)?;
 
@@ -622,7 +650,9 @@ impl PasswordStorage {
         let storage_data: StorageData =
             serde_json::from_str(&storage_json).map_err(|_| SecurityError::CryptographicError)?;
 
-        // Derive decryption key using the same salt that was used for encryption
+        // Derive decryption key using the same salt that was used for encryption.
+        // Try 64 MiB (current standard) first, then fall back to 32 MiB for files
+        // encrypted before the OWASP 64 MiB upgrade (backward compatibility).
         let key = Self::derive_key(master_password, &storage_data.salt)?;
 
         // Extract nonce (must be exactly 12 bytes for AES-GCM)
@@ -642,21 +672,29 @@ impl PasswordStorage {
             warn!("Failed to log password check: {}", e);
         }
 
-        // Decrypt data (will fail if password is wrong or data has been tampered with)
-        let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce)
-            .inspect_err(|_| {
-                // Log failed decryption attempt
-                let failed_entry = AuditLogger::create_entry(
-                    AuditEventType::MasterPasswordCheck,
-                    false,
-                    Some("Decryption failed - possibly wrong master password".to_string()),
-                );
-                if let Err(e) = audit_logger.log_event(&failed_entry) {
-                    warn!("Failed to log failed decryption: {}", e);
-                }
-                // Add timing jitter on error path to maintain consistent timing
-                add_timing_jitter();
-            })?;
+        // Decrypt data. Try 64 MiB key first; if that fails, transparently retry
+        // with the legacy 32 MiB key for files saved before the upgrade.
+        let decrypted_data =
+            if let Ok(data) = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce) {
+                data
+            } else {
+                // 64 MiB key failed — attempt legacy 32 MiB key for old files
+                let legacy_key = Self::derive_key_legacy(master_password, &storage_data.salt)?;
+                Self::decrypt_data(&storage_data.encrypted_data, &legacy_key, &nonce).inspect_err(
+                    |_| {
+                        // Both attempts failed: log and apply timing jitter
+                        let failed_entry = AuditLogger::create_entry(
+                            AuditEventType::MasterPasswordCheck,
+                            false,
+                            Some("Decryption failed - possibly wrong master password".to_string()),
+                        );
+                        if let Err(e) = audit_logger.log_event(&failed_entry) {
+                            warn!("Failed to log failed decryption: {}", e);
+                        }
+                        add_timing_jitter();
+                    },
+                )?
+            };
 
         // Convert decrypted bytes to UTF-8 string
         let json_str =
@@ -1106,11 +1144,16 @@ impl PasswordStorage {
         let storage_data: StorageData =
             serde_json::from_str(&storage_json).map_err(|_| SecurityError::CryptographicError)?;
 
-        // Derive key from master password
+        // Derive key from master password. Try 64 MiB first, fall back to 32 MiB for legacy files.
         let key = Self::derive_key(master_password, &storage_data.salt)?;
 
-        // Decrypt recovery key
-        let recovery_key = Self::decrypt_data(encrypted_key, &key, &recovery_nonce)?;
+        // Decrypt recovery key, with fallback to legacy 32 MiB params for old files
+        let recovery_key = if let Ok(k) = Self::decrypt_data(encrypted_key, &key, &recovery_nonce) {
+            k
+        } else {
+            let legacy_key = Self::derive_key_legacy(master_password, &storage_data.salt)?;
+            Self::decrypt_data(encrypted_key, &legacy_key, &recovery_nonce)?
+        };
 
         Ok(Some(recovery_key))
     }
@@ -1188,9 +1231,8 @@ mod tests {
 
     #[test]
     fn test_key_derivation_time() {
-        // Test that key derivation with strengthened parameters takes a reasonable time
-        // Expected: 100ms - 2000ms (acceptable range balancing security vs usability)
-        // Measured on CI: ~869ms
+        // Test that key derivation with OWASP-recommended 64 MiB parameters takes a reasonable time.
+        // Expected: 100ms - 5000ms (acceptable range balancing security vs usability on CI)
         let password = "test_password_for_timing";
         // Use random salt for testing to avoid security scan warnings
         let salt = SaltString::generate(&mut OsRng);
@@ -1201,7 +1243,7 @@ mod tests {
         let duration = start.elapsed();
 
         println!(
-            "Key derivation time with strengthened parameters: {:?}",
+            "Key derivation time with 64 MiB Argon2id parameters: {:?}",
             duration
         );
 
@@ -1212,11 +1254,29 @@ mod tests {
             duration.as_millis()
         );
 
-        // Verify key derivation takes less than 2 seconds (usability requirement)
+        // Verify key derivation takes less than 5 seconds (usability requirement;
+        // 64 MiB requires more memory bandwidth, so allow extra headroom on CI)
         assert!(
-            duration.as_secs() < 2,
+            duration.as_secs() < 5,
             "Key derivation too slow: {:?}s - poor user experience",
             duration.as_secs()
+        );
+    }
+
+    #[test]
+    fn test_legacy_32mib_key_differs_from_64mib_key() {
+        // Confirm that 64 MiB and 32 MiB parameters produce different keys for the same
+        // password+salt, which is the basis for the backward-compatible fallback logic.
+        let password = "migration_test_password";
+        let salt = SaltString::generate(&mut OsRng);
+        let salt_bytes = salt.as_str().as_bytes();
+
+        let key_64mib = PasswordStorage::derive_key(password, salt_bytes).unwrap();
+        let key_32mib = PasswordStorage::derive_key_legacy(password, salt_bytes).unwrap();
+
+        assert_ne!(
+            key_64mib, key_32mib,
+            "64 MiB and 32 MiB keys must differ for the fallback migration to be meaningful"
         );
     }
 

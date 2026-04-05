@@ -62,7 +62,7 @@ All previously identified critical and high-severity code-level findings have be
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │ Argon2id Key Derivation                               │ │
 │  │  • Algorithm: Argon2id (hybrid mode)                  │ │
-│  │  • Memory: 32 MiB                                      │ │
+│  │  • Memory: 64 MiB (OWASP recommended)                  │ │
 │  │  • Iterations: 2                                       │ │
 │  │  • Parallelism: 4 threads                             │ │
 │  │  • Version: V0x13 (latest)                            │ │
@@ -125,7 +125,7 @@ This table reflects the verified state of the project as of 2026-04-05, cross-re
 | Category | Status | Notes |
 |---|---|---|
 | Encryption Algorithm | ✅ Strong | AES-256-GCM with 96-bit random nonce per save, AEAD |
-| Key Derivation | ✅ Good | Argon2id (32 MiB, 2 iter, 4 parallelism, V0x13). Below OWASP 64 MiB recommendation — acceptable trade-off for usability |
+| Key Derivation | ✅ Strong | Argon2id (64 MiB, 2 iter, 4 parallelism, V0x13). Meets OWASP ≥64 MiB recommendation. Backward-compatible 32 MiB fallback for legacy files |
 | Nonce/Salt Generation | ✅ Strong | `OsRng` (CSPRNG) for all nonces and salts; fresh per operation; no reuse |
 | Memory Safety | ✅ Strong | Rust ownership, `ZeroizeOnDrop` for `PasswordEntry`, `Zeroizing<String>` for master passwords in `ui_handlers.rs` |
 | File Permissions | ✅ Strong | 0600/0700 on Unix, Windows ACL (current user only) |
@@ -185,7 +185,7 @@ All 21 security features identified in the initial security review have been imp
 1. ✅ `bytes` dependency vulnerability fix
 2. ✅ Secure memory clearing (`zeroize`)
 3. ✅ Secure file permissions (0600/0700)
-4. ✅ Strengthened Argon2id parameters (32 MiB)
+4. ✅ Strengthened Argon2id parameters (64 MiB, OWASP recommended; backward-compatible 32 MiB fallback)
 5. ✅ Password strength validation (zxcvbn + requirements)
 6. ✅ Decryption rate limiting (persistent)
 7. ✅ Security audit logging (HMAC-protected)
@@ -219,12 +219,12 @@ The following items have been identified through security review but are **not y
 to the threats they mitigate, and explicitly enumerates 12 out-of-scope threats and 6 residual
 risks. See [THREAT_MODEL.md](THREAT_MODEL.md).
 
-#### 2. Increase Argon2id Memory to 64 MiB (OWASP Recommendation)
+#### ~~2. Increase Argon2id Memory to 64 MiB (OWASP Recommendation)~~ ✅ Resolved
 
-Current: 32 MiB. OWASP recommends ≥64 MiB for password managers. Upgrade should include:
-- Update `Params::new(64 * 1024, ...)` in `src/storage.rs`
-- Backward-compatible migration: try 64 MiB first, fall back to 32 MiB for old files
-- Updated performance benchmarks and documentation
+`src/storage.rs` now uses 64 MiB (65536 KiB) for Argon2id key derivation, meeting the OWASP
+recommended minimum for password managers. A backward-compatible fallback to 32 MiB is applied
+automatically when loading files encrypted before this upgrade, ensuring no data loss for
+existing users. New saves always use 64 MiB parameters. Tests updated accordingly.
 
 ### 🟡 Medium Priority
 
@@ -368,7 +368,7 @@ All cryptographic dependencies (`argon2`, `aes-gcm`, `hmac`, `sha2`, `subtle`, `
 
 | Operation | Algorithm | Parameters | Assessment |
 |---|---|---|---|
-| Key Derivation | Argon2id V0x13 | 32 MiB, 2 iter, 4 parallel, 32-byte output | ✅ Strong (OWASP recommends ≥64 MiB) |
+| Key Derivation | Argon2id V0x13 | 64 MiB, 2 iter, 4 parallel, 32-byte output | ✅ Strong (meets OWASP ≥64 MiB recommendation) |
 | Encryption | AES-256-GCM | 256-bit key, 96-bit nonce | ✅ Industry standard AEAD |
 | Nonce Generation | OsRng | 12 bytes per operation | ✅ Cryptographically secure |
 | Salt Generation | OsRng via SaltString | Random per save | ✅ Proper salt management |
@@ -460,6 +460,16 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-05 — Increase Argon2id Memory to 64 MiB (Issue #2)
+
+- Upgraded `Params::new(65536, ...)` in `src/storage.rs` (64 MiB, OWASP recommended minimum for password managers)
+- Added backward-compatible migration: `load_entries()` and `verify_recovery_code()` now try 64 MiB first, then transparently fall back to 32 MiB for files encrypted before this upgrade
+- Added `ARGON2_MEMORY_KIB` (65536) and `ARGON2_MEMORY_KIB_LEGACY` (32768) named constants
+- Refactored `derive_key` to delegate to a shared private `derive_key_with_memory_cost` helper
+- Updated `test_key_derivation_time` upper bound to 5 s (64 MiB requires more memory bandwidth on CI)
+- Added `test_legacy_32mib_key_differs_from_64mib_key` test verifying the fallback is meaningful
+- Updated SECURITY.md: Open Issue #2 marked as resolved; KDF memory updated to 64 MiB in all tables
 
 ### 2026-04-05 — Created Formal Threat Model (Issue #1)
 
