@@ -674,6 +674,11 @@ impl PasswordStorage {
 
         // Decrypt data. Try 64 MiB key first; if that fails, transparently retry
         // with the legacy 32 MiB key for files saved before the upgrade.
+        //
+        // Performance note: the fallback derives a second key only for legacy files or
+        // wrong-password attempts. For wrong passwords the doubled cost is a net security
+        // benefit (raises attacker cost). Legacy files are re-saved with 64 MiB on the
+        // next write, so the fallback path disappears naturally over time.
         let decrypted_data =
             if let Ok(data) = Self::decrypt_data(&storage_data.encrypted_data, &key, &nonce) {
                 data
@@ -1267,6 +1272,7 @@ mod tests {
     fn test_legacy_32mib_key_differs_from_64mib_key() {
         // Confirm that 64 MiB and 32 MiB parameters produce different keys for the same
         // password+salt, which is the basis for the backward-compatible fallback logic.
+        // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
         let password = "migration_test_password";
         let salt = SaltString::generate(&mut OsRng);
         let salt_bytes = salt.as_str().as_bytes();
