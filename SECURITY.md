@@ -15,6 +15,7 @@ This document outlines the security architecture, current security status, ident
 - [CI/CD Pipeline Security](#cicd-pipeline-security-review)
 - [Supply-Chain Security](#supply-chain-security-analysis)
 - [Cryptography and Key Management Review](#cryptography-and-key-management-review)
+- [Threat Model](THREAT_MODEL.md) *(separate document)*
 - [Reporting Security Vulnerabilities](#reporting-security-vulnerabilities)
 - [Security Best Practices for Contributors](#security-best-practices-for-contributors)
 - [Changelog](#changelog)
@@ -145,7 +146,7 @@ This table reflects the verified state of the project as of 2026-04-05, cross-re
 | Database Integrity | ✅ Good | SHA-256 checksums, JSON validation, corruption detection, startup checks |
 | Backup/Export | ✅ Good | Encrypted with Argon2+AES-256-GCM (same as main), import with duplicate detection |
 | Windows Platform | ✅ Good | ACL-based permissions, app manifest, MSVC build, WiX installer in CI |
-| Threat Model | ⚠️ Missing | No formal `THREAT_MODEL.md` document |
+| Threat Model | ✅ Good | `THREAT_MODEL.md` documents 5 threat actors, 19 controls, 12 out-of-scope threats, and 6 residual risks |
 | Binary Signing | ⚠️ Missing | Release workflow has code signing placeholder but not enabled |
 | SBOM / Provenance | ⚠️ Missing | No Software Bill of Materials or SLSA provenance attestation |
 
@@ -211,18 +212,12 @@ The following items have been identified through security review but are **not y
 
 ### 🔴 High Priority
 
-#### 1. Create a Formal Threat Model (`THREAT_MODEL.md`)
+#### ~~1. Create a Formal Threat Model (`THREAT_MODEL.md`)~~ ✅ Resolved
 
-The project lacks a documented threat model. Without one, it is difficult to evaluate whether all relevant attack scenarios are addressed.
-
-**Recommended threat actors to document:**
-- Local unprivileged user on a shared system
-- Attacker with read access to `~/.password_saver/` directory
-- Attacker with a copy of the encrypted database file (offline attack)
-- Malicious application with user privileges (clipboard sniffing, keylogging)
-- Forensic investigator with access to memory dumps, swap files, or hibernation images
-
-**Deliverable:** `THREAT_MODEL.md` at the repository root mapping each security control to the threat it mitigates, and documenting known out-of-scope threats.
+`THREAT_MODEL.md` has been created at the repository root. It documents five threat actors
+(TA-1 through TA-5) using STRIDE methodology, maps 19 security controls (SC-01 through SC-19)
+to the threats they mitigate, and explicitly enumerates 12 out-of-scope threats and 6 residual
+risks. See [THREAT_MODEL.md](THREAT_MODEL.md).
 
 #### 2. Increase Argon2id Memory to 64 MiB (OWASP Recommendation)
 
@@ -465,6 +460,17 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-05 — Created Formal Threat Model (Issue #1)
+
+- Created `THREAT_MODEL.md` at the repository root
+- Documented five threat actors (TA-1 through TA-5): local unprivileged user, attacker with
+  read access to the storage directory, offline attacker with a copy of the encrypted database,
+  malicious same-user application, and forensic investigator with memory/disk artifacts
+- Applied STRIDE methodology to enumerate 20+ individual threat scenarios
+- Mapped 19 security controls (SC-01 through SC-19) to the threats each mitigates
+- Documented 12 out-of-scope threats and 6 residual risks
+- Updated SECURITY.md: Open Issue #1 marked as resolved; Security Posture Summary updated
 
 ### 2026-04-05 — SECURITY.md Review and Update (Issue #220)
 
