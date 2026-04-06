@@ -6,8 +6,9 @@
 //! 3. `README.md` documents that source-built binaries bypass `SmartScreen`.
 //! 4. `.github/workflows/release.yml` contains an active (enabled) signing step.
 //! 5. `.github/workflows/release.yml` skips signing gracefully when credentials are absent.
-//! 6. `WINDOWS.md` contains a Code Signing subsection documenting provider options.
-//! 7. `WINDOWS.md` code signing matrix entry is updated to reflect implementation status.
+//! 6. `.github/workflows/release.yml` signing step precedes archive creation.
+//! 7. `WINDOWS.md` contains a Code Signing subsection documenting provider options.
+//! 8. `WINDOWS.md` code signing matrix entry is updated to reflect implementation status.
 
 use std::fs;
 
@@ -281,10 +282,11 @@ fn release_workflow_signing_step_precedes_archive_creation() {
             .join("release.yml"),
     )
     .expect("Failed to read release.yml");
-    // Signing must occur before packaging so the archive contains the signed binary
+    // Signing must occur before packaging so the archive contains the signed binary;
+    // search for the action name which is more stable than the step's display name.
     let sign_pos = content
-        .find("Sign Windows binary (Microsoft Trusted Signing)")
-        .expect("Active signing step not found in release.yml");
+        .find("azure/trusted-signing-action")
+        .expect("azure/trusted-signing-action not found in release.yml");
     let zip_pos = content
         .find("Create zip (Windows)")
         .expect("Create zip step not found in release.yml");
