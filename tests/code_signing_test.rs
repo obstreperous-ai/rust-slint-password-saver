@@ -4,9 +4,10 @@
 //! 1. `README.md` contains a dedicated `SmartScreen` warning section.
 //! 2. `README.md` contains step-by-step bypass instructions ("More info → Run anyway").
 //! 3. `README.md` documents that source-built binaries bypass `SmartScreen`.
-//! 4. `.github/workflows/release.yml` contains a commented placeholder signing step.
-//! 5. `WINDOWS.md` contains a Code Signing subsection documenting provider options.
-//! 6. `WINDOWS.md` code signing matrix entry is updated to reflect documentation status.
+//! 4. `.github/workflows/release.yml` contains an active (enabled) signing step.
+//! 5. `.github/workflows/release.yml` skips signing gracefully when credentials are absent.
+//! 6. `WINDOWS.md` contains a Code Signing subsection documenting provider options.
+//! 7. `WINDOWS.md` code signing matrix entry is updated to reflect implementation status.
 
 use std::fs;
 
@@ -104,7 +105,7 @@ fn release_workflow_contains_signing_placeholder() {
 }
 
 #[test]
-fn release_workflow_signing_step_is_commented_out() {
+fn release_workflow_option_b_remains_commented_out() {
     let content = fs::read_to_string(
         repo_root()
             .join(".github")
@@ -112,18 +113,15 @@ fn release_workflow_signing_step_is_commented_out() {
             .join("release.yml"),
     )
     .expect("Failed to read release.yml");
-    // The signing step must appear as a comment (lines starting with #), not as an active step
-    let has_commented_signing = content.lines().any(|line| {
+    // Option B (signtool / EV certificate) must remain as a documented comment; the active
+    // Option A (Microsoft Trusted Signing) step is now enabled and is not commented out.
+    let has_commented_signtool = content.lines().any(|line| {
         let trimmed = line.trim();
-        trimmed.starts_with('#')
-            && (trimmed.contains("sign")
-                || trimmed.contains("Sign")
-                || trimmed.contains("signtool")
-                || trimmed.contains("trusted-signing"))
+        trimmed.starts_with('#') && trimmed.contains("signtool")
     });
     assert!(
-        has_commented_signing,
-        "release.yml signing step must be commented out (lines starting with '#')"
+        has_commented_signtool,
+        "release.yml Option B (signtool) must remain as a commented alternative"
     );
 }
 
@@ -206,5 +204,92 @@ fn windows_md_finding_d_marked_as_documented() {
     assert!(
         content.contains("Finding D") && (content.contains("Partially implemented") || content.contains("DOCUMENTED") || content.contains("Implemented")),
         "WINDOWS.md Finding D must carry a status marker (e.g. 'Partially implemented') showing progress"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// release.yml — active (enabled) signing step
+// ---------------------------------------------------------------------------
+
+#[test]
+fn release_workflow_has_active_signing_step() {
+    let content = fs::read_to_string(
+        repo_root()
+            .join(".github")
+            .join("workflows")
+            .join("release.yml"),
+    )
+    .expect("Failed to read release.yml");
+    // The active signing step must exist as a non-commented `name:` entry
+    let has_active_step = content.lines().any(|line| {
+        let trimmed = line.trim();
+        !trimmed.starts_with('#')
+            && trimmed.contains("name:")
+            && (trimmed.contains("Sign") || trimmed.contains("sign"))
+    });
+    assert!(
+        has_active_step,
+        "release.yml must contain an active (non-commented) signing step"
+    );
+}
+
+#[test]
+fn release_workflow_signing_uses_trusted_signing_action() {
+    let content = fs::read_to_string(
+        repo_root()
+            .join(".github")
+            .join("workflows")
+            .join("release.yml"),
+    )
+    .expect("Failed to read release.yml");
+    // The active step must reference the azure/trusted-signing-action as an uncommented `uses:` line
+    let has_active_uses = content.lines().any(|line| {
+        let trimmed = line.trim();
+        !trimmed.starts_with('#')
+            && trimmed.starts_with("uses:")
+            && trimmed.contains("azure/trusted-signing-action")
+    });
+    assert!(
+        has_active_uses,
+        "release.yml must contain an active `uses: azure/trusted-signing-action` line for signing"
+    );
+}
+
+#[test]
+fn release_workflow_signing_is_conditional_on_azure_tenant_id() {
+    let content = fs::read_to_string(
+        repo_root()
+            .join(".github")
+            .join("workflows")
+            .join("release.yml"),
+    )
+    .expect("Failed to read release.yml");
+    // The signing step must be conditional on AZURE_TENANT_ID so it skips gracefully when
+    // the secret is not configured
+    assert!(
+        content.contains("AZURE_TENANT_ID"),
+        "release.yml signing step must reference AZURE_TENANT_ID for conditional skipping"
+    );
+}
+
+#[test]
+fn release_workflow_signing_step_precedes_archive_creation() {
+    let content = fs::read_to_string(
+        repo_root()
+            .join(".github")
+            .join("workflows")
+            .join("release.yml"),
+    )
+    .expect("Failed to read release.yml");
+    // Signing must occur before packaging so the archive contains the signed binary
+    let sign_pos = content
+        .find("Sign Windows binary (Microsoft Trusted Signing)")
+        .expect("Active signing step not found in release.yml");
+    let zip_pos = content
+        .find("Create zip (Windows)")
+        .expect("Create zip step not found in release.yml");
+    assert!(
+        sign_pos < zip_pos,
+        "Signing step must appear before 'Create zip (Windows)' so the archive contains the signed binary"
     );
 }
