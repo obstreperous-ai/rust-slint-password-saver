@@ -236,9 +236,9 @@ Both `ci.yml` and `quality.yml` now have an explicit `permissions: contents: rea
 
 `security.yml` now uses `dtolnay/rust-toolchain@stable` instead of `@master`, ensuring reproducible and predictable toolchain installations in the security audit workflow.
 
-#### 5. Add SHA-256 Checksum Generation to Release Workflow
+#### ~~5. Add SHA-256 Checksum Generation to Release Workflow~~ ✅ Resolved
 
-Release artifacts (`.tar.gz`, `.zip`, `.msi`) lack published checksums. Generate and upload a `SHA256SUMS.txt` file as a release asset.
+The `release.yml` workflow now generates a `SHA256SUMS.txt` file in the `release` job after all platform artifacts are downloaded. A `sha256sum` step hashes every `.tar.gz`, `.zip`, and `.msi` artifact and appends the results to `SHA256SUMS.txt`, which is then uploaded alongside the other release assets via `softprops/action-gh-release`.
 
 #### 6. Enable Windows Authenticode Code Signing
 
@@ -316,12 +316,12 @@ The repository has 4 GitHub Actions workflows:
 | `ci.yml` | Push/PR to `main` | `contents: read` ✅ | Multi-OS matrix (Linux, macOS, Windows). |
 | `security.yml` | Push/PR on `Cargo.toml`/`Cargo.lock` + daily cron | `contents: read` ✅ | Uses `dtolnay/rust-toolchain@stable` ✅ |
 | `quality.yml` | Push/PR to `main` | `contents: read` ✅ | Clippy with `-D warnings`. |
-| `release.yml` | Tag push (`v*.*.*`) | `contents: write` ✅ | Multi-arch (Linux, macOS, Windows). ⚠️ No code signing or checksums. |
+| `release.yml` | Tag push (`v*.*.*`) | `contents: write` ✅ | Multi-arch (Linux, macOS, Windows). ✅ SHA-256 checksums generated. ⚠️ No code signing. |
 
 ### CI/CD Open Items
 
 - ~~Pin `dtolnay/rust-toolchain` to `@stable` in `security.yml`~~ ✅ Resolved
-- Add SHA-256 checksum generation to release artifacts
+- ~~Add SHA-256 checksum generation to release artifacts~~ ✅ Resolved
 - Enable Windows Authenticode code signing (placeholder exists)
 - Generate SBOM and SLSA provenance attestation
 

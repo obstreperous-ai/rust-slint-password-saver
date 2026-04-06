@@ -161,6 +161,18 @@ jobs:
     - name: Display structure of downloaded files
       run: ls -R ./artifacts
     
+    - name: Generate SHA-256 checksums
+      run: |
+        cd ./artifacts
+        # sha256sum outputs "<hash>  <path>"; strip the leading "./<artifact-dir>/" prefix
+        # so the final SHA256SUMS.txt contains clean "hash  filename" lines.
+        find . -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.msi" \) | sort | while read -r f; do
+          sha256sum "$f" | sed 's|^\([a-f0-9]*\)  \./[^/]*/\(.*\)|\1  \2|' >> ../SHA256SUMS.txt
+        done
+        cd ..
+        echo "Generated SHA256SUMS.txt:"
+        cat SHA256SUMS.txt
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
@@ -168,6 +180,7 @@ jobs:
           ./artifacts/**/*.tar.gz
           ./artifacts/**/*.zip
           ./artifacts/**/*.msi
+          SHA256SUMS.txt
         draft: false
         prerelease: false
         generate_release_notes: true
