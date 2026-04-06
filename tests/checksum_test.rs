@@ -60,14 +60,23 @@ fn release_workflow_uploads_sha256sums_as_release_asset() {
     )
     .expect("Failed to read .github/workflows/release.yml");
 
-    // Verify SHA256SUMS.txt appears in the files list of the release action
-    let sha256sums_in_files = content
+    // Find the softprops/action-gh-release step and verify SHA256SUMS.txt appears before
+    // the next top-level step definition (a line matching `    - name:`).
+    let after_release_action = content
+        .split("softprops/action-gh-release")
+        .nth(1)
+        .expect("release.yml must contain softprops/action-gh-release step");
+    // Collect lines up to the next step (lines that start a new step with "    - name:" or "    - uses:")
+    let files_block: String = after_release_action
         .lines()
-        .skip_while(|l| !l.contains("softprops/action-gh-release"))
-        .take(20)
-        .any(|l| l.contains("SHA256SUMS.txt"));
+        .take_while(|l| {
+            let trimmed = l.trim_start();
+            !(trimmed.starts_with("- name:") || trimmed.starts_with("- uses:"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
-        sha256sums_in_files,
+        files_block.contains("SHA256SUMS.txt"),
         "release.yml must include SHA256SUMS.txt in the softprops/action-gh-release files list"
     );
 }
@@ -138,11 +147,11 @@ fn security_md_ci_table_updated_for_checksums() {
     let content =
         fs::read_to_string(repo_root().join("SECURITY.md")).expect("Failed to read SECURITY.md");
 
-    // The CI/CD table row for release.yml should no longer say "No checksums"
+    // The CI/CD table row for release.yml must exist and must no longer say "No checksums"
     let release_yml_row = content
         .lines()
         .find(|l| l.contains("release.yml"))
-        .unwrap_or("");
+        .expect("SECURITY.md CI/CD table must contain a row for release.yml");
     assert!(
         !release_yml_row.contains("No checksums") && !release_yml_row.contains("no checksums"),
         "SECURITY.md CI/CD table must be updated to reflect that checksum generation is now implemented"
