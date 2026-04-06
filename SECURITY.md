@@ -147,7 +147,7 @@ This table reflects the verified state of the project as of 2026-04-05, cross-re
 | Backup/Export | ✅ Good | Encrypted with Argon2+AES-256-GCM (same as main), import with duplicate detection |
 | Windows Platform | ✅ Good | ACL-based permissions, app manifest, MSVC build, WiX installer in CI |
 | Threat Model | ✅ Good | `THREAT_MODEL.md` documents 5 threat actors, 19 controls, 12 out-of-scope threats, and 6 residual risks |
-| Binary Signing | ⚠️ Missing | Release workflow has code signing placeholder but not enabled |
+| Binary Signing | ✅ Conditional | Release workflow signs the Windows binary via Microsoft Trusted Signing when `AZURE_TENANT_ID` secret is configured; step skips gracefully when credentials are absent |
 | SBOM / Provenance | ⚠️ Missing | No Software Bill of Materials or SLSA provenance attestation |
 
 ---
@@ -240,9 +240,18 @@ Both `ci.yml` and `quality.yml` now have an explicit `permissions: contents: rea
 
 The `release.yml` workflow now generates a `SHA256SUMS.txt` file in the `release` job after all platform artifacts are downloaded. A `sha256sum` step hashes every `.tar.gz`, `.zip`, and `.msi` artifact and appends the results to `SHA256SUMS.txt`, which is then uploaded alongside the other release assets via `softprops/action-gh-release`.
 
-#### 6. Enable Windows Authenticode Code Signing
+#### ~~6. Enable Windows Authenticode Code Signing~~ ✅ Resolved
 
-Placeholder comments exist in `release.yml` but signing is not enabled. Users see SmartScreen warnings on Windows.
+The `release.yml` build job now contains an active Microsoft Trusted Signing step that runs before
+the archive and installer are packaged. The step is guarded by
+`if: runner.os == 'Windows' && env.AZURE_TENANT_ID != ''`, so it skips automatically when the
+five required GitHub Actions secrets (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
+`TRUSTED_SIGNING_ACCOUNT_NAME`, `TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`) are not configured.
+Once a Microsoft Trusted Signing subscription is set up and the secrets are populated the Windows
+binary (and consequently the `.zip` and `.msi` artifacts) will be Authenticode-signed on every
+release, eliminating the SmartScreen "Windows protected your PC" warning for end users. An
+Option B (EV certificate via `signtool.exe`) comment is retained in `release.yml` for reference.
+See WINDOWS.md "Code Signing" subsection for provider options, costs, and activation steps.
 
 #### 7. Full End-to-End Recovery Workflow Test
 
@@ -316,13 +325,13 @@ The repository has 4 GitHub Actions workflows:
 | `ci.yml` | Push/PR to `main` | `contents: read` ✅ | Multi-OS matrix (Linux, macOS, Windows). |
 | `security.yml` | Push/PR on `Cargo.toml`/`Cargo.lock` + daily cron | `contents: read` ✅ | Uses `dtolnay/rust-toolchain@stable` ✅ |
 | `quality.yml` | Push/PR to `main` | `contents: read` ✅ | Clippy with `-D warnings`. |
-| `release.yml` | Tag push (`v*.*.*`) | `contents: write` ✅ | Multi-arch (Linux, macOS, Windows). ✅ SHA-256 checksums generated. ⚠️ No code signing. |
+| `release.yml` | Tag push (`v*.*.*`) | `contents: write` ✅ | Multi-arch (Linux, macOS, Windows). ✅ SHA-256 checksums generated. ✅ Authenticode signing enabled (conditional on secrets). |
 
 ### CI/CD Open Items
 
 - ~~Pin `dtolnay/rust-toolchain` to `@stable` in `security.yml`~~ ✅ Resolved
 - ~~Add SHA-256 checksum generation to release artifacts~~ ✅ Resolved
-- Enable Windows Authenticode code signing (placeholder exists)
+- ~~Enable Windows Authenticode code signing~~ ✅ Resolved (conditional on secrets)
 - Generate SBOM and SLSA provenance attestation
 
 ---
@@ -459,6 +468,26 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-06 — Enable Windows Authenticode Code Signing (Issue #6)
+
+- Added job-level `env` block to the `build` job in `.github/workflows/release.yml` exposing the
+  five Microsoft Trusted Signing secrets (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,
+  `AZURE_CLIENT_SECRET`, `TRUSTED_SIGNING_ACCOUNT_NAME`,
+  `TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`) as environment variables
+- Added an active `Sign Windows binary (Microsoft Trusted Signing)` step using
+  `azure/trusted-signing-action@v0.5.1` guarded by
+  `if: runner.os == 'Windows' && env.AZURE_TENANT_ID != ''`; the step is skipped
+  automatically when the secrets are not configured and runs automatically once they are
+- Moved the signing step **before** archive creation (`Create zip` / WiX installer build) so
+  the `.zip` and `.msi` artifacts both contain the Authenticode-signed binary
+- Retained Option B (EV certificate via `signtool.exe`) as a commented reference in `release.yml`
+- Updated `tests/code_signing_test.rs`: renamed the "signed step is commented out" test to
+  `release_workflow_option_b_remains_commented_out`; added four new tests verifying the active
+  signing step, `azure/trusted-signing-action` usage, `AZURE_TENANT_ID` conditional, and correct
+  step ordering
+- Updated SECURITY.md: Open Issue #6 marked as resolved; Binary Signing row updated to
+  ✅ Conditional; CI/CD workflow table and Open Items updated
 
 ### 2026-04-06 — Add Explicit `permissions: contents: read` to CI Workflows (Issue #3)
 

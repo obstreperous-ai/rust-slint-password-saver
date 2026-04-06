@@ -12,6 +12,15 @@ jobs:
   build:
     name: Build Release
     runs-on: ${{ matrix.os }}
+    env:
+      # Authenticode signing credentials — set these secrets in Settings → Secrets and variables → Actions
+      # to enable automatic signing of the Windows release binary.  When any of these are absent the
+      # signing step is skipped gracefully; see WINDOWS.md "Code Signing" subsection for setup details.
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.TRUSTED_SIGNING_ACCOUNT_NAME }}
+      TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
     strategy:
       matrix:
         include:
@@ -66,6 +75,41 @@ jobs:
       if: runner.os == 'macOS'
       run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
     
+    # Sign the Windows binary BEFORE packaging so the zip and MSI both contain the signed
+    # executable.  The step is skipped automatically when the AZURE_TENANT_ID secret is not
+    # configured; no changes to the workflow file are needed when adding the secret later.
+    # See WINDOWS.md "Code Signing" subsection for provider options, cost estimates, and
+    # the required GitHub Actions secrets.
+    - name: Sign Windows binary (Microsoft Trusted Signing)
+      if: runner.os == 'Windows' && env.AZURE_TENANT_ID != ''
+      uses: azure/trusted-signing-action@v0.5.1
+      with:
+        azure-tenant-id: ${{ env.AZURE_TENANT_ID }}
+        azure-client-id: ${{ env.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ env.AZURE_CLIENT_SECRET }}
+        endpoint: https://eus.codesigning.azure.net/
+        trusted-signing-account-name: ${{ env.TRUSTED_SIGNING_ACCOUNT_NAME }}
+        certificate-profile-name: ${{ env.TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
+        files-folder: target/${{ matrix.target }}/release
+        files-folder-filter: exe
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+
+    # TODO: Option B — EV certificate via signtool.exe (alternative, requires a PFX secret):
+    #   - name: Sign Windows binary (signtool / EV certificate)
+    #     if: runner.os == 'Windows'
+    #     shell: pwsh
+    #     run: |
+    #       $pfxBytes = [Convert]::FromBase64String("${{ secrets.CODE_SIGNING_CERT_PFX_BASE64 }}")
+    #       $pfxPath  = "$env:RUNNER_TEMP\codesign.pfx"
+    #       [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+    #       signtool sign /fd SHA256 /p "${{ secrets.CODE_SIGNING_CERT_PASSWORD }}" `
+    #         /f "$pfxPath" `
+    #         /t http://timestamp.digicert.com `
+    #         "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
+    #       Remove-Item -Force "$pfxPath"
+
     - name: Create tarball (Linux and macOS)
       if: runner.os != 'Windows'
       run: |
@@ -100,43 +144,6 @@ jobs:
       with:
         name: ${{ matrix.asset_name }}-installer
         path: ${{ matrix.asset_name }}.msi
-
-    # TODO: Add Authenticode code-signing for the Windows binary to prevent SmartScreen from
-    # blocking the executable on first launch (Finding D in WINDOWS.md).
-    #
-    # Option A — Microsoft Trusted Signing (recommended, no hardware token required):
-    #   - name: Sign Windows binary (Microsoft Trusted Signing)
-    #     if: runner.os == 'Windows'
-    #     uses: azure/trusted-signing-action@v0
-    #     with:
-    #       azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-    #       azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-    #       azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-    #       endpoint: https://eus.codesigning.azure.net/
-    #       trusted-signing-account-name: <account-name>
-    #       certificate-profile-name: <profile-name>
-    #       files-folder: target/${{ matrix.target }}/release
-    #       files-folder-filter: exe
-    #       file-digest: SHA256
-    #       timestamp-rfc3161: http://timestamp.acs.microsoft.com
-    #       timestamp-digest: SHA256
-    #
-    # Option B — EV certificate via signtool.exe (requires PFX secret):
-    #   - name: Sign Windows binary (signtool / EV certificate)
-    #     if: runner.os == 'Windows'
-    #     shell: pwsh
-    #     run: |
-    #       $pfxBytes = [Convert]::FromBase64String("${{ secrets.CODE_SIGNING_CERT_PFX_BASE64 }}")
-    #       $pfxPath  = "$env:RUNNER_TEMP\codesign.pfx"
-    #       [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
-    #       signtool sign /fd SHA256 /p "${{ secrets.CODE_SIGNING_CERT_PASSWORD }}" `
-    #         /f "$pfxPath" `
-    #         /t http://timestamp.digicert.com `
-    #         "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
-    #       Remove-Item -Force "$pfxPath"
-    #
-    # See WINDOWS.md "Code Signing" subsection for provider options, estimated costs,
-    # and required GitHub Actions secrets.
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
