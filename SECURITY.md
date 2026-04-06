@@ -228,9 +228,9 @@ existing users. New saves always use 64 MiB parameters. Tests updated accordingl
 
 ### 🟡 Medium Priority
 
-#### 3. Add Explicit `permissions: contents: read` to CI Workflows
+#### ~~3. Add Explicit `permissions: contents: read` to CI Workflows~~ ✅ Resolved
 
-`ci.yml` and `quality.yml` lack explicit `permissions:` blocks and inherit defaults. Adding `permissions: contents: read` enforces least privilege.
+Both `ci.yml` and `quality.yml` now have an explicit `permissions: contents: read` block at the workflow level, enforcing least privilege and preventing unexpected token scope escalation.
 
 #### 4. Pin `dtolnay/rust-toolchain` to `@stable` in `security.yml`
 
@@ -313,14 +313,13 @@ The repository has 4 GitHub Actions workflows:
 
 | Workflow | Trigger | Permissions | Notes |
 |---|---|---|---|
-| `ci.yml` | Push/PR to `main` | Default (read) | Multi-OS matrix (Linux, macOS, Windows). ⚠️ No explicit `permissions:` block. |
+| `ci.yml` | Push/PR to `main` | `contents: read` ✅ | Multi-OS matrix (Linux, macOS, Windows). |
 | `security.yml` | Push/PR on `Cargo.toml`/`Cargo.lock` + daily cron | `contents: read` ✅ | ⚠️ Uses `dtolnay/rust-toolchain@master` instead of `@stable`. |
-| `quality.yml` | Push/PR to `main` | Default (read) | Clippy with `-D warnings`. ⚠️ No explicit `permissions:` block. |
+| `quality.yml` | Push/PR to `main` | `contents: read` ✅ | Clippy with `-D warnings`. |
 | `release.yml` | Tag push (`v*.*.*`) | `contents: write` ✅ | Multi-arch (Linux, macOS, Windows). ⚠️ No code signing or checksums. |
 
 ### CI/CD Open Items
 
-- Add explicit `permissions: contents: read` to `ci.yml` and `quality.yml`
 - Pin `dtolnay/rust-toolchain` to `@stable` in `security.yml`
 - Add SHA-256 checksum generation to release artifacts
 - Enable Windows Authenticode code signing (placeholder exists)
@@ -461,6 +460,13 @@ If you discover a security vulnerability in this project:
 
 ## Changelog
 
+### 2026-04-06 — Add Explicit `permissions: contents: read` to CI Workflows (Issue #3)
+
+- Added `permissions: contents: read` block to `.github/workflows/ci.yml` at the workflow level
+- Added `permissions: contents: read` block to `.github/workflows/quality.yml` at the workflow level
+- Both workflows now explicitly enforce least privilege; no implicit token scope escalation
+- Updated SECURITY.md: Open Issue #3 marked as resolved; CI/CD Workflow Analysis table updated
+
 ### 2026-04-05 — Increase Argon2id Memory to 64 MiB (Issue #2)
 
 - Upgraded `Params::new(65536, ...)` in `src/storage.rs` (64 MiB, OWASP recommended minimum for password managers)
@@ -531,6 +537,6 @@ If you discover a security vulnerability in this project:
 
 ---
 
-**Last Updated:** 2026-04-05
+**Last Updated:** 2026-04-06
 **Security Audit Status:** ✅ PASSING (All code-level findings resolved. 0 critical dependency issues. 2 non-critical dependency warnings.)
 **Next Review Date:** 2026-07-05
