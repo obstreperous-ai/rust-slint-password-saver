@@ -253,9 +253,18 @@ release, eliminating the SmartScreen "Windows protected your PC" warning for end
 Option B (EV certificate via `signtool.exe`) comment is retained in `release.yml` for reference.
 See WINDOWS.md "Code Signing" subsection for provider options, costs, and activation steps.
 
-#### 7. Full End-to-End Recovery Workflow Test
+#### ~~7. Full End-to-End Recovery Workflow Test~~ ✅ Resolved
 
-Recovery codes currently verify identity and unlock the UI, but full password-less database decryption is not yet implemented. Add an integration test covering the complete recovery scenario.
+`src/storage.rs` now stores the database encryption key encrypted with the recovery master key
+(`encrypted_db_key_for_recovery` field in `StorageData`). The new
+`PasswordStorage::load_entries_with_recovery_key` method enables complete password-less database
+decryption: once a valid recovery code is presented to `EmergencyRecovery::recover_access`, the
+resulting recovery key can be passed directly to `load_entries_with_recovery_key` to decrypt the
+full entry list — no master password is required. The new integration test module
+`tests/integration/recovery_workflow_test.rs` covers the complete scenario with six tests:
+full password-less recovery, each code independently unlocking the database, wrong-key rejection,
+graceful failure for databases without recovery data, multi-entry preservation, and parity between
+the master-password path and the recovery-key path.
 
 #### 8. Corrupt Backup Graceful Failure Test
 
@@ -468,6 +477,24 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-06 — Full End-to-End Recovery Workflow (Issue #7)
+
+- Added `encrypted_db_key_for_recovery` field to `StorageData` in `src/storage.rs`:
+  stores the database encryption key encrypted with the recovery master key
+  (`nonce (12 B) || AES-256-GCM ciphertext`), enabling password-less database
+  decryption without any master-password involvement
+- Added `PasswordStorage::load_entries_with_recovery_key(&self, recovery_key: &[u8])`
+  method: decrypts `encrypted_db_key_for_recovery` with the supplied recovery key,
+  then uses the recovered database key to decrypt password entries — complete
+  password-less recovery flow
+- Updated `save_entries_with_recovery` to also generate and store the new
+  `encrypted_db_key_for_recovery` blob on every recovery-enabled save
+- Added `tests/integration/recovery_workflow_test.rs` with six end-to-end tests
+  covering: password-less recovery, all three codes independently unlocking the
+  database, wrong-key rejection, graceful failure without recovery data, multi-entry
+  preservation, and parity between the master-password and recovery-key decryption paths
+- Updated SECURITY.md: Open Issue #7 marked as resolved
 
 ### 2026-04-06 — Enable Windows Authenticode Code Signing (Issue #6)
 

@@ -548,6 +548,7 @@ impl PasswordStorage {
             recovery_code_hashes: None,
             encrypted_recovery_key: None,
             recovery_key_salt: None,
+            encrypted_db_key_for_recovery: None,
         };
 
         // Serialize storage data to JSON and write to disk
@@ -1010,6 +1011,31 @@ impl PasswordStorage {
         let mut recovery_data = recovery_nonce_bytes.to_vec();
         recovery_data.extend_from_slice(&encrypted_recovery_key);
 
+        // Encrypt the database key with the recovery master key.
+        //
+        // This enables full password-less database decryption: once the user
+        // presents a valid recovery code (which yields the recovery_key), they
+        // can decrypt db_key and then decrypt the entries — no master password
+        // required.
+        //
+        // SECURITY NOTE: Same secure nonce generation pattern as above.
+        // lgtm[cpp/hardcoded-credentials]
+        // codeql[rust/hardcoded-cryptographic-key]
+        let mut db_key_nonce_bytes = [0u8; 12]; // False positive: buffer immediately overwritten by OsRng
+        OsRng.fill_bytes(&mut db_key_nonce_bytes);
+
+        // recovery_key must be exactly 32 bytes for AES-256-GCM
+        let recovery_key_arr: [u8; 32] = recovery_key
+            .try_into()
+            .map_err(|_| SecurityError::CryptographicError)?;
+
+        let encrypted_db_key =
+            Self::encrypt_data(key.as_ref(), &recovery_key_arr, &db_key_nonce_bytes)?;
+
+        // Combine nonce with ciphertext for storage: nonce (12 bytes) || ciphertext
+        let mut db_key_blob = db_key_nonce_bytes.to_vec();
+        db_key_blob.extend_from_slice(&encrypted_db_key);
+
         // Create storage structure with recovery data
         let storage_data = StorageData {
             salt: salt_bytes.to_vec(),
@@ -1018,6 +1044,7 @@ impl PasswordStorage {
             recovery_code_hashes: Some(recovery_code_hashes),
             encrypted_recovery_key: Some(recovery_data),
             recovery_key_salt: Some(recovery_key_salt),
+            encrypted_db_key_for_recovery: Some(db_key_blob),
         };
 
         // Serialize storage data to JSON and write to disk
@@ -1086,16 +1113,118 @@ impl PasswordStorage {
         }
     }
 
+    /// Load password entries using a recovery key, without requiring the master password.
+    ///
+    /// This method enables full password-less database decryption. It reads the database
+    /// key from the `encrypted_db_key_for_recovery` field (stored encrypted with the
+    /// recovery master key), decrypts it, then uses it to decrypt the password entries.
+    ///
+    /// # Arguments
+    ///
+    /// * `recovery_key` - The recovery master key (32 bytes) obtained after a successful
+    ///   recovery code verification via [`EmergencyRecovery::recover_access`]
+    ///
+    /// # Returns
+    ///
+    /// A vector of password entries on success, or a `SecurityError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The storage file cannot be read (`SecurityError::StorageError`)
+    /// - No recovery key data is stored (`SecurityError::CryptographicError`)
+    /// - The recovery key is incorrect (`SecurityError::AuthenticationFailed`)
+    /// - The encrypted data has been tampered with (`SecurityError::AuthenticationFailed`)
+    pub fn load_entries_with_recovery_key(
+        &self,
+        recovery_key: &[u8],
+    ) -> Result<Vec<PasswordEntry>, SecurityError> {
+        // Verify integrity before attempting decryption
+        let report = self.verify_integrity()?;
+        if !report.is_healthy() {
+            let issues = report.issues();
+            warn!("Database integrity issues detected: {:?}", issues);
+            return Err(SecurityError::IntegrityError(issues.join(", ")));
+        }
+
+        // Read storage file
+        let storage_json =
+            fs::read_to_string(&self.storage_path).map_err(|_| SecurityError::StorageError)?;
+        let storage_data: StorageData =
+            serde_json::from_str(&storage_json).map_err(|_| SecurityError::CryptographicError)?;
+
+        // The db key must have been stored encrypted with the recovery key during setup
+        let encrypted_db_key_blob = storage_data
+            .encrypted_db_key_for_recovery
+            .as_deref()
+            .ok_or(SecurityError::CryptographicError)?;
+
+        if encrypted_db_key_blob.len() < 12 {
+            return Err(SecurityError::CryptographicError);
+        }
+
+        // First 12 bytes are the nonce used to encrypt the db key
+        let db_key_nonce: [u8; 12] = encrypted_db_key_blob[..12]
+            .try_into()
+            .map_err(|_| SecurityError::CryptographicError)?;
+        let encrypted_db_key = &encrypted_db_key_blob[12..];
+
+        // The recovery_key must be exactly 32 bytes for AES-256-GCM
+        let recovery_key_arr: [u8; 32] = recovery_key
+            .try_into()
+            .map_err(|_| SecurityError::CryptographicError)?;
+
+        // Decrypt the database key using the recovery key
+        let db_key_bytes = Self::decrypt_data(encrypted_db_key, &recovery_key_arr, &db_key_nonce)?;
+
+        let db_key: [u8; 32] = db_key_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| SecurityError::CryptographicError)?;
+
+        // Extract the main nonce (used to encrypt the password entries)
+        let nonce: [u8; 12] = storage_data
+            .nonce
+            .as_slice()
+            .try_into()
+            .map_err(|_| SecurityError::CryptographicError)?;
+
+        // Decrypt the password entries using the recovered database key
+        let decrypted_data = Self::decrypt_data(&storage_data.encrypted_data, &db_key, &nonce)?;
+
+        let json_str =
+            String::from_utf8(decrypted_data).map_err(|_| SecurityError::CryptographicError)?;
+
+        let entries: Vec<PasswordEntry> =
+            serde_json::from_str(&json_str).map_err(|_| SecurityError::CryptographicError)?;
+
+        // Initialize audit logger
+        let audit_logger = AuditLogger::new(get_audit_log_path(), &get_audit_hmac_key_path());
+        let load_entry = AuditLogger::create_entry(
+            AuditEventType::PasswordsLoaded,
+            true,
+            Some(format!(
+                "Loaded {} password entries via recovery key (password-less)",
+                entries.len()
+            )),
+        );
+        if let Err(e) = audit_logger.log_event(&load_entry) {
+            warn!("Failed to log recovery load: {}", e);
+        }
+
+        Ok(entries)
+    }
+
     /// Verify a recovery code and decrypt the recovery key.
     ///
     /// This method checks if the provided recovery code hash matches one of the
     /// stored hashes, and if so, decrypts and returns the recovery key using
     /// the master password.
     ///
-    /// **Note**: Current implementation requires master password for decryption,
-    /// limiting recovery to identity verification only. Future enhancement will
-    /// store encrypted database key with recovery key to enable full recovery
-    /// without master password.
+    /// For full password-less database decryption use
+    /// [`EmergencyRecovery::recover_access`] to obtain the recovery key from a
+    /// recovery code and then pass it to
+    /// [`PasswordStorage::load_entries_with_recovery_key`].
     ///
     /// # Arguments
     ///
@@ -1198,6 +1327,17 @@ struct StorageData {
     /// Salt used for Argon2id recovery key derivation - Optional for backward compatibility
     #[serde(default, skip_serializing_if = "Option::is_none")]
     recovery_key_salt: Option<Vec<u8>>,
+    /// Database encryption key encrypted with the recovery master key.
+    ///
+    /// Stored as `nonce (12 bytes) || AES-256-GCM ciphertext`.  Allows
+    /// password-less database decryption: once the recovery master key is
+    /// obtained from a valid recovery code, this blob can be decrypted to
+    /// recover the database key without knowing the master password.
+    ///
+    /// Optional for backward compatibility with files saved before this field
+    /// was introduced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    encrypted_db_key_for_recovery: Option<Vec<u8>>,
 }
 
 #[cfg(test)]
