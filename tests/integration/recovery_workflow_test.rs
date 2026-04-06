@@ -173,7 +173,7 @@ fn test_wrong_recovery_key_cannot_decrypt_database() {
         .expect("Should save entries with recovery metadata");
 
     // A fabricated 32-byte key should not decrypt the database.
-    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture — wrong key intentionally used to verify rejection
+    // codeql[rust/hardcoded-credentials] // False positive: test fixture — wrong key intentionally used to verify rejection
     let wrong_key = vec![0xABu8; 32];
     let result = storage.load_entries_with_recovery_key(&wrong_key);
     assert!(
@@ -200,7 +200,7 @@ fn test_recovery_key_load_fails_when_no_recovery_data_present() {
         .expect("Should save entries without recovery");
 
     // Any recovery key should fail because there is no encrypted_db_key_for_recovery field.
-    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture — key value irrelevant, testing absence of recovery data
+    // codeql[rust/hardcoded-credentials] // False positive: test fixture — key value irrelevant, testing absence of recovery data
     let any_key = vec![0x11u8; 32];
     let result = storage.load_entries_with_recovery_key(&any_key);
     assert!(
