@@ -269,7 +269,11 @@ Before adding a suppression comment, verify ALL of these:
 
 ### Existing Suppression Conventions
 
-This project already uses extensive CodeQL suppression annotations. When adding new ones, follow the existing patterns exactly:
+This project already uses extensive CodeQL suppression annotations. When adding new ones, follow the existing patterns exactly.
+
+> **Note:** The codebase uses two justification separator styles. Both are valid CodeQL suppression syntax. Match the style already in use for each query ID:
+> - **Dash style** (` - `): Used with `rust/hardcoded-credentials` annotations
+> - **Double-slash style** (` // `): Used with `rust/hard-coded-cryptographic-value` annotations
 
 - **Test functions**: `// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords` (after `#[test]`)
 - **Inline test values**: `// codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only` (before the line)
