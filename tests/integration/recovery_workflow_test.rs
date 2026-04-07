@@ -217,14 +217,13 @@ fn test_full_recovery_preserves_all_entries() {
     let storage_path = dir.path().join("passwords_multi.enc");
     let storage = PasswordStorage::new(storage_path);
 
-    let entries = vec![
-        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
-        make_entry("Gmail", "eve@gmail.com", "Gmail@Pass1!"),
-        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
-        make_entry("GitHub", "eve@github.com", "Github@Pass2!"),
-        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
-        make_entry("LinkedIn", "eve@linkedin.com", "LinkedIn@Pass3!"),
-    ];
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+    let e_gmail = make_entry("Gmail", "eve@gmail.com", "Gmail@Pass1!");
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+    let e_github = make_entry("GitHub", "eve@github.com", "Github@Pass2!");
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
+    let e_linkedin = make_entry("LinkedIn", "eve@linkedin.com", "LinkedIn@Pass3!");
+    let entries = vec![e_gmail, e_github, e_linkedin];
 
     let recovery = EmergencyRecovery::create(MASTER_PASSWORD);
     let codes = recovery.get_codes();
