@@ -1019,7 +1019,7 @@ impl PasswordStorage {
         // required.
         //
         // SECURITY NOTE: Same secure nonce generation pattern as above.
-        // codeql[rust/hardcoded-credentials]
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: buffer immediately overwritten by OsRng
         let mut db_key_nonce_bytes = [0u8; 12]; // False positive: buffer immediately overwritten by OsRng
         OsRng.fill_bytes(&mut db_key_nonce_bytes);
 

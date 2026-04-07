@@ -57,7 +57,7 @@ fn test_full_end_to_end_passwordless_recovery() {
 
     // --- SETUP: Save database with recovery metadata ---
 
-    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
     let entry = make_entry("BankAccount", "alice@example.com", "Sup3rS3cret!");
     let recovery = EmergencyRecovery::create(MASTER_PASSWORD);
     let codes = recovery.get_codes();
@@ -115,7 +115,7 @@ fn test_each_recovery_code_independently_decrypts_database() {
     let storage_path = dir.path().join("passwords_each_code.enc");
     let storage = PasswordStorage::new(storage_path);
 
-    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
     let entry = make_entry("EmailAccount", "bob@example.com", "Email@Pass1");
     let recovery = EmergencyRecovery::create(MASTER_PASSWORD);
     let codes = recovery.get_codes();
@@ -158,7 +158,7 @@ fn test_wrong_recovery_key_cannot_decrypt_database() {
     let storage_path = dir.path().join("passwords_wrong_key.enc");
     let storage = PasswordStorage::new(storage_path);
 
-    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
     let entry = make_entry("Social", "carol@example.com", "Social@Pass99");
     let recovery = EmergencyRecovery::create(MASTER_PASSWORD);
 
@@ -173,7 +173,7 @@ fn test_wrong_recovery_key_cannot_decrypt_database() {
         .expect("Should save entries with recovery metadata");
 
     // A fabricated 32-byte key should not decrypt the database.
-    // codeql[rust/hardcoded-credentials] // False positive: test fixture — wrong key intentionally used to verify rejection
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: intentionally wrong test key to verify rejection
     let wrong_key = vec![0xABu8; 32];
     let result = storage.load_entries_with_recovery_key(&wrong_key);
     assert!(
@@ -191,7 +191,7 @@ fn test_recovery_key_load_fails_when_no_recovery_data_present() {
     let storage_path = dir.path().join("passwords_no_recovery.enc");
     let storage = PasswordStorage::new(storage_path);
 
-    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
     let entry = make_entry("LegacyService", "dave@example.com", "Legacy!Pass1");
 
     // Save WITHOUT recovery data (simulates legacy / non-recovery databases).
@@ -200,7 +200,7 @@ fn test_recovery_key_load_fails_when_no_recovery_data_present() {
         .expect("Should save entries without recovery");
 
     // Any recovery key should fail because there is no encrypted_db_key_for_recovery field.
-    // codeql[rust/hardcoded-credentials] // False positive: test fixture — key value irrelevant, testing absence of recovery data
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture — key value irrelevant, testing absence of recovery data
     let any_key = vec![0x11u8; 32];
     let result = storage.load_entries_with_recovery_key(&any_key);
     assert!(
@@ -217,10 +217,12 @@ fn test_full_recovery_preserves_all_entries() {
     let storage_path = dir.path().join("passwords_multi.enc");
     let storage = PasswordStorage::new(storage_path);
 
-    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
     let entries = vec![
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
         make_entry("Gmail", "eve@gmail.com", "Gmail@Pass1!"),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
         make_entry("GitHub", "eve@github.com", "Github@Pass2!"),
+        // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
         make_entry("LinkedIn", "eve@linkedin.com", "LinkedIn@Pass3!"),
     ];
 
@@ -266,7 +268,7 @@ fn test_master_password_and_recovery_key_load_identical_entries() {
     let storage_path = dir.path().join("passwords_parity.enc");
     let storage = PasswordStorage::new(storage_path);
 
-    // codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+    // codeql[rust/hard-coded-cryptographic-value] // False positive: test fixture only
     let entry = make_entry("Parity Service", "frank@example.com", "Parity@Test1!");
     let recovery = EmergencyRecovery::create(MASTER_PASSWORD);
     let codes = recovery.get_codes();
