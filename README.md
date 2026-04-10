@@ -562,7 +562,18 @@ The project uses GitHub Actions for continuous integration and deployment.
   - Check dependencies against RustSec advisory database
 - **Purpose**: Detect known security vulnerabilities in dependencies
 
-#### 4. **Release Workflow** (`.github/workflows/release.yml`)
+#### 4. **CodeQL Analysis Workflow** (`.github/workflows/codeql.yml`)
+- **Trigger**:
+  - Push to `main`
+  - Pull Requests
+  - Weekly on Monday at 00:00 UTC
+- **Steps**:
+  - Initialize CodeQL with Rust language (`build-mode: none`)
+  - Perform CodeQL analysis with custom config (`.github/codeql/codeql-config.yml`)
+- **Configuration**: Excludes `tests/` directory from analysis to avoid false positives on test fixtures
+- **Purpose**: Automated security vulnerability detection via static analysis
+
+#### 5. **Release Workflow** (`.github/workflows/release.yml`)
 - **Trigger**: Version tags (`v*.*.*`)
 - **Targets**:
   - `x86_64-unknown-linux-gnu` (Linux x64)
