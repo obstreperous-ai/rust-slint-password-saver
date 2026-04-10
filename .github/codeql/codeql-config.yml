@@ -7,4 +7,3 @@ name: "CodeQL Configuration"
 # See TESTING_SECURITY_NOTE.md for details.
 paths-ignore:
   - tests
-  - tests/**
