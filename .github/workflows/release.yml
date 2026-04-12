@@ -12,6 +12,8 @@ jobs:
   build:
     name: Build Release
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     env:
       # Authenticode signing credentials — set these secrets in Settings → Secrets and variables → Actions
       # to enable automatic signing of the Windows release binary.  When any of these are absent the

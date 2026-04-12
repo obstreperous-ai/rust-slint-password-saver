@@ -12,64 +12,34 @@ The test files contain hardcoded passwords for the following legitimate testing 
 2. **Encryption Testing**: Testing encryption/decryption requires known test passwords
 3. **Integration Testing**: End-to-end tests require complete test data including passwords
 
-### Security Scanning Suppressions
+### CodeQL Path Exclusion
 
-All test files with hardcoded credentials have been marked with appropriate security scanning suppressions:
+The `tests/` directory is **excluded from CodeQL analysis entirely** via a CodeQL
+configuration file (`.github/codeql/codeql-config.yml`). This is the primary
+mechanism for preventing false-positive security alerts on test fixtures.
 
-#### Files with Suppressions
+The CodeQL workflow (`.github/workflows/codeql.yml`) references this configuration
+and uses `build-mode: none` for Rust analysis. Because the entire `tests/` directory
+is excluded at the CodeQL level, individual inline `// codeql[...]` suppression
+comments in test files are no longer required for files under `tests/`.
 
-1. **`tests/validation_test.rs`**
-   - Purpose: Tests input validation rules
-   - Contains: Example passwords for validation testing
-   - Suppressions: File-level comment and per-test CodeQL annotations
+#### Why Path Exclusion Over Inline Suppressions
 
-2. **`tests/storage_test.rs`**
-   - Purpose: Tests encryption/decryption functionality
-   - Contains: Test master passwords and sample password entries
-   - Suppressions: File-level comment and per-test CodeQL annotations
+Inline CodeQL suppression comments (`// codeql[rust/hardcoded-credentials]`) are
+brittle—they must be placed precisely and can break when code is refactored.
+Excluding the entire test directory is more reliable and maintainable.
 
-3. **`tests/integration_test.rs`**
-   - Purpose: Tests cross-platform integration and password change functionality
-   - Contains: Test master passwords and password change scenarios
-   - Suppressions: File-level comment and per-test CodeQL annotations
+#### Files in `src/` with Inline Suppressions
 
-4. **`tests/error_sanitization_test.rs`**
-   - Purpose: Tests error message sanitization
-   - Contains: Test passwords for authentication error testing
-   - Suppressions: File-level comment and per-test CodeQL annotations
+For `#[cfg(test)]` modules and doc-test examples inside `src/` files, inline
+CodeQL suppression comments are still used because those files contain production
+code that must remain under CodeQL analysis. Current files with inline suppressions:
 
-5. **`tests/password_strength_test.rs`**
-   - Purpose: Edge case and boundary tests for password strength validation
-   - Contains: Boundary-condition passwords for length, character type, and entropy testing
-   - Suppressions: File-level comment and per-test CodeQL annotations
-
-6. **`src/validation.rs`**
-   - Purpose: Documentation examples for validation functions
-   - Contains: Example passwords in doc comments
-   - Suppressions: Module-level security note and inline CodeQL annotations
-
-### Suppression Format
-
-We use the following suppression patterns:
-
-```rust
-// File-level suppression
-#![allow(clippy::identity_op)]
-
-// Function-level CodeQL suppression
-#[test]
-// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
-fn test_function() {
-    let test_password = "example_password_123";
-    // ... test code
-}
-
-// Inline documentation suppression
-/// ```
-/// // codeql[rust/hardcoded-credentials] - Example password for documentation only
-/// assert!(validate_password("MySecureP@ssw0rd!").is_ok());
-/// ```
-```
+- **`src/validation.rs`** — Example passwords in doc comments
+- **`src/search.rs`** — Test helper with sample credentials in `#[cfg(test)]`
+- **`src/password_strength.rs`** — Test fixtures in `#[cfg(test)]`
+- **`src/storage.rs`** — Cryptographic test values in `#[cfg(test)]`
+- **`src/ui_handlers.rs`** — Test fixtures in `#[cfg(test)]`
 
 ### Important Notes
 
@@ -100,13 +70,13 @@ If your security scanning tool flags these files:
 
 When adding new tests with passwords:
 
-1. Add file-level security note at the top of the test file
-2. Add `#![allow(clippy::identity_op)]` to suppress lint warnings
-3. Add `// codeql[rust/hardcoded-credentials]` comment before test functions
+1. If the test is in the `tests/` directory — no CodeQL suppression is needed (excluded by config)
+2. If the test is in a `#[cfg(test)]` module inside `src/` — add `// codeql[rust/hardcoded-credentials]` before the relevant line
+3. Add file-level security note at the top of the test file
 4. Document the test purpose in comments
 5. Update this document if adding new test files with credentials
 
 ---
 
-Last Updated: 2026-02-11
+Last Updated: 2026-04-10
 Maintained by: GitHub Copilot AI
