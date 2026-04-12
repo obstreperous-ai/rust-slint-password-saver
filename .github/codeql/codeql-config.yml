@@ -1,0 +1,9 @@
+name: "CodeQL Configuration"
+
+# Exclude test directories from CodeQL analysis.
+# Test code intentionally uses hardcoded credentials, cryptographic keys,
+# and other patterns that CodeQL flags as security risks. These are
+# legitimate test fixtures, not production vulnerabilities.
+# See TESTING_SECURITY_NOTE.md for details.
+paths-ignore:
+  - tests
