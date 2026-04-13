@@ -199,8 +199,10 @@ fn test_import_fails_gracefully_with_garbage_data() {
     let storage_path = temp_dir.path().join("primary.enc");
     let corrupt_path = temp_dir.path().join("garbage.bak");
 
-    // Write random garbage bytes to the backup file.
-    let garbage: Vec<u8> = (0..=255u8).collect();
+    // Write scrambled garbage bytes to the backup file.
+    let garbage: Vec<u8> = (0..=255u8)
+        .map(|b| b.wrapping_mul(37).wrapping_add(13))
+        .collect();
     fs::write(&corrupt_path, &garbage).expect("Failed to write garbage file");
 
     // Attempting to import garbage data should return an error, not panic.
@@ -321,8 +323,8 @@ fn test_import_fails_gracefully_with_byte_flipped_backup() {
         corrupted_data.len() > 20,
         "Backup file should have substantial content"
     );
-    // Flip bytes at multiple positions to ensure corruption is detected.
-    for offset in [10, corrupted_data.len() / 3, corrupted_data.len() / 2] {
+    // Flip bytes at multiple positions (including near the start) to ensure corruption is detected.
+    for offset in [2, 10, corrupted_data.len() / 3, corrupted_data.len() / 2] {
         if offset < corrupted_data.len() {
             corrupted_data[offset] ^= 0xFF;
         }
