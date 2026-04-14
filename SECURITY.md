@@ -148,7 +148,7 @@ This table reflects the verified state of the project as of 2026-04-05, cross-re
 | Windows Platform | ✅ Good | ACL-based permissions, app manifest, MSVC build, WiX installer in CI |
 | Threat Model | ✅ Good | `THREAT_MODEL.md` documents 5 threat actors, 19 controls, 12 out-of-scope threats, and 6 residual risks |
 | Binary Signing | ✅ Conditional | Release workflow signs the Windows binary via Microsoft Trusted Signing when `AZURE_TENANT_ID` secret is configured; step skips gracefully when credentials are absent |
-| SBOM / Provenance | ✅ Good | SPDX SBOM (`sbom.spdx.json`) generated via `cargo-sbom` and uploaded as a release asset; SLSA provenance attestation remains future work |
+| SBOM / Provenance | ✅ Strong | SPDX SBOM (`sbom.spdx.json`) generated via `cargo-sbom` and uploaded as a release asset; SLSA provenance attestations generated via `actions/attest-build-provenance@v2` and attached to each release |
 
 ---
 
@@ -282,9 +282,14 @@ The file is uploaded alongside the platform archives, checksums, and installer a
 asset, giving downstream users and auditors a machine-readable inventory of all Rust crate
 dependencies included in each release.
 
-#### 10. Add SLSA Provenance Attestation
+#### ~~10. Add SLSA Provenance Attestation~~ ✅ Resolved
 
-No supply-chain provenance attestation is published with releases.
+The `release.yml` workflow's `release` job now has `attestations: write` and `id-token: write`
+permissions and includes an `actions/attest-build-provenance@v2` step that generates SLSA
+provenance attestations for all release artifacts (platform archives, checksums file, and SBOM).
+The attestations are signed via GitHub's OIDC-based signing infrastructure and stored in the
+repository's attestations API, allowing users to verify supply-chain integrity with
+`gh attestation verify`.
 
 #### 11. Add `cargo-deny` to CI
 
@@ -340,14 +345,14 @@ The repository has 4 GitHub Actions workflows:
 | `ci.yml` | Push/PR to `main` | `contents: read` ✅ | Multi-OS matrix (Linux, macOS, Windows). |
 | `security.yml` | Push/PR on `Cargo.toml`/`Cargo.lock` + daily cron | `contents: read` ✅ | Uses `dtolnay/rust-toolchain@stable` ✅ |
 | `quality.yml` | Push/PR to `main` | `contents: read` ✅ | Clippy with `-D warnings`. |
-| `release.yml` | Tag push (`v*.*.*`) | `contents: write` ✅ | Multi-arch (Linux, macOS, Windows). ✅ SHA-256 checksums generated. ✅ Authenticode signing enabled (conditional on secrets). |
+| `release.yml` | Tag push (`v*.*.*`) | `contents: write`, `attestations: write`, `id-token: write` ✅ | Multi-arch (Linux, macOS, Windows). ✅ SHA-256 checksums generated. ✅ Authenticode signing enabled (conditional on secrets). ✅ SLSA provenance attestations generated via `actions/attest-build-provenance@v2`. |
 
 ### CI/CD Open Items
 
 - ~~Pin `dtolnay/rust-toolchain` to `@stable` in `security.yml`~~ ✅ Resolved
 - ~~Add SHA-256 checksum generation to release artifacts~~ ✅ Resolved
 - ~~Enable Windows Authenticode code signing~~ ✅ Resolved (conditional on secrets)
-- Generate SBOM and SLSA provenance attestation
+- ~~Generate SBOM and SLSA provenance attestation~~ ✅ Resolved
 
 ---
 
@@ -483,6 +488,21 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-14 — Add SLSA Provenance Attestation (Issue #10)
+
+- Added `attestations: write` and `id-token: write` permissions to the `release` job in
+  `.github/workflows/release.yml`
+- Added `actions/attest-build-provenance@v2` step in the `release` job, running after checksum
+  generation and before the GitHub Release creation; the step attests all release artifacts
+  (platform archives, `SHA256SUMS.txt`, and `sbom.spdx.json`) using GitHub's OIDC-based
+  Sigstore signing infrastructure
+- Users can verify artifact provenance with:
+  `gh attestation verify <artifact> --repo <owner>/<repo>`
+- Added `tests/slsa_test.rs` with six tests verifying the workflow configuration and SECURITY.md
+  documentation are correct
+- Updated SECURITY.md: Open Issue #10 marked as resolved; SBOM/Provenance row upgraded from
+  ✅ Good to ✅ Strong; CI/CD Open Items updated; `release.yml` permissions row updated
 
 ### 2026-04-13 — Corrupt Backup Graceful Failure Test (Issue #8)
 
