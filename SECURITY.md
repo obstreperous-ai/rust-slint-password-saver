@@ -266,9 +266,11 @@ full password-less recovery, each code independently unlocking the database, wro
 graceful failure for databases without recovery data, multi-entry preservation, and parity between
 the master-password path and the recovery-key path.
 
-#### 8. Corrupt Backup Graceful Failure Test
+#### ~~8. Corrupt Backup Graceful Failure Test~~ ✅ Resolved
 
-No tests verify that `import_from_file()` handles corrupted backup files gracefully (truncated, byte-flipped, garbage data).
+Five integration tests in `tests/integration/backup_recovery_test.rs` now verify that
+`import_from_file()` returns a proper `Err` (never panics) when given corrupted backup files:
+garbage data, empty file, non-existent file, truncated backup, and byte-flipped backup.
 
 ### 🔵 Low Priority
 
@@ -477,6 +479,17 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-13 — Corrupt Backup Graceful Failure Test (Issue #8)
+
+- Added five integration tests to `tests/integration/backup_recovery_test.rs` verifying that
+  `import_from_file()` returns a proper `Err` (never panics) when given corrupted backup files:
+  - `test_import_fails_gracefully_with_garbage_data`: completely random bytes
+  - `test_import_fails_gracefully_with_empty_file`: zero-length file
+  - `test_import_fails_gracefully_with_nonexistent_file`: missing file path
+  - `test_import_fails_gracefully_with_truncated_backup`: valid backup truncated to half size
+  - `test_import_fails_gracefully_with_byte_flipped_backup`: valid backup with flipped bytes
+- Updated SECURITY.md: Open Issue #8 marked as resolved
 
 ### 2026-04-06 — Full End-to-End Recovery Workflow (Issue #7)
 

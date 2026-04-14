@@ -187,3 +187,156 @@ fn test_list_backups_in_directory() {
     let backups = BackupManager::list_backups(backup_dir).expect("Failed to list backups");
     assert_eq!(backups.len(), 2, "Should list exactly 2 backup files");
 }
+
+// ─── Corrupt Backup Graceful Failure Tests (SECURITY.md Issue #8) ───
+
+/// Test that `import_from_file` gracefully fails when the backup file contains
+/// completely random garbage data (not valid JSON or encrypted data).
+#[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+fn test_import_fails_gracefully_with_garbage_data() {
+    let temp_dir = tempdir().unwrap();
+    let storage_path = temp_dir.path().join("primary.enc");
+    let corrupt_path = temp_dir.path().join("garbage.bak");
+
+    // Write scrambled garbage bytes to the backup file.
+    let garbage: Vec<u8> = (0..=255u8)
+        .map(|b| b.wrapping_mul(37).wrapping_add(13))
+        .collect();
+    fs::write(&corrupt_path, &garbage).expect("Failed to write garbage file");
+
+    // Attempting to import garbage data should return an error, not panic.
+    let manager = BackupManager::new(PasswordStorage::new(storage_path));
+    let result = manager.import_from_file(&corrupt_path, MASTER_PASSWORD, MASTER_PASSWORD);
+
+    assert!(
+        result.is_err(),
+        "import_from_file should fail on garbage data"
+    );
+}
+
+/// Test that `import_from_file` gracefully fails when the backup file is empty
+/// (zero bytes).
+#[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+fn test_import_fails_gracefully_with_empty_file() {
+    let temp_dir = tempdir().unwrap();
+    let storage_path = temp_dir.path().join("primary.enc");
+    let empty_path = temp_dir.path().join("empty.bak");
+
+    // Write an empty file.
+    fs::write(&empty_path, b"").expect("Failed to write empty file");
+
+    // Attempting to import an empty file should return an error, not panic.
+    let manager = BackupManager::new(PasswordStorage::new(storage_path));
+    let result = manager.import_from_file(&empty_path, MASTER_PASSWORD, MASTER_PASSWORD);
+
+    assert!(
+        result.is_err(),
+        "import_from_file should fail on empty file"
+    );
+}
+
+/// Test that `import_from_file` gracefully fails when the backup file does not
+/// exist on disk.
+#[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+fn test_import_fails_gracefully_with_nonexistent_file() {
+    let temp_dir = tempdir().unwrap();
+    let storage_path = temp_dir.path().join("primary.enc");
+    let missing_path = temp_dir.path().join("does_not_exist.bak");
+
+    // Attempting to import a non-existent file should return an error, not panic.
+    let manager = BackupManager::new(PasswordStorage::new(storage_path));
+    let result = manager.import_from_file(&missing_path, MASTER_PASSWORD, MASTER_PASSWORD);
+
+    assert!(
+        result.is_err(),
+        "import_from_file should fail on non-existent file"
+    );
+}
+
+/// Test that `import_from_file` gracefully fails when a valid backup file has
+/// been truncated (partial data remaining).
+#[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+fn test_import_fails_gracefully_with_truncated_backup() {
+    let temp_dir = tempdir().unwrap();
+    let storage_path = temp_dir.path().join("primary.enc");
+    let backup_path = temp_dir.path().join("backup.bak");
+
+    // Create a valid backup first.
+    let storage = PasswordStorage::new(storage_path.clone());
+    let entries = vec![make_entry("TruncTest", "user@test.com", "pass123")];
+    storage
+        .save_entries(&entries, MASTER_PASSWORD)
+        .expect("Failed to save entries");
+
+    let manager = BackupManager::new(PasswordStorage::new(storage_path.clone()));
+    manager
+        .create_backup(MASTER_PASSWORD, &backup_path)
+        .expect("Failed to create backup");
+
+    // Truncate the backup file to half its original size.
+    let original_data = fs::read(&backup_path).expect("Failed to read backup");
+    assert!(
+        original_data.len() > 10,
+        "Backup file should have substantial content"
+    );
+    let truncated = &original_data[..original_data.len() / 2];
+    fs::write(&backup_path, truncated).expect("Failed to write truncated file");
+
+    // Attempting to import the truncated file should return an error, not panic.
+    let import_manager = BackupManager::new(PasswordStorage::new(storage_path));
+    let result = import_manager.import_from_file(&backup_path, MASTER_PASSWORD, MASTER_PASSWORD);
+
+    assert!(
+        result.is_err(),
+        "import_from_file should fail on truncated backup"
+    );
+}
+
+/// Test that `import_from_file` gracefully fails when random bytes in the backup
+/// file have been flipped (simulating bit-rot or tampering).
+#[test]
+// codeql[rust/hardcoded-credentials] - Test fixture with intentional hardcoded passwords
+fn test_import_fails_gracefully_with_byte_flipped_backup() {
+    let temp_dir = tempdir().unwrap();
+    let storage_path = temp_dir.path().join("primary.enc");
+    let backup_path = temp_dir.path().join("backup.bak");
+
+    // Create a valid backup first.
+    let storage = PasswordStorage::new(storage_path.clone());
+    let entries = vec![make_entry("FlipTest", "user@test.com", "pass456")];
+    storage
+        .save_entries(&entries, MASTER_PASSWORD)
+        .expect("Failed to save entries");
+
+    let manager = BackupManager::new(PasswordStorage::new(storage_path.clone()));
+    manager
+        .create_backup(MASTER_PASSWORD, &backup_path)
+        .expect("Failed to create backup");
+
+    // Flip bytes at several positions in the backup file to simulate corruption.
+    let mut corrupted_data = fs::read(&backup_path).expect("Failed to read backup");
+    assert!(
+        corrupted_data.len() > 20,
+        "Backup file should have substantial content"
+    );
+    // Flip bytes at multiple positions (including near the start) to ensure corruption is detected.
+    for offset in [2, 10, corrupted_data.len() / 3, corrupted_data.len() / 2] {
+        if offset < corrupted_data.len() {
+            corrupted_data[offset] ^= 0xFF;
+        }
+    }
+    fs::write(&backup_path, &corrupted_data).expect("Failed to write corrupted file");
+
+    // Attempting to import the byte-flipped file should return an error, not panic.
+    let import_manager = BackupManager::new(PasswordStorage::new(storage_path));
+    let result = import_manager.import_from_file(&backup_path, MASTER_PASSWORD, MASTER_PASSWORD);
+
+    assert!(
+        result.is_err(),
+        "import_from_file should fail on byte-flipped backup"
+    );
+}
