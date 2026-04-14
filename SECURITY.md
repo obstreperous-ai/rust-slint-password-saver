@@ -148,7 +148,7 @@ This table reflects the verified state of the project as of 2026-04-05, cross-re
 | Windows Platform | ✅ Good | ACL-based permissions, app manifest, MSVC build, WiX installer in CI |
 | Threat Model | ✅ Good | `THREAT_MODEL.md` documents 5 threat actors, 19 controls, 12 out-of-scope threats, and 6 residual risks |
 | Binary Signing | ✅ Conditional | Release workflow signs the Windows binary via Microsoft Trusted Signing when `AZURE_TENANT_ID` secret is configured; step skips gracefully when credentials are absent |
-| SBOM / Provenance | ⚠️ Missing | No Software Bill of Materials or SLSA provenance attestation |
+| SBOM / Provenance | ✅ Good | SPDX SBOM (`sbom.spdx.json`) generated via `cargo-sbom` and uploaded as a release asset; SLSA provenance attestation remains future work |
 
 ---
 
@@ -274,9 +274,13 @@ garbage data, empty file, non-existent file, truncated backup, and byte-flipped 
 
 ### 🔵 Low Priority
 
-#### 9. Generate SBOM in CI
+#### ~~9. Generate SBOM in CI~~ ✅ Resolved
 
-No Software Bill of Materials (SPDX or CycloneDX) is generated. Use `cargo-sbom` or equivalent in the release workflow.
+The `release.yml` workflow now installs `cargo-sbom` and generates an SPDX 2.3 JSON Software
+Bill of Materials (`sbom.spdx.json`) in the `release` job before the GitHub Release is created.
+The file is uploaded alongside the platform archives, checksums, and installer as a named release
+asset, giving downstream users and auditors a machine-readable inventory of all Rust crate
+dependencies included in each release.
 
 #### 10. Add SLSA Provenance Attestation
 

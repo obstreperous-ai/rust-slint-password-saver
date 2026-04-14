@@ -161,7 +161,22 @@ jobs:
       contents: write
     steps:
     - uses: actions/checkout@v4
-    
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+
+    - name: Install cargo-sbom
+      run: cargo install cargo-sbom --locked
+
+    - name: Generate SBOM (SPDX JSON)
+      run: |
+        set -e
+        cargo sbom --output-format spdx_json_2_3 > sbom.spdx.json
+        test -s sbom.spdx.json || { echo "ERROR: sbom.spdx.json is empty or missing"; exit 1; }
+        echo "SBOM generated successfully ($(wc -c < sbom.spdx.json) bytes)"
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4.1.3
       with:
@@ -190,6 +205,7 @@ jobs:
           ./artifacts/**/*.zip
           ./artifacts/**/*.msi
           SHA256SUMS.txt
+          sbom.spdx.json
         draft: false
         prerelease: false
         generate_release_notes: true
