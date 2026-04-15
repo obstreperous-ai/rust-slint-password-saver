@@ -20,7 +20,7 @@ env:
 
 jobs:
   audit:
-    name: Cargo Audit
+    name: Cargo Audit + Deny
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,8 +32,13 @@ jobs:
       with:
         toolchain: stable
     
-    - name: Install cargo-audit
-      run: cargo install cargo-audit --locked
+    - name: Install cargo-audit and cargo-deny
+      run: |
+        cargo install cargo-audit --locked
+        cargo install cargo-deny --locked
     
     - name: Run cargo audit
       run: cargo audit
+    
+    - name: Run cargo deny
+      run: cargo deny check advisories bans licenses
