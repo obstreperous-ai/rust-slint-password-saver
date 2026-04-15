@@ -159,6 +159,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     steps:
     - uses: actions/checkout@v4
 
@@ -196,6 +198,16 @@ jobs:
         cd ..
         echo "Generated SHA256SUMS.txt:"
         cat SHA256SUMS.txt
+
+    - name: Generate SLSA provenance attestations
+      uses: actions/attest-build-provenance@v2
+      with:
+        subject-path: |
+          ./artifacts/**/*.tar.gz
+          ./artifacts/**/*.zip
+          ./artifacts/**/*.msi
+          SHA256SUMS.txt
+          sbom.spdx.json
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
