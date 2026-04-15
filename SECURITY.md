@@ -299,9 +299,11 @@ compatibility checking, duplicate dependency detection, and advisory cross-refer
 The repository now includes `deny.toml` for policy configuration (allowed licenses and advisory
 tracking/ignores for currently monitored transitive issues).
 
-#### 12. Add Clipboard Manager Risk Warning
+#### ~~12. Add Clipboard Manager Risk Warning~~ ✅ Resolved
 
-Users should be warned (in README and/or UI) that clipboard managers (KDE Klipper, Clipman, macOS clipboard history) may retain copied passwords beyond the 30-second auto-clear.
+README now explicitly warns that clipboard managers/history tools (for example KDE Klipper,
+Clipman, and macOS clipboard history) may retain copied passwords beyond the app's 30-second
+auto-clear window.
 
 #### 13. Document Two-Factor Authentication as Future Enhancement
 
@@ -492,6 +494,12 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-15 — Add Clipboard Manager Retention Warning (Issue #12)
+
+- Updated `README.md` security notes with an explicit warning that clipboard managers/history
+  tools may retain copied passwords longer than the 30-second auto-clear timeout
+- Marked Issue #12 as resolved in "Open Issues and Future Work"
 
 ### 2026-04-14 — Add SLSA Provenance Attestation (Issue #10)
 

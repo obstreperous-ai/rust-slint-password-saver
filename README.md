@@ -120,6 +120,8 @@ The application uses the [zxcvbn](https://github.com/dropbox/zxcvbn) password st
 - Master password is never stored and cannot be recovered if forgotten
 - The application does not implement any backup/recovery mechanism by design
 - All data is stored locally; no cloud synchronization (enhances security, reduces attack surface)
+- Passwords copied to clipboard are auto-cleared after 30 seconds, but OS clipboard managers/history
+  (for example KDE Klipper, Clipman, and macOS clipboard history) may retain copies longer
 
 🔍 **Security Status**: The project undergoes regular security audits. Current security status and identified issues are documented in [SECURITY.md](SECURITY.md).
 
