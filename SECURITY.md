@@ -291,9 +291,13 @@ The attestations are signed via GitHub's OIDC-based signing infrastructure and s
 repository's attestations API, allowing users to verify supply-chain integrity with
 `gh attestation verify`.
 
-#### 11. Add `cargo-deny` to CI
+#### ~~11. Add `cargo-deny` to CI~~ ✅ Resolved
 
-Complement `cargo-audit` with `cargo-deny` for license compatibility checking, duplicate dependency detection, and advisory cross-referencing.
+The `security.yml` workflow now installs `cargo-deny` and runs
+`cargo deny check advisories bans licenses` alongside `cargo audit`, adding license
+compatibility checking, duplicate dependency detection, and advisory cross-referencing in CI.
+The repository now includes `deny.toml` for policy configuration (allowed licenses and advisory
+tracking/ignores for currently monitored transitive issues).
 
 #### 12. Add Clipboard Manager Risk Warning
 
@@ -318,7 +322,7 @@ Windows is in the CI matrix (compile + test), but there is no dedicated test ver
 | A03 | Injection | ✅ Applicable | ✅ Mitigated | Input validation (control char rejection, length limits), no SQL/OS command execution |
 | A04 | Insecure Design | ✅ Applicable | ✅ Good | Zero-knowledge architecture, defense-in-depth, secure defaults |
 | A05 | Security Misconfiguration | ✅ Applicable | ✅ Good | Secure file permissions enforced by default, no debug modes in production |
-| A06 | Vulnerable Components | ✅ Applicable | ✅ Good | cargo-audit in CI + pre-commit, scheduled daily scans, 0 critical vulnerabilities |
+| A06 | Vulnerable Components | ✅ Applicable | ✅ Good | cargo-audit + cargo-deny in CI + pre-commit, scheduled daily scans, 0 critical vulnerabilities |
 | A07 | Auth Failures | ✅ Applicable | ✅ Strong | Persistent rate limiting, timing attack protection, strong password requirements |
 | A08 | Data Integrity Failures | ✅ Applicable | ✅ Good | AES-GCM authentication tag, SHA-256 checksums, HMAC-protected audit logs |
 | A09 | Logging & Monitoring | ✅ Applicable | ✅ Good | Comprehensive audit logging with HMAC integrity, rotation, secure permissions |
@@ -343,7 +347,7 @@ The repository has 4 GitHub Actions workflows:
 | Workflow | Trigger | Permissions | Notes |
 |---|---|---|---|
 | `ci.yml` | Push/PR to `main` | `contents: read` ✅ | Multi-OS matrix (Linux, macOS, Windows). |
-| `security.yml` | Push/PR on `Cargo.toml`/`Cargo.lock` + daily cron | `contents: read` ✅ | Uses `dtolnay/rust-toolchain@stable` ✅ |
+| `security.yml` | Push/PR on `Cargo.toml`/`Cargo.lock` + daily cron | `contents: read` ✅ | Uses `dtolnay/rust-toolchain@stable` ✅. Runs `cargo audit` + `cargo deny check advisories bans licenses` ✅ |
 | `quality.yml` | Push/PR to `main` | `contents: read` ✅ | Clippy with `-D warnings`. |
 | `release.yml` | Tag push (`v*.*.*`) | `contents: write`, `attestations: write`, `id-token: write` ✅ | Multi-arch (Linux, macOS, Windows). ✅ SHA-256 checksums generated. ✅ Authenticode signing enabled (conditional on secrets). ✅ SLSA provenance attestations generated via `actions/attest-build-provenance@v2`. |
 
@@ -362,7 +366,7 @@ The repository has 4 GitHub Actions workflows:
 
 - ✅ `Cargo.lock` is committed — ensures reproducible builds
 - ✅ Build dependencies are separate from runtime (`[build-dependencies]`)
-- ✅ `cargo audit` runs daily in CI and on dependency changes
+- ✅ `cargo audit` and `cargo deny check advisories bans licenses` run daily in CI and on dependency changes
 - ✅ Pre-commit hook includes `cargo-audit`
 
 ### Direct Dependencies (16 runtime + 1 dev + 2 build)
