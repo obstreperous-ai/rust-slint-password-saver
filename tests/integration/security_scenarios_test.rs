@@ -337,7 +337,7 @@ fn test_storage_operations_produce_audit_entries() {
     let storage = PasswordStorage::new(storage_path);
 
     let audit_path = get_audit_log_path();
-    let size_before = fs::metadata(&audit_path).map(|m| m.len()).unwrap_or(0);
+    let size_before = fs::metadata(&audit_path).map_or(0u64, |m| m.len());
 
     storage
         .save_entries(&[make_entry("AuditTest")], MASTER_PASSWORD)
@@ -347,7 +347,7 @@ fn test_storage_operations_produce_audit_entries() {
         .expect("Failed to load entries");
 
     // The audit log should have grown after save + load.
-    let size_after = fs::metadata(&audit_path).map(|m| m.len()).unwrap_or(0);
+    let size_after = fs::metadata(&audit_path).map_or(0u64, |m| m.len());
     assert!(
         size_after > size_before,
         "Audit log should grow after storage operations (was {size_before} bytes, now {size_after} bytes)"
