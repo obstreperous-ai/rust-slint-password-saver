@@ -89,10 +89,10 @@ pub fn sort_entries(entries: &mut [PasswordEntry], criteria: SortCriteria) {
             entries.sort_by(|a, b| b.title.cmp(&a.title));
         }
         SortCriteria::DateCreatedNewest => {
-            entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            entries.sort_by_key(|entry| std::cmp::Reverse(entry.created_at));
         }
         SortCriteria::DateCreatedOldest => {
-            entries.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+            entries.sort_by_key(|entry| entry.created_at);
         }
         SortCriteria::UsernameAscending => {
             entries.sort_by(|a, b| a.username.cmp(&b.username));
