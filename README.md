@@ -120,6 +120,8 @@ The application uses the [zxcvbn](https://github.com/dropbox/zxcvbn) password st
 - Master password is never stored and cannot be recovered if forgotten
 - The application does not implement any backup/recovery mechanism by design
 - All data is stored locally; no cloud synchronization (enhances security, reduces attack surface)
+- Two-factor authentication (TOTP, hardware security keys, biometrics) is out of scope for v0.1 due to
+  the local-only, single-user design; it is planned for future consideration
 - Passwords copied to clipboard are auto-cleared after 30 seconds, but OS clipboard managers/history
   (for example KDE Klipper, Clipman, and macOS clipboard history) may retain copies longer
 
@@ -734,7 +736,9 @@ This section outlines planned improvements and features. It's designed to be **a
 - [ ] **Password History**: Track password changes over time
 - [ ] **Trash/Recovery**: Soft delete with recovery option
 - [ ] **Categories/Tags**: Organize passwords by category
-- [ ] **Two-Factor Auth Storage**: Store TOTP secrets (requires TOTP implementation)
+- [ ] **Two-Factor Authentication (Future Scope)**: TOTP, hardware security key, and biometrics support
+  - **Status**: Explicitly out of scope for v0.1 due to local-only, single-user design
+  - **Plan**: Re-evaluate for a future release when broader authentication workflows are introduced
 - [ ] **Browser Extension**: Integrate with web browsers
 - [ ] **Mobile Apps**: iOS/Android versions (significant effort)
 
@@ -826,4 +830,3 @@ for a full dependency license inventory.
 ---
 
 **⚠️ Disclaimer**: This is an educational/experimental project. While it implements industry-standard encryption, it has not undergone professional security audit. Use at your own risk for non-critical password storage. For production use, consider established password managers like Bitwarden, 1Password, or KeePassXC.
-

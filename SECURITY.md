@@ -4,6 +4,8 @@
 
 This document outlines the security architecture, current security status, identified vulnerabilities, and recommended improvements for the Rust Slint Password Saver project. This is a password manager application that uses Argon2 + AES-256-GCM encryption to protect user credentials.
 
+**Scope note (v0.1):** Two-factor authentication methods (TOTP, hardware security keys, biometrics) are out of scope for v0.1 because the app is currently designed as a local-only, single-user password vault. 2FA is planned for future consideration.
+
 ## Table of Contents
 
 - [Current Security Status](#current-security-status)
@@ -305,9 +307,11 @@ README now explicitly warns that clipboard managers/history tools (for example K
 Clipman, and macOS clipboard history) may retain copied passwords beyond the app's 30-second
 auto-clear window.
 
-#### 13. Document Two-Factor Authentication as Future Enhancement
+#### ~~13. Document Two-Factor Authentication as Future Enhancement~~ ✅ Resolved
 
-README and SECURITY.md should explicitly state that 2FA (TOTP, hardware security key, biometrics) is out of scope for v0.1 but planned for future consideration. Rationale: local-only, single-user design.
+README and SECURITY.md now explicitly state that 2FA (TOTP, hardware security keys, biometrics)
+is out of scope for v0.1 and planned for future consideration because the current architecture is
+local-only and single-user.
 
 #### 14. Dedicated Windows ACL Permission Test
 
@@ -494,6 +498,13 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-16 — Document 2FA as Future Enhancement (Issue #13)
+
+- Updated `README.md` and `SECURITY.md` to explicitly state that 2FA methods (TOTP, hardware
+  security keys, biometrics) are out of scope for v0.1
+- Added rationale that the current product scope is local-only and single-user
+- Marked Issue #13 as resolved in "Open Issues and Future Work"
 
 ### 2026-04-15 — Add Clipboard Manager Retention Warning (Issue #12)
 
