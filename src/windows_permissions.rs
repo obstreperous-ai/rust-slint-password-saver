@@ -406,14 +406,14 @@ mod tests {
         set_windows_secure_permissions(&test_file)
             .expect("Failed to set secure permissions on test file");
 
-        let escaped_path = test_file.to_string_lossy().replace('\'', "''");
-        let command = format!(
-            "$acl = Get-Acl -LiteralPath '{}'; Write-Output ($acl.AreAccessRulesProtected.ToString() + '|' + $acl.Access.Count)",
-            escaped_path
-        );
-
         let output = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", &command])
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$acl = Get-Acl -LiteralPath $env:ACL_TEST_PATH; Write-Output ($acl.AreAccessRulesProtected.ToString() + '|' + $acl.Access.Count)",
+            ])
+            .env("ACL_TEST_PATH", &test_file)
             .output()
             .expect("Failed to run PowerShell ACL inspection");
 
