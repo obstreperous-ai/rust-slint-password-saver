@@ -338,8 +338,130 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
 #[cfg(windows)]
 mod tests {
     use super::*;
+    use std::ffi::c_void;
     use std::fs;
     use std::io::Write;
+    use std::mem::size_of;
+    use std::path::Path;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{CloseHandle, HLOCAL, PSID};
+    use windows::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
+    use windows::Win32::Security::{
+        AclSizeInformation, EqualSid, GetAce, GetAclInformation, GetSecurityDescriptorControl,
+        GetTokenInformation, TokenUser, ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION,
+        DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SE_DACL_PROTECTED, TOKEN_QUERY,
+        TOKEN_USER,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    fn inspect_file_dacl(path: &Path) -> Result<(bool, u32, bool), String> {
+        const ACCESS_ALLOWED_ACE_TYPE_VALUE: u8 = 0x00;
+
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 path".to_string())?;
+        let mut wide_path: Vec<u16> = path_str.encode_utf16().collect();
+        wide_path.push(0);
+
+        let mut dacl: *mut ACL = std::ptr::null_mut();
+        let mut security_descriptor = PSECURITY_DESCRIPTOR::default();
+
+        let inspect_result = unsafe {
+            GetNamedSecurityInfoW(
+                PCWSTR(wide_path.as_ptr()),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                None,
+                None,
+                Some(&mut dacl),
+                None,
+                &mut security_descriptor,
+            )
+            .map_err(|e| format!("GetNamedSecurityInfoW failed: {:?}", e))
+            .and_then(|_| {
+                if dacl.is_null() {
+                    return Err("DACL pointer is null".to_string());
+                }
+
+                let mut control = 0u16;
+                let mut revision = 0u32;
+                GetSecurityDescriptorControl(security_descriptor, &mut control, &mut revision)
+                    .map_err(|e| format!("GetSecurityDescriptorControl failed: {:?}", e))?;
+                let is_protected = (control & SE_DACL_PROTECTED.0) != 0;
+
+                let mut acl_info = ACL_SIZE_INFORMATION::default();
+                GetAclInformation(
+                    dacl,
+                    &mut acl_info as *mut _ as *mut c_void,
+                    size_of::<ACL_SIZE_INFORMATION>() as u32,
+                    AclSizeInformation,
+                )
+                .map_err(|e| format!("GetAclInformation failed: {:?}", e))?;
+
+                let mut token_handle = windows::Win32::Foundation::HANDLE(0);
+                OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token_handle)
+                    .map_err(|e| format!("OpenProcessToken failed: {:?}", e))?;
+
+                let sid_match_result = (|| -> Result<bool, String> {
+                    let mut token_user_size = 0u32;
+                    let _ =
+                        GetTokenInformation(token_handle, TokenUser, None, 0, &mut token_user_size);
+
+                    if token_user_size == 0 {
+                        return Err("Token user SID buffer size is zero".to_string());
+                    }
+
+                    let mut token_user_buffer = vec![0u8; token_user_size as usize];
+                    GetTokenInformation(
+                        token_handle,
+                        TokenUser,
+                        Some(token_user_buffer.as_mut_ptr() as *mut _),
+                        token_user_size,
+                        &mut token_user_size,
+                    )
+                    .map_err(|e| format!("GetTokenInformation failed: {:?}", e))?;
+
+                    let token_user =
+                        std::ptr::read_unaligned(token_user_buffer.as_ptr() as *const TOKEN_USER);
+                    let current_user_sid = PSID(token_user.User.Sid.0);
+
+                    if acl_info.AceCount == 0 {
+                        return Ok(false);
+                    }
+
+                    let mut ace_ptr: *mut c_void = std::ptr::null_mut();
+                    GetAce(dacl, 0, &mut ace_ptr).map_err(|e| format!("GetAce failed: {:?}", e))?;
+
+                    if ace_ptr.is_null() {
+                        return Ok(false);
+                    }
+
+                    let ace_header = &*(ace_ptr as *const ACE_HEADER);
+                    if ace_header.AceType != ACCESS_ALLOWED_ACE_TYPE_VALUE {
+                        return Ok(false);
+                    }
+
+                    let allowed_ace = ace_ptr as *const ACCESS_ALLOWED_ACE;
+                    let ace_sid = PSID(std::ptr::addr_of!((*allowed_ace).SidStart) as *mut c_void);
+
+                    Ok(EqualSid(ace_sid, current_user_sid).is_ok())
+                })();
+
+                if let Err(e) = CloseHandle(token_handle) {
+                    return Err(format!("CloseHandle failed: {:?}", e));
+                }
+                sid_match_result.map(|sid_matches| (is_protected, acl_info.AceCount, sid_matches))
+            })
+        };
+
+        unsafe {
+            if !security_descriptor.0.is_null() {
+                let _ = windows::Win32::Foundation::LocalFree(HLOCAL(security_descriptor.0));
+            }
+        }
+
+        inspect_result
+    }
 
     #[test]
     fn test_windows_file_permissions_secure() {
@@ -406,49 +528,25 @@ mod tests {
         set_windows_secure_permissions(&test_file)
             .expect("Failed to set secure permissions on test file");
 
-        let output = std::process::Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "$acl = Get-Acl -LiteralPath $env:ACL_TEST_PATH; Write-Output ($acl.AreAccessRulesProtected.ToString() + '|' + $acl.Access.Count)",
-            ])
-            .env("ACL_TEST_PATH", &test_file)
-            .output()
-            .expect("Failed to run PowerShell ACL inspection");
+        let acl_result = inspect_file_dacl(&test_file);
 
         let _ = fs::remove_file(&test_file);
         let _ = fs::remove_dir(&test_dir);
 
+        let (is_protected, ace_count, sid_matches_current_user) =
+            acl_result.expect("Win32 ACL inspection failed");
+
+        assert_eq!(
+            is_protected, true,
+            "ACL should be protected from inheritance"
+        );
+        assert_eq!(
+            ace_count, 1u32,
+            "ACL should contain exactly one explicit ACE"
+        );
         assert!(
-            output.status.success(),
-            "PowerShell ACL inspection failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let acl_summary = stdout
-            .lines()
-            .find(|line| line.contains('|'))
-            .map(str::trim)
-            .unwrap_or_default();
-        let mut parts = acl_summary.split('|');
-        let is_protected = parts.next().unwrap_or_default();
-        let ace_count = parts
-            .next()
-            .unwrap_or_default()
-            .parse::<usize>()
-            .unwrap_or(0);
-
-        assert_eq!(
-            is_protected, "True",
-            "ACL should be protected from inheritance, got output: {}",
-            stdout
-        );
-        assert_eq!(
-            ace_count, 1,
-            "ACL should contain exactly one explicit ACE (current user), got output: {}",
-            stdout
+            sid_matches_current_user,
+            "Single explicit ACE should belong to current user SID"
         );
     }
 }
