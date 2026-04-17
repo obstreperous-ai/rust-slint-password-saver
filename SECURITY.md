@@ -313,9 +313,12 @@ README and SECURITY.md now explicitly state that 2FA (TOTP, hardware security ke
 is out of scope for v0.1 and planned for future consideration because the current architecture is
 local-only and single-user.
 
-#### 14. Dedicated Windows ACL Permission Test
+#### ~~14. Dedicated Windows ACL Permission Test~~ ✅ Resolved
 
-Windows is in the CI matrix (compile + test), but there is no dedicated test verifying that ACLs actually restrict access as intended on Windows.
+Added `test_windows_file_acl_is_protected_and_single_ace` in
+`src/windows_permissions.rs` to verify Windows ACLs are both protected from inheritance
+and reduced to a single explicit ACE after applying secure permissions, ensuring access is
+restricted to the current user as intended.
 
 ---
 
@@ -499,6 +502,14 @@ If you discover a security vulnerability in this project:
 
 ## Changelog
 
+### 2026-04-17 — Dedicated Windows ACL Permission Test (Issue #14)
+
+- Added a dedicated Windows ACL test in `src/windows_permissions.rs`:
+  `test_windows_file_acl_is_protected_and_single_ace`
+- The test verifies ACL inheritance is disabled (`AreAccessRulesProtected == True`) and that
+  exactly one explicit ACE remains after applying secure permissions
+- Marked Issue #14 as resolved in "Open Issues and Future Work"
+
 ### 2026-04-16 — Document 2FA as Future Enhancement (Issue #13)
 
 - Updated `README.md` and `SECURITY.md` to explicitly state that 2FA methods (TOTP, hardware
@@ -653,6 +664,6 @@ If you discover a security vulnerability in this project:
 
 ---
 
-**Last Updated:** 2026-04-06
+**Last Updated:** 2026-04-17
 **Security Audit Status:** ✅ PASSING (All code-level findings resolved. 0 critical dependency issues. 2 non-critical dependency warnings.)
 **Next Review Date:** 2026-07-05

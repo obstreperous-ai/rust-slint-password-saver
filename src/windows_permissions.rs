@@ -386,4 +386,69 @@ mod tests {
             result
         );
     }
+
+    #[test]
+    fn test_windows_file_acl_is_protected_and_single_ace() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "password_saver_test_win_acl_{}",
+            std::process::id()
+        ));
+        let test_file = test_dir.join("test_acl_file.txt");
+
+        let _ = fs::remove_dir_all(&test_dir);
+        fs::create_dir_all(&test_dir).expect("Failed to create test directory");
+
+        let mut file = fs::File::create(&test_file).expect("Failed to create test file");
+        file.write_all(b"test data")
+            .expect("Failed to write test file");
+        drop(file);
+
+        set_windows_secure_permissions(&test_file)
+            .expect("Failed to set secure permissions on test file");
+
+        let escaped_path = test_file.to_string_lossy().replace('\'', "''");
+        let command = format!(
+            "$acl = Get-Acl -LiteralPath '{}'; Write-Output ($acl.AreAccessRulesProtected.ToString() + '|' + $acl.Access.Count)",
+            escaped_path
+        );
+
+        let output = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &command])
+            .output()
+            .expect("Failed to run PowerShell ACL inspection");
+
+        let _ = fs::remove_file(&test_file);
+        let _ = fs::remove_dir(&test_dir);
+
+        assert!(
+            output.status.success(),
+            "PowerShell ACL inspection failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let acl_summary = stdout
+            .lines()
+            .find(|line| line.contains('|'))
+            .map(str::trim)
+            .unwrap_or_default();
+        let mut parts = acl_summary.split('|');
+        let is_protected = parts.next().unwrap_or_default();
+        let ace_count = parts
+            .next()
+            .unwrap_or_default()
+            .parse::<usize>()
+            .unwrap_or(0);
+
+        assert_eq!(
+            is_protected, "True",
+            "ACL should be protected from inheritance, got output: {}",
+            stdout
+        );
+        assert_eq!(
+            ace_count, 1,
+            "ACL should contain exactly one explicit ACE (current user), got output: {}",
+            stdout
+        );
+    }
 }
