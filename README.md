@@ -552,7 +552,7 @@ The project uses GitHub Actions for continuous integration and deployment.
 #### 2. **Code Quality Workflow** (`.github/workflows/quality.yml`)
 - **Trigger**: Push to `main`, Pull Requests
 - **Jobs**:
-  - **Format Check**: `cargo fmt --check`
+  - **Format Check**: `cargo fmt -- --check`
   - **Clippy Lint**: `cargo clippy --all-targets -- -D warnings`
 - **Purpose**: Enforce code style and catch common mistakes
 
@@ -562,8 +562,9 @@ The project uses GitHub Actions for continuous integration and deployment.
   - Pull Requests (if Cargo files changed)
   - Daily at 00:00 UTC
 - **Steps**:
-  - Install `cargo-audit`
-  - Check dependencies against RustSec advisory database
+  - Install `cargo-audit` and `cargo-deny`
+  - Run `cargo audit`
+  - Run `cargo deny check advisories bans licenses`
 - **Purpose**: Detect known security vulnerabilities in dependencies
 
 #### 4. **CodeQL Analysis Workflow** (`.github/workflows/codeql.yml`)
@@ -583,11 +584,13 @@ The project uses GitHub Actions for continuous integration and deployment.
   - `x86_64-unknown-linux-gnu` (Linux x64)
   - `x86_64-apple-darwin` (macOS Intel)
   - `aarch64-apple-darwin` (macOS Apple Silicon)
+  - `x86_64-pc-windows-msvc` (Windows x64)
 - **Steps**:
   - Build release binaries for all targets
-  - Strip debug symbols
-  - Create tarballs
-  - Create GitHub release with artifacts
+  - Create tarballs/zip archives and Windows MSI installer
+  - Generate `SHA256SUMS.txt` and SPDX SBOM (`sbom.spdx.json`)
+  - Generate SLSA build provenance attestation
+  - Create GitHub release with all artifacts
 - **Purpose**: Automated release builds and distribution
 
 ### CI/CD Best Practices
@@ -686,39 +689,19 @@ This section outlines planned improvements and features. It's designed to be **a
 
 ### High Priority
 
-- [ ] **Password Search/Filter**: Add search functionality to quickly find stored passwords
-  - **Files to modify**: `src/ui/main.slint` (add search input), `src/main.rs` (filter logic)
-  - **Complexity**: Medium
-  - **Dependencies**: None
+- [x] **Password Search/Filter**: Implemented (`src/search.rs`, `src/ui/main.slint`, `src/ui_handlers.rs`)
 
-- [ ] **Password Export/Import**: Allow users to export/import password databases
-  - **Files to modify**: `src/storage.rs` (add export/import methods), `src/main.rs` (UI callbacks)
-  - **Security consideration**: Export format should maintain encryption
-  - **Complexity**: Medium-High
+- [x] **Password Export/Import**: Implemented encrypted backup import/export (`src/backup.rs`, `src/ui_handlers.rs`)
 
-- [ ] **Password Generator**: Built-in secure password generator
-  - **New module**: `src/generator.rs`
-  - **Dependencies**: Consider `rand` crate (already indirect dependency)
-  - **UI changes**: Add generator button in `src/ui/main.slint`
-  - **Complexity**: Low-Medium
+- [x] **Password Generator**: Implemented (`src/password_generator.rs`, `src/ui/main.slint`)
 
-- [ ] **Master Password Change**: Allow changing the master password
-  - **Files to modify**: `src/storage.rs` (decrypt with old, encrypt with new)
-  - **UI changes**: Add "Change Master Password" dialog
-  - **Complexity**: Medium
+- [x] **Master Password Change**: Implemented (`src/storage.rs`, `src/ui_handlers.rs`)
 
 ### Medium Priority
 
-- [ ] **Password Strength Indicator**: Visual feedback on password strength
-  - **New module**: `src/strength.rs`
-  - **Dependencies**: Consider `zxcvbn` crate
-  - **UI changes**: Add strength meter in `src/ui/main.slint`
-  - **Complexity**: Low
+- [x] **Password Strength Indicator**: Implemented (`src/password_strength.rs`, `src/ui/main.slint`)
 
-- [ ] **Clipboard Integration**: Copy passwords to clipboard with auto-clear
-  - **Dependencies**: `arboard` or `clipboard` crate
-  - **Security**: Clear clipboard after timeout
-  - **Complexity**: Medium
+- [x] **Clipboard Integration**: Implemented with auto-clear (`src/clipboard.rs`, `src/ui_handlers.rs`)
 
 - [ ] **Dark Mode Support**: Add theme switching
   - **Files to modify**: `src/ui/main.slint` (add theme property)
@@ -728,11 +711,11 @@ This section outlines planned improvements and features. It's designed to be **a
   - Windows build and run confirmed; pre-built binaries shipped in release workflow
   - Storage path uses `%LOCALAPPDATA%\PasswordSaver\` on Windows
   - See [Known Windows Limitations](#known-windows-limitations) for current caveats
-  - **Remaining**: Code-signing for SmartScreen, DPI manifest, Windows installer
+  - **Status**: Code-signing workflow and WiX installer are implemented (signing requires repository secrets)
 
 ### Low Priority / Nice to Have
 
-- [ ] **Auto-lock**: Lock after period of inactivity
+- [x] **Auto-lock**: Implemented via session timeout (`src/session.rs`)
 - [ ] **Password History**: Track password changes over time
 - [ ] **Trash/Recovery**: Soft delete with recovery option
 - [ ] **Categories/Tags**: Organize passwords by category

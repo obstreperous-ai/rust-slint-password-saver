@@ -1013,9 +1013,10 @@ This section provides specific guidance for AI coding agents working on this cod
 
 1. **Read the module documentation** at the top of each file
 2. **Examine existing tests** in the corresponding `tests/` file
-3. **Run the test suite:** `cargo test`
-4. **Check linting:** `cargo clippy --all-targets`
+3. **Verify build:** `cargo build`
+4. **Run the test suite:** `cargo test`
 5. **Verify formatting:** `cargo fmt -- --check`
+6. **Check linting:** `cargo clippy --all-targets -- -D warnings`
 
 #### Making Changes
 
@@ -1031,11 +1032,11 @@ This section provides specific guidance for AI coding agents working on this cod
 
 #### After Making Changes
 
-1. **Run tests:** `cargo test --all-targets`
-2. **Run clippy:** `cargo clippy --all-targets -- -D warnings`
-3. **Format code:** `cargo fmt`
-4. **Build release:** `cargo build --release` (ensure it compiles)
-5. **Run security audit:** `cargo audit` (ensure no new vulnerabilities)
+1. **Format code:** `cargo fmt`
+2. **Verify build:** `cargo build`
+3. **Run tests:** `cargo test --all-targets`
+4. **Run clippy:** `cargo clippy --all-targets -- -D warnings`
+5. **Run security audit:** `cargo audit` (and `cargo deny check advisories bans licenses` when available)
 6. **Review changes:** Use `git diff` to verify no unintended modifications
 
 ### Common Tasks for AI Agents
