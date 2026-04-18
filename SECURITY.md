@@ -351,13 +351,14 @@ restricted to the current user as intended.
 
 ### Workflow Analysis
 
-The repository has 4 GitHub Actions workflows:
+The repository has 5 GitHub Actions workflows:
 
 | Workflow | Trigger | Permissions | Notes |
 |---|---|---|---|
 | `ci.yml` | Push/PR to `main` | `contents: read` ✅ | Multi-OS matrix (Linux, macOS, Windows). |
 | `security.yml` | Push/PR on `Cargo.toml`/`Cargo.lock` + daily cron | `contents: read` ✅ | Uses `dtolnay/rust-toolchain@stable` ✅. Runs `cargo audit` + `cargo deny check advisories bans licenses` ✅ |
 | `quality.yml` | Push/PR to `main` | `contents: read` ✅ | Clippy with `-D warnings`. |
+| `codeql.yml` | Push/PR to `main` + weekly cron | `security-events: write`, `contents: read` ✅ | Rust CodeQL static analysis using `.github/codeql/codeql-config.yml` (`tests/` excluded to reduce fixture false positives). |
 | `release.yml` | Tag push (`v*.*.*`) | `contents: write`, `attestations: write`, `id-token: write` ✅ | Multi-arch (Linux, macOS, Windows). ✅ SHA-256 checksums generated. ✅ Authenticode signing enabled (conditional on secrets). ✅ SLSA provenance attestations generated via `actions/attest-build-provenance@v2`. |
 
 ### CI/CD Open Items
@@ -501,6 +502,14 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-18 — Final Code Quality and Documentation Consistency Review (Issue #256)
+
+- Updated CI/CD workflow inventory to include `codeql.yml` (5 workflows total)
+- Added explicit CodeQL workflow row (permissions, trigger, and test-fixture exclusion config)
+- Re-verified security guidance alignment with current CI workflows and documentation
+- Confirmed quality gates in the final review run: `cargo build`, `cargo test`,
+  `cargo fmt -- --check`, and `cargo clippy --all-targets -- -D warnings`
 
 ### 2026-04-17 — Dedicated Windows ACL Permission Test (Issue #14)
 
