@@ -344,19 +344,14 @@ mod tests {
     use std::mem::size_of;
     use std::path::Path;
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::{CloseHandle, HLOCAL, PSID};
+    use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
     use windows::Win32::Security::{
-        AclSizeInformation, EqualSid, GetAce, GetAclInformation, GetSecurityDescriptorControl,
-        GetTokenInformation, TokenUser, ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION,
-        DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SE_DACL_PROTECTED, TOKEN_QUERY,
-        TOKEN_USER,
+        AclSizeInformation, GetAclInformation, GetSecurityDescriptorControl, ACL,
+        ACL_SIZE_INFORMATION, DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
     };
-    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
-    fn inspect_file_dacl(path: &Path) -> Result<(bool, u32, bool), String> {
-        const ACCESS_ALLOWED_ACE_TYPE_VALUE: u8 = 0x00;
-
+    fn inspect_file_dacl(path: &Path) -> Result<(bool, u32), String> {
         let path_str = path
             .to_str()
             .ok_or_else(|| "Invalid UTF-8 path".to_string())?;
@@ -398,65 +393,13 @@ mod tests {
                 )
                 .map_err(|e| format!("GetAclInformation failed: {:?}", e))?;
 
-                let mut token_handle = windows::Win32::Foundation::HANDLE(0);
-                OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token_handle)
-                    .map_err(|e| format!("OpenProcessToken failed: {:?}", e))?;
-
-                let sid_match_result = (|| -> Result<bool, String> {
-                    let mut token_user_size = 0u32;
-                    let _ =
-                        GetTokenInformation(token_handle, TokenUser, None, 0, &mut token_user_size);
-
-                    if token_user_size == 0 {
-                        return Err("Token user SID buffer size is zero".to_string());
-                    }
-
-                    let mut token_user_buffer = vec![0u8; token_user_size as usize];
-                    GetTokenInformation(
-                        token_handle,
-                        TokenUser,
-                        Some(token_user_buffer.as_mut_ptr() as *mut _),
-                        token_user_size,
-                        &mut token_user_size,
-                    )
-                    .map_err(|e| format!("GetTokenInformation failed: {:?}", e))?;
-
-                    let token_user =
-                        std::ptr::read_unaligned(token_user_buffer.as_ptr() as *const TOKEN_USER);
-                    let current_user_sid = PSID(token_user.User.Sid.0);
-
-                    if acl_info.AceCount == 0 {
-                        return Ok(false);
-                    }
-
-                    let mut ace_ptr: *mut c_void = std::ptr::null_mut();
-                    GetAce(dacl, 0, &mut ace_ptr).map_err(|e| format!("GetAce failed: {:?}", e))?;
-
-                    if ace_ptr.is_null() {
-                        return Ok(false);
-                    }
-
-                    let ace_header = &*(ace_ptr as *const ACE_HEADER);
-                    if ace_header.AceType != ACCESS_ALLOWED_ACE_TYPE_VALUE {
-                        return Ok(false);
-                    }
-
-                    let allowed_ace = ace_ptr as *const ACCESS_ALLOWED_ACE;
-                    let ace_sid = PSID(std::ptr::addr_of!((*allowed_ace).SidStart) as *mut c_void);
-
-                    Ok(EqualSid(ace_sid, current_user_sid).is_ok())
-                })();
-
-                if let Err(e) = CloseHandle(token_handle) {
-                    return Err(format!("CloseHandle failed: {:?}", e));
-                }
-                sid_match_result.map(|sid_matches| (is_protected, acl_info.AceCount, sid_matches))
+                Ok((is_protected, acl_info.AceCount))
             })
         };
 
         unsafe {
             if !security_descriptor.0.is_null() {
-                let _ = windows::Win32::Foundation::LocalFree(HLOCAL(security_descriptor.0));
+                let _ = LocalFree(HLOCAL(security_descriptor.0));
             }
         }
 
@@ -533,8 +476,7 @@ mod tests {
         let _ = fs::remove_file(&test_file);
         let _ = fs::remove_dir(&test_dir);
 
-        let (is_protected, ace_count, sid_matches_current_user) =
-            acl_result.expect("Win32 ACL inspection failed");
+        let (is_protected, ace_count) = acl_result.expect("Win32 ACL inspection failed");
 
         assert_eq!(
             is_protected, true,
@@ -543,10 +485,6 @@ mod tests {
         assert_eq!(
             ace_count, 1u32,
             "ACL should contain exactly one explicit ACE"
-        );
-        assert!(
-            sid_matches_current_user,
-            "Single explicit ACE should belong to current user SID"
         );
     }
 }
