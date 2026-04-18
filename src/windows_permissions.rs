@@ -338,8 +338,73 @@ pub fn set_windows_directory_permissions(path: &Path) -> Result<(), SecurityErro
 #[cfg(windows)]
 mod tests {
     use super::*;
+    use std::ffi::c_void;
     use std::fs;
     use std::io::Write;
+    use std::mem::size_of;
+    use std::path::Path;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{LocalFree, HLOCAL};
+    use windows::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
+    use windows::Win32::Security::{
+        AclSizeInformation, GetAclInformation, GetSecurityDescriptorControl, ACL,
+        ACL_SIZE_INFORMATION, DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
+    };
+
+    fn inspect_file_dacl(path: &Path) -> Result<(bool, u32), String> {
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 path".to_string())?;
+        let mut wide_path: Vec<u16> = path_str.encode_utf16().collect();
+        wide_path.push(0);
+
+        let mut dacl: *mut ACL = std::ptr::null_mut();
+        let mut security_descriptor = PSECURITY_DESCRIPTOR::default();
+
+        let inspect_result = unsafe {
+            GetNamedSecurityInfoW(
+                PCWSTR(wide_path.as_ptr()),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                None,
+                None,
+                Some(&mut dacl),
+                None,
+                &mut security_descriptor,
+            )
+            .map_err(|e| format!("GetNamedSecurityInfoW failed: {:?}", e))
+            .and_then(|_| {
+                if dacl.is_null() {
+                    return Err("DACL pointer is null".to_string());
+                }
+
+                let mut control = 0u16;
+                let mut revision = 0u32;
+                GetSecurityDescriptorControl(security_descriptor, &mut control, &mut revision)
+                    .map_err(|e| format!("GetSecurityDescriptorControl failed: {:?}", e))?;
+                let is_protected = (control & SE_DACL_PROTECTED.0) != 0;
+
+                let mut acl_info = ACL_SIZE_INFORMATION::default();
+                GetAclInformation(
+                    dacl,
+                    &mut acl_info as *mut _ as *mut c_void,
+                    size_of::<ACL_SIZE_INFORMATION>() as u32,
+                    AclSizeInformation,
+                )
+                .map_err(|e| format!("GetAclInformation failed: {:?}", e))?;
+
+                Ok((is_protected, acl_info.AceCount))
+            })
+        };
+
+        unsafe {
+            if !security_descriptor.0.is_null() {
+                let _ = LocalFree(HLOCAL(security_descriptor.0));
+            }
+        }
+
+        inspect_result
+    }
 
     #[test]
     fn test_windows_file_permissions_secure() {
@@ -384,6 +449,42 @@ mod tests {
             result.is_ok(),
             "Failed to set Windows directory permissions: {:?}",
             result
+        );
+    }
+
+    #[test]
+    fn test_windows_file_acl_is_protected_and_single_ace() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "password_saver_test_win_acl_{}",
+            std::process::id()
+        ));
+        let test_file = test_dir.join("test_acl_file.txt");
+
+        let _ = fs::remove_dir_all(&test_dir);
+        fs::create_dir_all(&test_dir).expect("Failed to create test directory");
+
+        let mut file = fs::File::create(&test_file).expect("Failed to create test file");
+        file.write_all(b"test data")
+            .expect("Failed to write test file");
+        drop(file);
+
+        set_windows_secure_permissions(&test_file)
+            .expect("Failed to set secure permissions on test file");
+
+        let acl_result = inspect_file_dacl(&test_file);
+
+        let _ = fs::remove_file(&test_file);
+        let _ = fs::remove_dir(&test_dir);
+
+        let (is_protected, ace_count) = acl_result.expect("Win32 ACL inspection failed");
+
+        assert_eq!(
+            is_protected, true,
+            "ACL should be protected from inheritance"
+        );
+        assert_eq!(
+            ace_count, 1u32,
+            "ACL should contain exactly one explicit ACE"
         );
     }
 }
