@@ -503,6 +503,21 @@ If you discover a security vulnerability in this project:
 
 ## Changelog
 
+### 2026-04-20 — Fix Security Audit: upgrade `rustls-webpki` to 0.103.12
+
+- Resolved two `cargo audit` failures in the Security Audit workflow caused by
+  `rustls-webpki 0.103.10`:
+  - RUSTSEC-2026-0098: name constraints for URI names were incorrectly accepted
+  - RUSTSEC-2026-0099: name constraints were accepted for certificates asserting
+    a wildcard name
+- Updated transitive dependency to `rustls-webpki 0.103.12` via `cargo update -p rustls-webpki`
+  (Cargo.lock only, no direct-dependency or API changes required)
+- Verified: `cargo audit` exits 0, `cargo deny check advisories bans licenses` passes,
+  `cargo build`, `cargo test` (78 passing), `cargo fmt -- --check`, and
+  `cargo clippy --all-targets -- -D warnings` all succeed
+- No `audit.toml` / advisory ignores were added for these advisories; the fix is
+  a genuine dependency upgrade per the issue requirements
+
 ### 2026-04-18 — Final Code Quality and Documentation Consistency Review (Issue #256)
 
 - Updated CI/CD workflow inventory to include `codeql.yml` (5 workflows total)
