@@ -26,7 +26,7 @@ This document outlines the security architecture, current security status, ident
 
 ## Current Security Status
 
-### ✅ Security Audit Status: **PASSING** (2026-04-05)
+### ✅ Security Audit Status: **PASSING** (2026-04-25)
 
 All previously identified critical and high-severity code-level findings have been resolved. The project demonstrates solid security engineering with proper use of cryptographic primitives, appropriate key derivation, secure randomness, and thoughtful error handling.
 
@@ -502,6 +502,20 @@ If you discover a security vulnerability in this project:
 ---
 
 ## Changelog
+
+### 2026-04-25 — Fix Security Audit: upgrade `rustls-webpki` to 0.103.13 (RUSTSEC-2026-0104)
+
+- Resolved `cargo audit` failure in the Security Audit workflow caused by
+  `rustls-webpki 0.103.12`:
+  - RUSTSEC-2026-0104: Reachable panic in certificate revocation list parsing
+- Updated transitive dependency to `rustls-webpki 0.103.13` via `cargo update -p rustls-webpki`
+  (Cargo.lock only, no direct-dependency or API changes required)
+- `core2 0.4.0` remains as a yanked warning only; `deny.toml` has `yanked = "warn"` so
+  this does not fail CI. No newer `^0.4` release exists upstream; tracked via `bitstream-io`
+  → `rav1e` → `ravif` → `image` → `arboard` chain.
+- Verified: `cargo build`, `cargo test` (78 passing), `cargo fmt -- --check`, and
+  `cargo clippy --all-targets -- -D warnings` all succeed
+- No `audit.toml` / advisory ignores were added; the fix is a genuine dependency upgrade
 
 ### 2026-04-20 — Fix Security Audit: upgrade `rustls-webpki` to 0.103.12
 
