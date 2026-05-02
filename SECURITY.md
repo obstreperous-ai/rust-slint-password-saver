@@ -503,6 +503,17 @@ If you discover a security vulnerability in this project:
 
 ## Changelog
 
+### 2026-04-26 — Fix RUSTSEC-2026-0105: remove yanked `core2` via `bitstream-io` upgrade
+
+- Resolved RUSTSEC-2026-0105: `core2` is unmaintained and all versions yanked.
+- Transitive dependency chain: `arboard`/`slint` → `image` → `ravif` → `rav1e` →
+  `bitstream-io 4.9.0` → `core2 0.4.0`.
+- Updated `bitstream-io` from v4.9.0 to v4.10.0 via `cargo update -p bitstream-io`;
+  the new version replaces `core2` with `no_std_io2` (maintained fork, one of the
+  alternatives recommended in the advisory). `core2` is fully removed from `Cargo.lock`.
+- No direct-dependency or API changes required; `Cargo.lock` only.
+- Verification performed for this lockfile-only change: `cargo build` succeeds.
+
 ### 2026-04-25 — Fix Security Audit: upgrade `rustls-webpki` to 0.103.13 (RUSTSEC-2026-0104)
 
 - Resolved `cargo audit` failure in the Security Audit workflow caused by
@@ -510,9 +521,6 @@ If you discover a security vulnerability in this project:
   - RUSTSEC-2026-0104: Reachable panic in certificate revocation list parsing
 - Updated transitive dependency to `rustls-webpki 0.103.13` via `cargo update -p rustls-webpki`
   (Cargo.lock only, no direct-dependency or API changes required)
-- `core2 0.4.0` remains as a yanked warning only; `deny.toml` has `yanked = "warn"` so
-  this does not fail CI. No newer `^0.4` release exists upstream; tracked via `bitstream-io`
-  → `rav1e` → `ravif` → `image` → `arboard` chain.
 - Verified: `cargo build`, `cargo test` (78 passing), `cargo fmt -- --check`, and
   `cargo clippy --all-targets -- -D warnings` all succeed
 - No `audit.toml` / advisory ignores were added; the fix is a genuine dependency upgrade
