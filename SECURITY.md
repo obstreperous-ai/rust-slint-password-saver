@@ -512,7 +512,7 @@ If you discover a security vulnerability in this project:
   the new version replaces `core2` with `no_std_io2` (maintained fork, one of the
   alternatives recommended in the advisory). `core2` is fully removed from `Cargo.lock`.
 - No direct-dependency or API changes required; `Cargo.lock` only.
-- Verified: `cargo build` succeeds.
+- Verification performed for this lockfile-only change: `cargo build` succeeds.
 
 ### 2026-04-25 — Fix Security Audit: upgrade `rustls-webpki` to 0.103.13 (RUSTSEC-2026-0104)
 
